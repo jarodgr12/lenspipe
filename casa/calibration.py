@@ -247,10 +247,12 @@ def step_bandpass(cfg: Config) -> None:
 @step(7, "Gain (Amplitude and Phase) calibration (gaincal)")
 def step_gains(cfg: Config) -> None:
     prior = APRIORI + ["delays.cal", "bpass.cal"]
-    # Legacy append flags preserved verbatim, including append=False on the
-    # target solve (which overwrites phase.cal with the field-2 solutions).
+    # One deliberate change from the legacy script: the target phase solve used
+    # append=False, which replaced phase.cal with the target's solutions just
+    # before the amp.cal solves and fluxscale needed the calibrators' ones.
+    # All three fields now append (agreed 2026-09-09; see CHANGELOG 2.0.2).
     for fld, append in ((FLUX_FIELD, False), (PHASE_FIELD, True),
-                        (TARGET_FIELD, False)):
+                        (TARGET_FIELD, True)):
         _gaincal(cfg, "phase.cal", fld, GAIN_SPW, "int", "p", prior,
                  append=append)
     interp = ["", "", "", "", "nearest", "nearest", "linear"]

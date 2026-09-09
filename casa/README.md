@@ -3,8 +3,12 @@
 `calibration.py` is the modernised form of `legacy/scriptForCalibration.A.py`
 for CASA 6.5.7. Observation-specific values live in a TOML file
 (`observation.22A-388.1555.A.toml`); the calibration logic (tables, fields,
-channel ranges, solints, interpolation, `append` flags) is unchanged from the
-legacy script. Only the final export step differs (see below).
+channel ranges, solints, interpolation) is unchanged from the legacy script,
+with two deliberate exceptions: the final export step (see below), and the
+target's phase solve in step 7, which now appends to `phase.cal` instead of
+replacing it (the legacy `append=False` discarded the calibrators' phase
+solutions before the amplitude solves and `fluxscale` used them; see
+`CHANGELOG.md` 2.0.2).
 
 ## Running
 

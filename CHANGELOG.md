@@ -3,6 +3,19 @@
 Each entry says whether existing products need re-running. The `lenspipe`
 version that made a product is recorded in its metadata JSON.
 
+## 2.0.2 — 2026-09-09
+
+**Re-run needed:** no for DifMAP products (stages 1 to 3 are unchanged).
+Affects CASA calibration of future observations only.
+
+- Changed: in CASA step 7 the target's phase solve now appends to `phase.cal`
+  like the two calibrators, instead of `append=False`. The legacy setting
+  replaced the table with the target's solutions immediately before the
+  amplitude solves, `fluxscale` and the flux-calibrator `applycal` needed the
+  calibrators' phase solutions, leaving those steps working on flagged data.
+  Agreed as a copy-and-paste slip in the original; the target's entries in
+  `phase.cal` are not used for the final target calibration either way.
+
 ## 2.0.1 — 2026-09-09
 
 **Re-run needed:** no. Products from 2.0.0 are unchanged; epochs that failed
