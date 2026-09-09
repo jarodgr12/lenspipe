@@ -25,6 +25,16 @@ On the machine that has DifMAP (and CASA, if you calibrate there), one line:
 curl -LsSf https://raw.githubusercontent.com/jarodgr12/lenspipe/master/scripts/install.sh | bash
 ```
 
+If raw.githubusercontent.com is unavailable (it returns 503 now and then),
+the same script through the GitHub API, or a clone, does the same job:
+
+```bash
+curl -LsSf -H 'Accept: application/vnd.github.raw' \
+  https://api.github.com/repos/jarodgr12/lenspipe/contents/scripts/install.sh | bash
+# or
+git clone --depth 1 https://github.com/jarodgr12/lenspipe.git && bash lenspipe/scripts/install.sh --from https://github.com/jarodgr12/lenspipe.git
+```
+
 That installs `uv` if needed, installs `lenspipe` from this repository with
 its own private Python into `~/.local/bin`, and runs `lenspipe doctor`, which
 reports Python, DifMAP, CASA, fonts, cores and memory, and says how to fix
