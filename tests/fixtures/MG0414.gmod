@@ -1,0 +1,17 @@
+! Master model for the test lens: four images, six components.
+! GROUP A1
+! COMPONENT A1a
+0.312v 0.0v 0.0v 0.8v 1.0 0.0 1 0 0
+! COMPONENT A1b
+0.041v 1.9v 42.0v 0.0 1.0 0.0 0
+! GROUP A2
+! COMPONENT A2a
+0.288v 400.5v 105.3v 0.9v 1.0 0.0 1 0 0
+! GROUP B
+! COMPONENT Ba
+0.101v 1240.2v -32.6v 0.0 1.0 0.0 0
+! COMPONENT Bb
+0.012v 1252.9v -30.1v 0.0 1.0 0.0 0
+! GROUP C
+! COMPONENT Ca
+0.045v 2001.7v 150.0v 0.7v 1.0 0.0 1 0 0

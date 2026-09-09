@@ -1,0 +1,36 @@
+Caltech difmap 2.5k
+Reading UV FITS file: /data/MG0414/stage1/MG0414.A/MG0414.A.cal.uvf
+Selecting polarization: I,  channels: 1..1
+A total of 3 model components were read from file MG0414.A.stage2.mod
+Iteration 01: reduced chi-squared = 1.234567
+Iteration 20: reduced chi-squared = 1.100000
+ Flux (Jy)          East (mas)         North (mas)        Shape
+  Value    Stdev     Value    Stdev     Value    Stdev     Type    Major  Ratio  Phi
+#-------------------------------------------------------------------------------
+ 0.3101234 0.0031 0 0 0 0 gaussian 0.8 1 0
+ 0.0412 0.00082 1.2712 0 1.4118 0 delta 0 1 0
+ 0.2879 0.0029 386.4 0 -106.2 0 gaussian 0.9 1 0
+Inverting map and beam
+Estimated noise=1.0234 mJy/beam.
+STAGE2_RMS 1 0.0010234
+Writing 3 model components to file: /tmp/channel_00001.mod
+Selecting polarization: I,  channels: 2..2
+A total of 3 model components were read from file MG0414.A.stage2.mod
+Iteration 20: reduced chi-squared = 1.100000
+#-------------------------------------------------------------------------------
+ 0.3099 0.0030 0 0 0 0 gaussian 0.8 1 0
+ 0.0410 0.00081 1.2712 0 1.41Your choice of large map pixels excluded 12.3% of the data.
+The y-axis pixel size should ideally be below 24.97 milli-arcsec.
+18 0 delta 0 1 0
+ 0.2880 0.0028 386.4 0 -106.2 0 gaussian 0.9 1 0
+Inverting map and beam
+STAGE2_RMS 2 1.0301e-03
+Writing 3 model components to file: /tmp/channel_00002.mod
+Selecting polarization: I,  channels: 3..3
+#-------------------------------------------------------------------------------
+ 0.3102 0.0031 0 0 0 0 gaussian 0.8 1 0
+ 0.0413 0.00083 1.2712 0 1.4118 0 delta 0 1 0
+ 0.2878 0.0029 386.4 0 -106.2 0 gaussian 0.9 1 0
+Inverting map and beam
+STAGE2_RMS 3 0.0010111
+Exiting program

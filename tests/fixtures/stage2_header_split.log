@@ -1,0 +1,47 @@
+Caltech difference mapping program - version 2.5q (3 Dec 2022)
+Reading UV FITS file: /data/1555/stage1/1555.B/1555.B.cal.uvf
+Selecting polarization: I,  channels: 3032..3032
+Reading IF 48 channels: 3032..3032
+clrmod: Cleared the established and tentative models.
+A total of 5 model components were read from file /data/1555/stage2/1555.B/1555.B.stage2.mod
+There are 5 variables and 74908 usable visibilities.
+Iteration 20: Reduced Chi-squared=5255.7382 (Increased)
+#    Flux (Jy)          East (arcsec)        North (arcsec)    Shape   R.A. (deg)       Dec (deg)  Major FWHM (arcsec) Minor FWHM (arcsec)  Theta (deg)     Freq
+#  Value     Stdev      Value     Stdev      Value     Stdev                                          Value    Stdev     Value    Stdev     Value  Stdev
+#------------------  -------------------  ------------------- ------  -------------- -------------- -----------------  -----------------  ---------------  ------
+ 2.9705e-02 1.2e-05   4.4397e-02 0.0e+00  -2.6973e-02 0.0e+00  point  -120.7002344841  37.3599825068 0.000e+00 0.0e+00  0.000e+00 0.0e+00     0.00 0.0e+00  1.49
+ 8.1233e-04 1.2e-05   6.2960e-02 0.0e+00  -6.0265e-02 0.0e+00  point  -120.7002279969  37.3599732591 0.000e+00 0.0e+00  0.000e+00 0.0e+00     0.00 0.0e+00  1.49
+ 1.5655e-02 7.8e-06  -2.9728e-02 0.0e+00   2.1380e-02 0.0e+00  point  -120.7002603892  37.3599959382 0.000e+00 0.0e+00  0.000e+00 0.0e+00     0.00 0.0e+00  1.49
+ 1.2419e-02 7.3e-06  -3.6809e-01 0.0e+00  -5.6240e-02 0.0e+00  point  -120.7003786376  37.3599743771 0.000e+00 0.0e+00  0.000e+00 0.0e+00     0.00 0.0e+00  1.49
+ 2.3495e-03 7.4e-06  -1.1706e-01 0.0e+00  -3.9382e-01 0.0e+00  point  -120.7002909090  37.3598806054 0.000e+00 0.0e+00  0.000e+00 0.0e+00     0.00 0.0e+00  1.49
+Adding 5 model components to the UV plane model.
+The established model now contains 5 components and 0.0625006 Jy
+Inverting map and beam
+Estimated beam: bmin=117.4 mas, bmaj=129.2 mas, bpa=-72.2 degrees
+Estimated noise=0.00732116 mJy/beam.
+STAGE2_RMS 3032 0.000534027
+Writing 5 model components to file: /data/1555/stage2/1555.B/.1555.B.channel.work/channel_03032.mod
+Selecting polarization: I,  channels: 3033..3033
+Reading IF 48 channels: 3033..3033
+clrmod: Cleared the established and tentative models.
+A total of 5 model components were read from file /data/1555/stage2/1555.B/1555.B.stage2.mod
+There are 5 variables and 74908 usable visibilities.
+Iteration 20: Reduced Chi-squared=5179.7107 (Increased)
+#    Flux (Jy)          East (arcsec)        North (arcsec)    Shape   R.A. (deg)       Dec (deg)  Major FWHM (arcsec) Minor FWHM (arcsec)  Theta (deg)     Freq
+#  Value     Stdev      Value     Stdev      Value     Stdev                                          Value    Stdev     Value    Stdev     Value  Stdev
+#Your choice of large map pixels excluded 0.0347% of the data.
+ The y-axis pixel size should ideally be below 25 milli-arcsec
+------------------  -------------------  ------------------- ------  -------------- -------------- -----------------  -----------------  ---------------  ------
+ 2.9191e-02 1.2e-05   4.4397e-02 0.0e+00  -2.6973e-02 0.0e+00  point  -120.7002344841  37.3599825068 0.000e+00 0.0e+00  0.000e+00 0.0e+00     0.00 0.0e+00  1.49
+ 9.8579e-04 1.2e-05   6.2960e-02 0.0e+00  -6.0265e-02 0.0e+00  point  -120.7002279969  37.3599732591 0.000e+00 0.0e+00  0.000e+00 0.0e+00     0.00 0.0e+00  1.49
+ 1.6120e-02 7.8e-06  -2.9728e-02 0.0e+00   2.1380e-02 0.0e+00  point  -120.7002603892  37.3599959382 0.000e+00 0.0e+00  0.000e+00 0.0e+00     0.00 0.0e+00  1.49
+ 1.3456e-02 7.3e-06  -3.6809e-01 0.0e+00  -5.6240e-02 0.0e+00  point  -120.7003786376  37.3599743771 0.000e+00 0.0e+00  0.000e+00 0.0e+00     0.00 0.0e+00  1.49
+ 2.7474e-03 7.4e-06  -1.1706e-01 0.0e+00  -3.9382e-01 0.0e+00  point  -120.7002909090  37.3598806054 0.000e+00 0.0e+00  0.000e+00 0.0e+00     0.00 0.0e+00  1.49
+Adding 5 model components to the UV plane model.
+The established model now contains 5 components and 0.0625006 Jy
+Inverting map and beam
+Estimated beam: bmin=117.4 mas, bmaj=129.2 mas, bpa=-72.2 degrees
+Estimated noise=0.00732116 mJy/beam.
+STAGE2_RMS 3033 0.000533389
+Writing 5 model components to file: /data/1555/stage2/1555.B/.1555.B.channel.work/channel_03033.mod
+Exiting program

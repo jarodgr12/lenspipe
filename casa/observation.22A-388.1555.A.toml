@@ -1,0 +1,65 @@
+# Observation config for casa/calibration.py
+# Project 22A-388, epoch A, target B1555+375 ("1555"), EVLA Ku band (12-18 GHz),
+# 48 spws x 64 channels. Values copied from legacy/scriptForCalibration.A.py.
+
+[observation]
+# Raw SDM-derived MeasurementSet delivered by the NRAO archive.
+msfile = "22A-388.sb41674889.eb41704405.59653.561157118056.ms"
+# Output of step 0 (mstransform): only the fields/spws/scans below. Every
+# calibration table and the run record <mssplit>.calibration.json hang off it.
+mssplit = "22A-388.1555.A.ms"
+# Source label and epoch letter: step 10 writes <source>.<epoch>.uvfits, which
+# is the filename DifMAP Stage 1 expects inside <project>/inputs/.
+source = "1555"
+epoch = "A"
+# Field ids in the RAW msfile to keep. After the split they are re-indexed to
+# 0 = flux calibrator 3C286, 1 = phase calibrator, 2 = target.
+fields = "0,1,3,4"
+# Spectral windows of interest in the raw msfile (all 48 Ku-band spws).
+spw = "0~47"
+# Scans to keep (calibrator + target scans of this scheduling block).
+scans = "7,11,13,17,18"
+# Reference antenna: a central pad (legacy note: ea23, ea28 or ea10).
+refant = "ea10"
+
+[apriori]
+# spw selection for the opacity table (gencal caltype="opac"); must cover every
+# spw of mssplit because plotweather returns one opacity per spw.
+opacity_spw = "0~47"
+
+[fluxcal]
+# Model image for the flux calibrator (3C286 at Ku/U band) used by setjy.
+model = "3C286_U.im"
+# Flux density standard used by setjy for the flux calibrator.
+standard = "Perley-Butler 2010"
+
+# A-priori flag commands applied in order by step 2. Each table is passed
+# straight to flagdata(vis=mssplit, **command); only flagdata keywords allowed.
+[[flags]]
+# Flag exact zeros (correlator dropouts) in the DATA column.
+mode = "clip"
+clipzeros = true
+
+[[flags]]
+# Manual baseline flag on spw 23 for baselines ea?-ea? indices 1&4,1&5,1&6,1&7.
+mode = "manual"
+spw = "23"
+antenna = "1&4;1&5;1&6;1&7"
+
+[[flags]]
+# Quack the first 20 s of every target (field 2) scan (antenna slew settling).
+mode = "quack"
+field = "2"
+quackinterval = 20
+quackmode = "beg"
+
+[export]
+# false (default): ONE file <source>.<epoch>.uvfits with all 48 spws x 64
+#   channels (width=1), the layout DifMAP Stage 1 expects.
+# true: legacy comparison layout, three 16-spw files averaged by 4 channels,
+#   named <source>.<epoch>.1.uvfits, .2.uvfits, .3.uvfits.
+legacy_split = false
+# Passed to exportuvfits(overwrite=...). Leave false to protect existing files.
+overwrite = false
+# statwt minsamp (minimum number of unflagged visibilities per weight estimate).
+statwt_minsamp = 8
