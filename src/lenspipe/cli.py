@@ -294,6 +294,8 @@ def stage2(
     shards: Annotated[str | None, typer.Option("--shards", help="DifMAP processes per epoch or 'auto'.")] = None,
     modelfit_iterations: Annotated[int | None, typer.Option("--modelfit-iterations")] = None,
     keep_models: Annotated[bool | None, typer.Option("--keep-models/--no-keep-models")] = None,
+    plots: Annotated[bool | None, typer.Option("--plots/--no-plots", help="Write the quick-look PNGs.")] = None,
+    error_bars: Annotated[bool | None, typer.Option("--error-bars/--no-error-bars", help="Error bars on the quick-look plots.")] = None,
     recover_from_log: Annotated[bool, typer.Option("--recover-from-log", help="Rebuild products from the existing log.")] = False,
     resume: Annotated[bool, typer.Option("--resume", help="Continue an interrupted run; finished shards are kept.")] = False,
     overwrite: Annotated[bool, typer.Option("--overwrite")] = False,
@@ -312,6 +314,8 @@ def stage2(
         "channels": channels,
         "modelfit_iterations": modelfit_iterations,
         "keep_models": keep_models,
+        "plot_spectrum": plots,
+        "plot_error_bars": error_bars,
     }
     if shards is not None:
         overrides["shards"] = "auto" if shards == "auto" else int(shards)
@@ -355,6 +359,7 @@ def stage3(
     exclude_channels: Annotated[str | None, typer.Option("--exclude-channels")] = None,
     exclude_epoch_channels: Annotated[list[str] | None, typer.Option("--exclude-epoch-channels", help="EPOCH:SPEC; repeatable.")] = None,
     annotations: Annotated[bool | None, typer.Option("--annotations/--no-annotations")] = None,
+    error_bars: Annotated[bool | None, typer.Option("--error-bars/--no-error-bars", help="Error bars on every figure.")] = None,
     formats: Annotated[str | None, typer.Option("--formats", help="Figure formats, e.g. 'png' or 'pdf,png'.")] = None,
     use_tex: Annotated[bool | None, typer.Option("--use-tex/--no-use-tex")] = None,
     overwrite: Annotated[bool, typer.Option("--overwrite")] = False,
@@ -384,6 +389,7 @@ def stage3(
                 "exclude_channels": exclude_channels,
                 "exclude_epoch_channels": exclude_epoch_channels,
                 "annotations": annotations,
+                "plot_error_bars": error_bars,
                 "figure_formats": (
                     [f.strip() for f in formats.split(",") if f.strip()] if formats else None
                 ),

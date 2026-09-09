@@ -898,7 +898,7 @@ def run_epoch(
         return Stage2Result(paths, False, "failed", str(exc))
 
     write_spectrum(paths.spectrum_csv, rows, prepared.output_labels, prepared.error_labels)
-    _quicklook(paths, prepared, reporter)
+    _quicklook(paths, prepared, reporter, config.stage2)
 
     retained_models_directory: Path | None = None
     if stage2.keep_models:
@@ -977,7 +977,7 @@ def _recover(
         return Stage2Result(paths, False, "failed", str(exc))
 
     write_spectrum(paths.spectrum_csv, rows, prepared.output_labels, prepared.error_labels)
-    _quicklook(paths, prepared, reporter)
+    _quicklook(paths, prepared, reporter, config.stage2)
     _write_metadata(
         paths, config, mode=config.stage2.mode, total_channels=len(prepared.frequencies),
         fit_count=len(prepared.fit_ranges), observation_mjd=prepared.observation_mjd,
@@ -991,11 +991,16 @@ def _recover(
     )
 
 
-def _quicklook(paths: Stage2Paths, prepared: _Prepared, reporter: Reporter) -> None:
+def _quicklook(
+    paths: Stage2Paths, prepared: _Prepared, reporter: Reporter, config: Stage2Config | None = None
+) -> None:
     from lenspipe.stage2_quicklook import write_quicklook_plots
 
+    if config is not None and not config.plot_spectrum:
+        return
     try:
         write_quicklook_plots(
+            error_bars=config.plot_error_bars if config is not None else True,
             csv_path=paths.spectrum_csv,
             spectrum_png=paths.plot_file,
             grouped_png=paths.grouped_plot_file,

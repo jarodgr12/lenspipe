@@ -46,6 +46,20 @@ def _resolve_x_limits(x_limits):
     return SUMMARY_FREQUENCY_LIMITS_GHZ if x_limits is None else x_limits
 
 
+SHOW_ERROR_BARS = True
+
+
+def configure_error_bars(show: bool) -> None:
+    """Draw error bars on every Stage 3 figure (default) or plot the points alone."""
+    global SHOW_ERROR_BARS
+    SHOW_ERROR_BARS = bool(show)
+
+
+def _yerr(values):
+    """The ``yerr`` argument for ``ax.errorbar``: the errors, or None when bars are off."""
+    return values if SHOW_ERROR_BARS else None
+
+
 def _format_mjd(mjd: float) -> str:
     """Format MJD to four decimal places."""
     return f"{float(mjd):.4f}"
@@ -298,7 +312,7 @@ def _draw_spectrum_panel(
         ax.errorbar(
             frequency[mask],
             y[mask],
-            yerr=yerr[mask],
+            yerr=_yerr(yerr[mask]),
             fmt="o",
             ms=marker_size,
             capsize=0,
@@ -353,7 +367,7 @@ def _draw_ratio_panel(
         ax.errorbar(
             frequency[mask],
             y[mask],
-            yerr=yerr[mask],
+            yerr=_yerr(yerr[mask]),
             fmt="o",
             ms=marker_size,
             capsize=0,
@@ -548,7 +562,7 @@ def plot_spectra_with_residuals(
         ax.errorbar(
             frequency[mask],
             flux[mask] * 1000.0,
-            yerr=sigma[mask] * 1000.0,
+            yerr=_yerr(sigma[mask] * 1000.0),
             fmt="o",
             ms=4.5,
             linestyle="none",
@@ -644,7 +658,7 @@ def plot_combined_average_spectrum(
                 rf"$\alpha={a_value}\pm{a_error}$"
             )
         ax.errorbar(
-            frequency[mask], values[mask], yerr=errors[mask],
+            frequency[mask], values[mask], yerr=_yerr(errors[mask]),
             fmt="o", ms=4.5, capsize=0, linestyle="none",
             color=colour, label=legend_label, zorder=3,
         )
@@ -714,7 +728,7 @@ def plot_combined_average_flux_ratios(
         ax.errorbar(
             frequency[mask],
             values[mask],
-            yerr=errors[mask],
+            yerr=_yerr(errors[mask]),
             fmt="o",
             ms=4.5,
             capsize=0,
@@ -775,7 +789,7 @@ def plot_epoch_weighted_flux_ratios_vs_mjd(
         if not np.any(mask):
             continue
         ax.errorbar(
-            mjd[mask], values[mask], yerr=errors[mask],
+            mjd[mask], values[mask], yerr=_yerr(errors[mask]),
             fmt="o", ms=4.5, capsize=0, linestyle="none",
             color=colour, label=label, zorder=3,
         )
@@ -840,7 +854,7 @@ def plot_epoch_normalized_weighted_flux_ratios_vs_mjd(
 
         if np.any(mask):
             axis.errorbar(
-                mjd[mask], values[mask], yerr=errors[mask],
+                mjd[mask], values[mask], yerr=_yerr(errors[mask]),
                 fmt="o", ms=4.5, capsize=0, linestyle="none",
                 color=colour, zorder=3,
             )
@@ -959,7 +973,7 @@ def plot_epoch_reference_fluxes_vs_mjd(
         if not np.any(mask):
             continue
         ax.errorbar(
-            mjd[mask], values[mask], yerr=errors[mask],
+            mjd[mask], values[mask], yerr=_yerr(errors[mask]),
             fmt="o", ms=4.5, capsize=0, linestyle="none",
             color=colour, label=label, zorder=3,
         )
@@ -1001,7 +1015,7 @@ def plot_epoch_rcusp_vs_mjd(
 
     if np.any(mask):
         ax.errorbar(
-            mjd[mask], values[mask], yerr=errors[mask],
+            mjd[mask], values[mask], yerr=_yerr(errors[mask]),
             fmt="o", ms=4.5, capsize=0, linestyle="none",
             color=COLOURS[0], zorder=3,
         )

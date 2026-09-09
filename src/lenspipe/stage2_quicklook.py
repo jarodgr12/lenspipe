@@ -13,7 +13,6 @@ import pandas as pd  # noqa: E402
 
 __all__ = ["write_quicklook_plots"]
 
-PLOT_ERROR_BARS = True
 PLOT_DPI = 200
 
 
@@ -36,7 +35,8 @@ def _good_rows(data: pd.DataFrame, labels: list[str]) -> pd.DataFrame:
 
 
 def _plot_lines(
-    data: pd.DataFrame, labels: list[str], plot_path: Path, ylabel: str, title: str
+    data: pd.DataFrame, labels: list[str], plot_path: Path, ylabel: str, title: str,
+    error_bars: bool = True,
 ) -> None:
     good = _good_rows(data, labels)
     if good.empty:
@@ -49,7 +49,7 @@ def _plot_lines(
         if finite.empty:
             continue
         display = label.removesuffix("_jy")
-        if PLOT_ERROR_BARS and finite["rms_jy_per_beam"].notna().all():
+        if error_bars and finite["rms_jy_per_beam"].notna().all():
             ax.errorbar(
                 finite["frequency_ghz"], finite[label], yerr=finite["rms_jy_per_beam"],
                 fmt="o-", linewidth=1, markersize=4, capsize=2, label=display,
@@ -117,6 +117,7 @@ def write_quicklook_plots(
     source: str,
     epoch: str,
     warn: Callable[[str], None],
+    error_bars: bool = True,
 ) -> None:
     data = pd.read_csv(csv_path)
     required = {"frequency_ghz", "rms_jy_per_beam", "fit_status"}
@@ -129,14 +130,14 @@ def write_quicklook_plots(
             "spectrum",
             lambda: _plot_lines(
                 data, output_labels, spectrum_png, "Flux density (Jy)",
-                _title(data, source, epoch, "spectrum"),
+                _title(data, source, epoch, "spectrum"), error_bars,
             ),
         ),
         (
             "grouped spectrum",
             lambda: _plot_lines(
                 data, grouped_labels, grouped_png, "Combined flux density (Jy)",
-                _title(data, source, epoch, "grouped-component spectra"),
+                _title(data, source, epoch, "grouped-component spectra"), error_bars,
             ),
         ),
     ]

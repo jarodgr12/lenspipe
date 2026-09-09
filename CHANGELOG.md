@@ -19,6 +19,9 @@ completed with `lenspipe stage2 <project> --epoch X --resume` without refitting.
 - Added: `scripts/install.sh --from <git-url> --ref <tag>` for installing
   straight from a repository.
 - Added: GitHub Actions workflow running lint and tests on Linux.
+- Added: plot toggles. `stage2.plot_spectrum` and `stage2.plot_error_bars`
+  (the former script constants) and `stage3.plot_error_bars`, also as
+  `--plots/--no-plots` and `--error-bars/--no-error-bars`.
 
 ## 2.0.0 — 2026-09-09
 

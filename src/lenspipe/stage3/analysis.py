@@ -1103,6 +1103,7 @@ def write_epoch_products(
                 "title": "MJD only",
                 "major_ticks": "inward on all four sides",
                 "minor_ticks": False,
+                "error_bars": plotting.SHOW_ERROR_BARS,
                 "frequency_limits_ghz": list(plotting.SUMMARY_FREQUENCY_LIMITS_GHZ),
                 "spectrum_y_limits_mjy": list(spectrum_y_limits),
                 "ratio_y_limits": (
@@ -1703,11 +1704,16 @@ class Stage3Summary:
 
 
 def _worker_init(
-    use_tex: bool, frame: tuple[float, float], ticks: list[float], formats: list[str]
+    use_tex: bool,
+    frame: tuple[float, float],
+    ticks: list[float],
+    formats: list[str],
+    error_bars: bool = True,
 ) -> None:
     configure_matplotlib(use_tex=use_tex)
     plotting.configure_frequency_frame(frame, ticks)
     plotting.configure_figure_formats(formats)
+    plotting.configure_error_bars(error_bars)
 
 
 def run_stage3(
@@ -1747,6 +1753,7 @@ def run_stage3(
     configure_matplotlib(use_tex=settings.use_tex)
     plotting.configure_frequency_frame(settings.frequency_frame_ghz, settings.frequency_ticks_ghz)
     plotting.configure_figure_formats(settings.figure_formats)
+    plotting.configure_error_bars(settings.plot_error_bars)
 
     datasets = discover_stage2_datasets(
         root, requested_epochs=epochs or None, requested_products=products or None
@@ -1857,6 +1864,7 @@ def run_stage3(
                     settings.frequency_frame_ghz,
                     settings.frequency_ticks_ghz,
                     settings.figure_formats,
+                    settings.plot_error_bars,
                 ),
             ) as pool:
                 futures = {

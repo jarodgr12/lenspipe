@@ -143,6 +143,10 @@ class Stage2Config(_Model):
     )
     keep_models: bool = Field(False, description="Retain every fitted model under models_<mode>/.")
     input_pattern: str = "*.cal.uvf"
+    plot_spectrum: bool = Field(True, description="Write the quick-look PNG plots after each epoch.")
+    plot_error_bars: bool = Field(
+        True, description="Draw residual-RMS error bars on the quick-look plots."
+    )
     memory_fraction: float = Field(
         0.5,
         gt=0,
@@ -203,6 +207,9 @@ class Stage3Config(_Model):
         description="Group names (A1, A2, B) for R_cusp; empty list disables it.",
     )
     annotations: bool = Field(True, description="Also write annotated spectrum figures.")
+    plot_error_bars: bool = Field(
+        True, description="Draw error bars on every Stage 3 figure; off plots the points alone."
+    )
     figure_formats: list[Literal["pdf", "png", "svg"]] = Field(
         default_factory=lambda: ["pdf", "png"],
         description="Formats written for every Stage 3 figure; png alone roughly halves plot time.",
@@ -365,6 +372,8 @@ shards = "auto"                     # DifMAP processes per epoch; "auto" = cores
                                     # further capped so shards x epoch_workers fit in memory
 keep_models = false
 input_pattern = "*.cal.uvf"
+plot_spectrum = true                # quick-look PNGs after each epoch
+plot_error_bars = true              # residual-RMS error bars on those plots
 memory_fraction = 0.5               # share of physical RAM DifMAP processes may use in total
 memory_multiple = 3.0               # estimated DifMAP RSS per dataset as a multiple of the UV-FITS size
 
@@ -376,6 +385,7 @@ frequency_frame_ghz = [11.7, 18.3]
 frequency_ticks_ghz = [12.0, 13.0, 14.0, 15.0, 16.0, 17.0, 18.0]
 rcusp_images = ["A1", "A2", "B"]    # [] disables R_cusp
 annotations = true
+plot_error_bars = true              # error bars on every Stage 3 figure
 figure_formats = ["pdf", "png"]     # ["png"] for quick iteration runs
 use_tex = false
 # exclude_channels = "1-4,61-64"

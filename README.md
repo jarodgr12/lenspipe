@@ -125,6 +125,8 @@ Settings that did not exist before:
 | `run.epoch_workers` | 2 | Epochs processed concurrently in stages 1 and 2 |
 | `run.plot_workers` | 4 | Processes writing Stage 3 per-visit figures |
 | `stage3.figure_formats` | `["pdf","png"]` | Formats written for every Stage 3 figure; `["png"]` roughly halves plot time |
+| `stage2.plot_spectrum`, `stage2.plot_error_bars` | true, true | Quick-look PNGs after each epoch, and whether they carry residual-RMS error bars |
+| `stage3.plot_error_bars` | true | Error bars on every Stage 3 figure; off plots the points alone |
 | `project.difmap.stream` | `pipe` | `pty` makes DifMAP line-buffer so progress arrives per fit |
 | `stage3.rcusp_images` | `["A1","A2","B"]` | Group names for the cusp relation; `[]` disables it |
 | `stage3.frequency_frame_ghz`, `frequency_ticks_ghz` | 11.7 to 18.3, 12..18 | Plot frame |
