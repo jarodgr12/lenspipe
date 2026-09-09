@@ -1,27 +1,36 @@
 #!/usr/bin/env bash
 # Install (or update) lenspipe as a plain command and check the environment.
 #
-#   bash scripts/install.sh                                   # from this checkout
-#   bash scripts/install.sh --from https://host/lenspipe.git --ref v2.0.1
-#   bash scripts/install.sh --dry-run                         # show what would run
+#   One line, no checkout needed (tracks master; later updates: `lenspipe update`):
+#     curl -LsSf https://raw.githubusercontent.com/jarodgr12/lenspipe/master/scripts/install.sh | bash
+#   From a checkout:            bash scripts/install.sh
+#   A specific release:         bash scripts/install.sh --from https://github.com/jarodgr12/lenspipe.git --ref v2.0.1
+#   Show what would run:        bash scripts/install.sh --dry-run
 #
 # Installs uv (a Python package manager) if missing, then installs lenspipe with
 # its own private Python into ~/.local/bin, then runs `lenspipe doctor`.
 # Re-running it updates an existing installation. System Python and CASA are
-# never touched. Later updates: `lenspipe update`.
+# never touched.
 set -euo pipefail
 
-here="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+DEFAULT_REPO="https://github.com/jarodgr12/lenspipe.git"
+script_path="${BASH_SOURCE[0]:-}"
+if [ -n "$script_path" ] && [ -f "$script_path" ]; then
+  here="$(cd "$(dirname "$script_path")/.." && pwd)"
+else
+  here=""   # piped from curl: no checkout, install from the repository
+fi
 export PATH="$HOME/.local/bin:$PATH"
 
-SOURCE="$here"; REF=""; DRY=0
+SOURCE="${here:-$DEFAULT_REPO}"; REF=""; DRY=0
+usage() { if [ -n "$script_path" ] && [ -f "$script_path" ]; then sed -n '2,13p' "$script_path"; else echo "usage: install.sh [--from URL|DIR] [--ref TAG] [--dry-run]"; fi; }
 while [ $# -gt 0 ]; do
   case "$1" in
     --from) SOURCE="$2"; shift 2 ;;
     --ref) REF="$2"; shift 2 ;;
     --dry-run) DRY=1; shift ;;
-    -h|--help) sed -n '2,12p' "$0"; exit 0 ;;
-    *) echo "unknown option: $1"; sed -n '2,12p' "$0"; exit 2 ;;
+    -h|--help) usage; exit 0 ;;
+    *) echo "unknown option: $1"; usage; exit 2 ;;
   esac
 done
 

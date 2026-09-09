@@ -19,31 +19,33 @@ Stage 1 inputs.
 
 ## Install
 
-On the machine that has DifMAP (and CASA, if you calibrate there), from a
-copy of this repository:
+On the machine that has DifMAP (and CASA, if you calibrate there), one line:
 
 ```bash
-bash scripts/install.sh
+curl -LsSf https://raw.githubusercontent.com/jarodgr12/lenspipe/master/scripts/install.sh | bash
 ```
 
-That installs `uv` if needed, installs `lenspipe` with its own private Python
-into `~/.local/bin`, and runs `lenspipe doctor`, which reports Python, DifMAP,
-CASA, fonts, cores and memory, and says how to fix anything missing. System
-Python and CASA are not touched. Developers can use `uv sync --all-extras`
-and `uv run lenspipe` instead.
+That installs `uv` if needed, installs `lenspipe` from this repository with
+its own private Python into `~/.local/bin`, and runs `lenspipe doctor`, which
+reports Python, DifMAP, CASA, fonts, cores and memory, and says how to fix
+anything missing. System Python and CASA are not touched. It needs `git` and
+internet access once; runs are offline afterwards.
+
+From a checkout, `bash scripts/install.sh` installs that checkout instead, and
+`--from <url> --ref v2.0.1` pins a release. Developers can use
+`uv sync --all-extras` and `uv run lenspipe`.
 
 ### Updating
 
-Replace the checkout with the new version (unzip over it, or `git pull`) and
-run `lenspipe update`. It reinstalls from the source the tool was installed
-from and runs `doctor`. Installing straight from a repository also works:
-
 ```bash
-bash scripts/install.sh --from https://github.com/jarodgr12/lenspipe.git --ref v2.0.1
+lenspipe update
 ```
 
+That reinstalls from the source the tool was installed from, so an install
+from the repository picks up the current `master`, and runs `doctor`.
+`lenspipe update --check` shows the source without changing anything.
 `CHANGELOG.md` states for every release whether existing products need to be
-re-run. The version that produced a product is recorded in its metadata.
+re-run; the version that produced a product is recorded in its metadata.
 
 ## Quick start
 
