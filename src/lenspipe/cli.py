@@ -561,18 +561,91 @@ def jobs(
 
 @app.command()
 def ui(
-    project: ProjectArg = Path("."),
+    project: Annotated[Path | None, typer.Argument(help="Project to open. Default: the last project used, else the current directory; switch projects on the Project page.")] = None,
     host: Annotated[str, typer.Option("--host")] = "127.0.0.1",
     port: Annotated[int, typer.Option("--port")] = 8080,
     no_browser: Annotated[bool, typer.Option("--no-browser", help="Do not open a browser window.")] = False,
 ) -> None:
-    """Start the local web console for this project."""
+    """Start the local web console. Stop it later with `lenspipe stop`."""
+    from lenspipe.console_registry import find_consoles, port_in_use
+
+    if port_in_use(host, port):
+        running = find_consoles(port=port)
+        if running:
+            record = running[0]
+            typer.echo(
+                f"A console is already listening on port {port} (pid {record.pid}, project {record.root}).\n"
+                f"Open {record.url}, or run 'lenspipe stop --port {port}' first, or choose another --port.",
+                err=True,
+            )
+        else:
+            typer.echo(f"Port {port} is already in use by another program; choose another --port.", err=True)
+        raise typer.Exit(code=1)
     try:
         from lenspipe.ui.app import serve
     except ImportError as exc:  # pragma: no cover - depends on optional install
         typer.echo(f"ERROR: the console needs nicegui: {exc}", err=True)
         raise typer.Exit(code=1) from exc
-    serve(Layout.at(project).root, host=host, port=port, open_browser=not no_browser)
+    serve(Layout.at(project).root if project is not None else None, host=host, port=port, open_browser=not no_browser)
+
+
+@app.command()
+def stop(
+    project: Annotated[Path | None, typer.Argument(help="Only stop consoles serving this project.")] = None,
+    port: Annotated[int | None, typer.Option("--port", help="Only stop the console on this port.")] = None,
+    with_jobs: Annotated[bool, typer.Option("--with-jobs", help="Also cancel that project's running jobs.")] = False,
+    list_only: Annotated[bool, typer.Option("--list", help="Show running consoles without stopping them.")] = False,
+) -> None:
+    """Stop running consoles (started by `lenspipe ui`), even from a terminal that has since closed.
+
+    Jobs keep running unless --with-jobs is given: they are separate processes by design.
+    """
+    from lenspipe.console_registry import find_consoles, stop_console
+    from lenspipe.jobs import JobManager
+
+    root = Layout.at(project).root if project is not None else None
+    consoles = find_consoles(root=root, port=port)
+    if not consoles:
+        typer.echo("No running console found" + (f" for {root}" if root else "") + (f" on port {port}" if port else "") + ".")
+        if root is None and port is None:
+            raise typer.Exit(code=0)
+        raise typer.Exit(code=3)
+    for record in consoles:
+        origin = "" if record.source == "registry" else "  (found by process scan)"
+        typer.echo(f"console pid {record.pid}  {record.url}  {record.root or '?'}{origin}")
+    if list_only:
+        return
+    failed = 0
+    for record in consoles:
+        if stop_console(record):
+            typer.echo(f"stopped pid {record.pid}")
+        else:
+            failed += 1
+            typer.echo(f"could not stop pid {record.pid}", err=True)
+    if with_jobs:
+        roots = {r.root for r in consoles if r.root} if root is None else {str(root)}
+        for job_root in sorted(roots):
+            manager = JobManager(job_root)
+            manager.pump()
+            for job in manager.list():
+                if job.status in {"running", "queued"}:
+                    manager.cancel(job.id)
+                    typer.echo(f"cancelled job {job.id}")
+    else:
+        for job_root in sorted({r.root for r in consoles if r.root}):
+            try:
+                manager = JobManager(job_root)
+                manager.pump()
+                active = [j for j in manager.list() if j.status in {"running", "queued"}]
+            except OSError:
+                continue
+            if active:
+                typer.echo(
+                    f"{len(active)} job(s) still running for {job_root}; they continue on their own. "
+                    "Use --with-jobs or 'lenspipe jobs --cancel <id>' to stop them."
+                )
+    if failed:
+        raise typer.Exit(code=1)
 
 
 # ---------------------------------------------------------------------------
