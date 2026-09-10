@@ -71,9 +71,18 @@ def unregister(pid: int | None = None) -> None:
 
 
 def _command_line(pid: int) -> str | None:
+    """Full command line of a process. ``ps`` truncates to the terminal width
+    unless told otherwise, so /proc is preferred and ``-ww`` is used otherwise."""
+    proc_cmdline = Path("/proc") / str(pid) / "cmdline"
+    try:
+        raw = proc_cmdline.read_bytes()
+    except OSError:
+        raw = b""
+    if raw:
+        return " ".join(part.decode("utf-8", errors="replace") for part in raw.split(b"\0") if part) or None
     try:
         output = subprocess.run(
-            ["ps", "-o", "command=", "-p", str(pid)], text=True, capture_output=True, check=False
+            ["ps", "-ww", "-o", "command=", "-p", str(pid)], text=True, capture_output=True, check=False
         ).stdout.strip()
     except OSError:
         return None
@@ -121,14 +130,23 @@ def _is_console_process(pid: int) -> bool:
 
 
 def _scan_processes() -> list[tuple[int, str]]:
+    skip = {os.getpid(), os.getppid()}
+    found: list[tuple[int, str]] = []
+    proc = Path("/proc")
+    if proc.is_dir():
+        for entry in proc.iterdir():
+            if not entry.name.isdigit() or int(entry.name) in skip:
+                continue
+            command = _command_line(int(entry.name))
+            if command and looks_like_console_command(command):
+                found.append((int(entry.name), command))
+        return sorted(found)
     try:
         output = subprocess.run(
-            ["ps", "-axo", "pid=,command="], text=True, capture_output=True, check=False
+            ["ps", "-axww", "-o", "pid=,command="], text=True, capture_output=True, check=False
         ).stdout
     except OSError:
         return []
-    found: list[tuple[int, str]] = []
-    skip = {os.getpid(), os.getppid()}
     for line in output.splitlines():
         line = line.strip()
         if not line:

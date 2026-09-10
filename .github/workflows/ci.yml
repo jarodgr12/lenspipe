@@ -1,8 +1,10 @@
 name: ci
 
+# Pull requests are checked once via pull_request; pushes only trigger on master
+# (post-merge confirmation) and release tags, so a PR commit is not built twice.
 on:
   push:
-    branches: ["**"]
+    branches: ["master"]
     tags: ["v*"]
   pull_request:
 

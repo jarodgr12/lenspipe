@@ -43,8 +43,8 @@ def _alive(pid: int) -> bool:
 
 
 def _ps(pid: int) -> str:
-    """What `ps` reports for the fake console; shown when a lookup assertion fails."""
-    return subprocess.run(["ps", "-o", "command=", "-p", str(pid)], text=True, capture_output=True).stdout
+    """What the registry sees for the fake console; shown when a lookup assertion fails."""
+    return console_registry._command_line(pid) or "<no command line>"
 
 
 def test_registered_console_is_found_and_stopped(registry: Path, tmp_path: Path) -> None:
