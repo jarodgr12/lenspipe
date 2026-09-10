@@ -291,6 +291,7 @@ def run_epoch(
             on_line=on_line,
             cancel_event=cancel_event,
             stream=config.project.difmap.stream,
+            nice=config.run.nice,
         )
     except (DifmapNotFound, OSError) as exc:
         reporter.clear(label)

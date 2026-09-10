@@ -160,7 +160,9 @@ def decide_shards(
     the memory cap; ``auto`` never exceeds it.
     """
     cores = cpu_count or os.cpu_count() or 2
-    cpu_cap = max(1, min(8, cores - 1))
+    # Leave one core for the console and the OS, and share the rest between the
+    # epochs that run at the same time, so the machine is never oversubscribed.
+    cpu_cap = max(1, min(8, (cores - 1) // max(1, epoch_workers)))
     total = total_memory_bytes if total_memory_bytes is not None else physical_memory_bytes()
 
     memory_cap: int | None = None

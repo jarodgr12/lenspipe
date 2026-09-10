@@ -107,10 +107,9 @@ def jobs_page(job: str | None = None) -> None:
                 selected["log_box"] = ui.log(max_lines=400).classes(
                     "w-full h-[50vh] font-mono text-xs"
                 )
-            update_live(record, force=True)
 
-        def update_live(record: JobRecord, force: bool = False) -> None:
-            progress = record.progress()
+        def update_live(record: JobRecord, progress: dict, text: str, force: bool = False) -> None:
+            """Apply already-read progress and log tail; file reads happen off the event loop."""
             if force or progress != selected["progress"]:
                 selected["progress"] = progress
                 box = selected["progress_box"]
@@ -130,7 +129,6 @@ def jobs_page(job: str | None = None) -> None:
                             ui.label(str(item["detail"])).classes(
                                 "text-caption opacity-60 font-mono pl-2 truncate"
                             )
-            text = record.tail(300)
             if force or text != selected["log"]:
                 selected["log"] = text
                 log = selected["log_box"]
@@ -138,29 +136,36 @@ def jobs_page(job: str | None = None) -> None:
                 if text:
                     log.push(text)
 
-        def select(job_id: str) -> None:
+        async def select(job_id: str) -> None:
             selected["id"] = job_id
             selected["signature"] = None
             list_signature["value"] = None
-            poll()
+            await poll()
 
         async def cancel(job_id: str) -> None:
             if console.manager is None:
                 return
             await run.io_bound(console.manager.cancel, job_id)
             ui.notify(f"Cancelled {job_id}", type="warning")
-            select(job_id)
+            await select(job_id)
 
-        def rerun(record: JobRecord) -> None:
+        async def rerun(record: JobRecord) -> None:
             if console.manager is None:
                 return
-            new = console.manager.submit(record.argv, title=record.title, stage=record.stage)
+            new = await run.io_bound(
+                console.manager.submit, record.argv, title=record.title, stage=record.stage
+            )
             ui.notify(f"Submitted {new.id}", type="positive")
-            select(new.id)
+            await select(new.id)
 
-        def poll() -> None:
+        def _read_state() -> list[JobRecord]:
             console.tick()
-            records = console.jobs(LIST_LIMIT)
+            return console.jobs(LIST_LIMIT)
+
+        async def poll() -> None:
+            # Every file read runs in a worker thread: while DifMAP saturates the machine,
+            # blocking the event loop here is what makes the browser report "Connection lost".
+            records = await run.io_bound(_read_state)
             signature = tuple((r.id, r.status) for r in records) + (selected["id"],)
             if signature != list_signature["value"]:
                 list_signature["value"] = signature
@@ -177,8 +182,12 @@ def jobs_page(job: str | None = None) -> None:
             if detail_signature != selected["signature"]:
                 selected["signature"] = detail_signature
                 render_detail(current)
+                if current is not None:
+                    progress, text = await run.io_bound(lambda: (current.progress(), current.tail(300)))
+                    update_live(current, progress, text, force=True)
             elif current is not None and current.status == "running":
-                update_live(current)
+                progress, text = await run.io_bound(lambda: (current.progress(), current.tail(300)))
+                update_live(current, progress, text)
 
-        poll()
+        ui.timer(0.0, poll, once=True)
         ui.timer(1.0, poll)

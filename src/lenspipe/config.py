@@ -247,6 +247,15 @@ class Stage3Config(_Model):
 class RunConfig(_Model):
     epoch_workers: int = Field(2, ge=1, description="Epochs processed concurrently.")
     plot_workers: int = Field(4, ge=1, description="Stage 3 per-visit plot processes.")
+    nice: int = Field(
+        10,
+        ge=0,
+        le=19,
+        description=(
+            "Scheduling priority for jobs and DifMAP (0 = normal, 19 = lowest). Lower priority "
+            "keeps the console and the desktop responsive while fits saturate the CPUs."
+        ),
+    )
 
 
 class CasaConfig(_Model):
@@ -403,6 +412,7 @@ alpha_prior_max = 2.0
 [run]
 epoch_workers = 2
 plot_workers = 4
+nice = 10                           # job/DifMAP priority: 0 normal .. 19 lowest; keeps the console responsive
 
 [casa]
 # interpreter = "casa"              # or a python with casatasks; unset hides calibration in the console

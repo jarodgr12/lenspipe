@@ -69,6 +69,18 @@ def test_stderr_never_splits_a_stdout_line(tmp_path: Path) -> None:
     assert not any("#---Warning" in line for line in lines)
 
 
+def test_nice_lowers_difmap_priority(fake_difmap: Path, tmp_path: Path) -> None:
+    import os
+
+    baseline = os.getpriority(os.PRIO_PROCESS, 0)
+    inherited = run_difmap(str(fake_difmap), "nice\nquit\n", tmp_path / "n0.log")
+    assert f"NICE {baseline}" in inherited.log_text
+    lowered = run_difmap(str(fake_difmap), "nice\nquit\n", tmp_path / "n1.log", nice=15)
+    assert "NICE 15" in lowered.log_text
+    clamped = run_difmap(str(fake_difmap), "nice\nquit\n", tmp_path / "n2.log", nice=99)
+    assert "NICE 19" in clamped.log_text
+
+
 def test_missing_executable() -> None:
     with pytest.raises(DifmapNotFound):
         run_difmap("definitely-not-difmap-xyz", "quit\n", Path("/tmp/never.log"))

@@ -3,6 +3,19 @@
 Each entry says whether existing products need re-running. The `lenspipe`
 version that made a product is recorded in its metadata JSON.
 
+## 2.0.4 — 2026-09-10
+
+**Re-run needed:** no.
+
+- Changed: jobs and every DifMAP process now run at lower scheduling priority
+  (`run.nice`, default 10) so the console and the desktop stay responsive
+  while fits saturate the CPUs. Throughput is essentially unchanged.
+- Changed: the automatic shard count shares the spare cores between the epochs
+  running at once instead of giving each epoch cores minus one, so the machine
+  is no longer oversubscribed with the default two epoch workers.
+- Changed: the console reads job files off the event loop and tolerates
+  20 seconds without a heartbeat before showing "Connection lost" (was 3).
+
 ## 2.0.3 — 2026-09-10
 
 **Re-run needed:** no.
