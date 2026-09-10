@@ -79,18 +79,22 @@ def run_difmap(
     cancel_event: threading.Event | None = None,
     stream: str = "pipe",
     cwd: Path | None = None,
+    nice: int | None = None,
 ) -> DifmapResult:
     """Run DifMAP with ``commands`` on stdin, writing the log incrementally.
 
     The full log is also returned. ``on_line`` receives each output line as it
     arrives (without its newline). Setting ``cancel_event`` terminates the whole
     process group. With ``stream="pty"`` DifMAP sees a terminal on stdout and
-    line-buffers, which makes per-fit progress arrive promptly.
+    line-buffers, which makes per-fit progress arrive promptly. ``nice`` sets
+    DifMAP's scheduling priority (0 normal to 19 lowest) so a saturating fit
+    does not starve the console.
     """
     path = resolve_executable(executable)
     log_path.parent.mkdir(parents=True, exist_ok=True)
     start = time.monotonic()
     cancelled = False
+    preexec = _priority_setter(nice)
 
     # stdout and stderr are captured on separate pipes. DifMAP block-buffers stdout when
     # piped but writes warnings to stderr unbuffered; merging them in one pipe lets a
@@ -108,6 +112,7 @@ def run_difmap(
         text=False,
         cwd=str(cwd) if cwd else None,
         start_new_session=True,
+        preexec_fn=preexec,
         **popen_kwargs,
     )
 
@@ -154,6 +159,21 @@ def run_difmap(
         duration_s=time.monotonic() - start,
         cancelled=cancelled,
     )
+
+
+def _priority_setter(nice: int | None):
+    """A preexec hook that gives the child an absolute niceness, or None to inherit."""
+    if nice is None or not hasattr(os, "setpriority"):
+        return None
+    level = max(0, min(19, int(nice)))
+
+    def apply() -> None:
+        try:
+            os.setpriority(os.PRIO_PROCESS, 0, level)
+        except OSError:
+            pass
+
+    return apply
 
 
 def _terminate_group(process: subprocess.Popen, grace_s: float = 5.0) -> None:

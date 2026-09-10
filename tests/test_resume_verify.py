@@ -43,9 +43,18 @@ def test_auto_shards_respect_memory_budget() -> None:
                   total_memory_bytes=16 * GIB, cpu_count=12)
     one_epoch = decide_shards("auto", epoch_workers=1, **kwargs)
     two_epochs = decide_shards("auto", epoch_workers=2, **kwargs)
-    assert one_epoch.cpu_cap == 8
+    assert one_epoch.cpu_cap == 8  # 11 spare cores, capped at 8
     assert one_epoch.memory_cap == 2 and one_epoch.shards == 2  # 8 GiB budget / 3 GiB per process
+    assert two_epochs.cpu_cap == 5  # the 11 spare cores are shared by two epochs
     assert two_epochs.memory_cap == 1 and two_epochs.shards == 1  # budget halves per concurrent epoch
+
+
+def test_cpu_cap_never_oversubscribes_the_machine() -> None:
+    cores = 10
+    for workers in (1, 2, 3, 4, 9, 20):
+        decision = decide_shards("auto", 3072, epoch_workers=workers, cpu_count=cores)
+        assert decision.cpu_cap * workers <= max(cores - 1, workers)
+        assert decision.cpu_cap >= 1
 
 
 def test_auto_shards_fall_back_to_cpu_without_size() -> None:

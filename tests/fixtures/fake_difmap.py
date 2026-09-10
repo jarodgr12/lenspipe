@@ -237,6 +237,8 @@ def main() -> int:
             emit(f"Writing {'clean' if command == 'wmap' else 'dirty'} map to FITS file: {argument}")
         elif command == "sleep":
             time.sleep(float(argument))
+        elif command == "nice":
+            emit(f"NICE {os.getpriority(os.PRIO_PROCESS, 0)}")
         elif command == "fail":
             emit("Deliberate failure requested")
             return 3

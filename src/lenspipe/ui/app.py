@@ -5,7 +5,7 @@ from __future__ import annotations
 import atexit
 from pathlib import Path
 
-from nicegui import app, ui
+from nicegui import app, run, ui
 
 from lenspipe.console_registry import register, unregister
 from lenspipe.ui import (  # noqa: F401 - importing registers the @ui.page routes
@@ -20,6 +20,7 @@ from lenspipe.ui.state import console
 __all__ = ["serve"]
 
 TICK_SECONDS = 2.0
+RECONNECT_TIMEOUT_SECONDS = 20.0
 
 
 def serve(
@@ -37,7 +38,11 @@ def serve(
     atexit.register(unregister)
     app.on_shutdown(unregister)
     # Queued jobs start and chained stages are released even when no browser tab is open.
-    app.timer(TICK_SECONDS, console.tick)
+    # The tick reads job files, so it runs in a worker thread rather than on the event loop.
+    async def tick() -> None:
+        await run.io_bound(console.tick)
+
+    app.timer(TICK_SECONDS, tick)
     ui.run(
         host=host,
         port=port,
@@ -46,4 +51,7 @@ def serve(
         show=open_browser,
         dark=None,
         show_welcome_message=True,
+        # A busy machine can stall the server for a moment; keep the browser attached
+        # rather than showing "Connection lost" after the default three seconds.
+        reconnect_timeout=RECONNECT_TIMEOUT_SECONDS,
     )

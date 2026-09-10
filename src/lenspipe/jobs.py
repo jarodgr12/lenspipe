@@ -218,6 +218,7 @@ class JobManager:
                 cwd=str(self.layout.root),
                 env=env,
                 start_new_session=True,
+                preexec_fn=self._priority_setter(),
             )
         except OSError as exc:
             log_handle.close()
@@ -234,6 +235,25 @@ class JobManager:
         record.pid = process.pid
         record.started_utc = _now()
         record.save()
+
+    def _priority_setter(self):
+        """Run jobs at the project's configured niceness so the console stays responsive."""
+        try:
+            from lenspipe.config import load_config
+
+            level = load_config(self.layout.root).run.nice
+        except Exception:  # noqa: BLE001 - a broken config must not stop jobs from starting
+            level = 10
+        if not hasattr(os, "setpriority"):
+            return None
+
+        def apply() -> None:
+            try:
+                os.setpriority(os.PRIO_PROCESS, 0, max(0, min(19, int(level))))
+            except OSError:
+                pass
+
+        return apply
 
     def _reconcile(self, record: JobRecord) -> None:
         process = self._processes.get(record.id)
