@@ -146,12 +146,18 @@ Settings that did not exist before:
 
 ## The console
 
-`lenspipe ui <project>` starts a local web app (NiceGUI) on
-http://127.0.0.1:8080 with five pages: Project (inventory by epoch and stage),
+`lenspipe ui` starts a local web app (NiceGUI) on http://127.0.0.1:8080. It
+opens the last project used, or the one given as an argument, and the Project
+page switches between projects. Five pages: Project (inventory by epoch and stage),
 Parameters (forms generated from the configuration schema, saved to
 `lenspipe.toml`), Run (choose stages, epochs and options, preview the exact
 command, submit), Jobs (queue, live progress and log tail, cancel, re-run) and
 Results (figure gallery and tables).
+
+Stop the console with `lenspipe stop <project>` (or `lenspipe stop --port 8080`),
+which works even if the terminal that started it has gone. Running jobs are
+left alone unless you add `--with-jobs`; `lenspipe stop --list` shows what is
+running.
 
 Every console action is a job: a subprocess running `python -m lenspipe ...`
 with its record under `<project>/.jobs/<id>/` (`job.json`, `log.txt`,

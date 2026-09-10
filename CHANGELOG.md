@@ -3,6 +3,20 @@
 Each entry says whether existing products need re-running. The `lenspipe`
 version that made a product is recorded in its metadata JSON.
 
+## 2.0.3 — 2026-09-10
+
+**Re-run needed:** no.
+
+- Added: `lenspipe stop [project] [--port N] [--with-jobs] [--list]` ends
+  running consoles, including ones whose terminal has since closed and ones
+  started by earlier versions (found by a process scan). Jobs keep running
+  unless `--with-jobs` is given, because they are separate processes by
+  design. `lenspipe ui` now refuses to start a second console on a port that
+  already has one and points at `stop`.
+- Changed: `lenspipe ui` no longer needs a project argument. Without one it
+  opens the last project used (else the current directory); projects are
+  switched on the Project page, and `stop` follows the switch.
+
 ## 2.0.2 — 2026-09-09
 
 **Re-run needed:** no for DifMAP products (stages 1 to 3 are unchanged).

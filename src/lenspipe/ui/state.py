@@ -44,6 +44,8 @@ class Console:
     dark: bool = False
     pipelines: list[Pipeline] = field(default_factory=list)
     notices: list[str] = field(default_factory=list)
+    host: str | None = None  # set by serve(); None when not serving (tests)
+    port: int | None = None
 
     # -- project ------------------------------------------------------------
 
@@ -59,6 +61,20 @@ class Console:
         self.pipelines.clear()
         self._mount_files()
         self.remember_root(self.root)
+        if self.host is not None and self.port is not None:
+            # Keep `lenspipe stop <project>` accurate after switching projects in the UI.
+            from lenspipe.console_registry import register
+
+            register(self.host, self.port, self.root)
+
+    @classmethod
+    def default_root(cls) -> Path:
+        """The project to open when none is given: the most recent one, else the cwd."""
+        for candidate in cls.recent_roots():
+            path = Path(candidate)
+            if path.is_dir():
+                return path
+        return Path.cwd().resolve()
 
     def _mount_files(self) -> None:
         # Starlette keeps routes in a plain list, so the previous mount can be dropped
