@@ -87,10 +87,37 @@ def test_missing_executable() -> None:
     assert difmap_version("definitely-not-difmap-xyz")["version"] is None
 
 
-def test_version_probe(fake_difmap: Path) -> None:
+def test_version_probe(fake_difmap: Path, tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.chdir(tmp_path)
     info = difmap_version(str(fake_difmap))
-    assert info["version"] == "2.5k"
+    assert info["version"] == "2.5k" and info["is_difmap"] is True
     assert "fake-difmap" in (info["banner"] or "")
+    assert not list(tmp_path.glob("difmap.log*"))  # the probe's own DifMAP log stays out of the cwd
+
+
+@pytest.mark.parametrize(
+    "text, expected",
+    [
+        ("Caltech difference mapping program - version 2.5q (3 Dec 2022)\nCopyright", "2.5q"),
+        ("Caltech difmap 2.4b\n", "2.4b"),
+        ("Type 'help difmap' to list difference mapping commands\nStarted logfile: difmap.log_3\n", None),
+    ],
+)
+def test_version_pattern_matches_real_banners(text: str, expected: str | None) -> None:
+    from lenspipe.difmap.runner import _VERSION_PATTERN
+
+    match = _VERSION_PATTERN.search(text)
+    found = (match.group(1) or match.group(2)) if match else None
+    assert found == expected
+
+
+def test_probe_recognises_difmap_that_prints_only_quitting(tmp_path: Path) -> None:
+    """2.5q exits on quit without flushing its banner; 'Quitting program' still identifies it."""
+    script = tmp_path / "difmap"
+    script.write_text("#!/bin/sh\ncat >/dev/null\necho 'Quitting program'\n")
+    script.chmod(0o755)
+    info = difmap_version(str(script))
+    assert info["version"] is None and info["is_difmap"] is True
 
 
 @pytest.mark.skipif(not hasattr(__import__("os"), "openpty"), reason="no pty")

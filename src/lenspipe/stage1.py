@@ -292,6 +292,7 @@ def run_epoch(
             cancel_event=cancel_event,
             stream=config.project.difmap.stream,
             nice=config.run.nice,
+            cwd=paths.output_directory,  # DifMAP writes its own difmap.log_N in its cwd
         )
     except (DifmapNotFound, OSError) as exc:
         reporter.clear(label)
@@ -320,6 +321,8 @@ def run_epoch(
     rms = tagged_scalar(result.log_text, STAGE1_RMS_MARKER)
     if rms is None:
         rms = extract_last_numeric(result.log_text)
+    for own_log in paths.output_directory.glob("difmap.log*"):  # duplicate of our captured log
+        own_log.unlink(missing_ok=True)
 
     try:
         label_fitted_model(paths.final_model, hierarchy)

@@ -3,6 +3,23 @@
 Each entry says whether existing products need re-running. The `lenspipe`
 version that made a product is recorded in its metadata JSON.
 
+## 2.0.7 — 2026-09-10
+
+**Re-run needed:** no.
+
+- Fixed: `doctor` warned that a working DifMAP "printed no banner". The real
+  banner says "difference mapping program - version 2.5q" without the word
+  "difmap", and DifMAP can exit on `quit` without flushing it. The probe now
+  reads the version from DifMAP's own session log and accepts DifMAP's
+  "Quitting program" as identification.
+- Fixed: every DifMAP run left a `difmap.log_N` in whatever directory the
+  command was run from. Stage 1 and Stage 2 now run DifMAP inside their work
+  directories and remove the duplicate.
+- Changed: `doctor` names the input file behind a missing master model (a
+  name like `1555.L.2.uvfits` means source `1555.L`, epoch `2`) and only
+  fails when no file can run; it also flags `memory_multiple = 3.0` left in
+  configs written by 2.0.1 and suggests `"auto"`.
+
 ## 2.0.6 — 2026-09-10
 
 **Re-run needed:** no.

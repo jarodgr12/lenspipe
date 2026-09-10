@@ -47,7 +47,7 @@ def test_doctor_warns_when_executable_is_not_difmap(tmp_path: Path, monkeypatch)
     impostor.chmod(0o755)
     monkeypatch.setenv("PATH", str(tmp_path))
     checks = {c.name: c for c in run_checks(None, LenspipeConfig())}
-    assert checks["difmap"].status == "warn" and "no DifMAP banner" in checks["difmap"].detail
+    assert checks["difmap"].status == "warn" and "did not identify itself as DifMAP" in checks["difmap"].detail
 
 
 def test_doctor_finds_configured_difmap_and_project_problems(project: Path, fake_difmap: Path, monkeypatch) -> None:

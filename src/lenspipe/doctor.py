@@ -102,11 +102,13 @@ def run_checks(project_root: Path | None, config: LenspipeConfig | None = None) 
         info = difmap_version(difmap_path)
         if info.get("version"):
             results.append(CheckResult("difmap", OK, f"{difmap_path}, version {info['version']}"))
+        elif info.get("is_difmap"):
+            results.append(CheckResult("difmap", OK, f"{difmap_path} (DifMAP; version not printed)"))
         else:
-            banner = info.get("banner") or "no output"
+            banner = str(info.get("banner") or "no output")
             results.append(
                 CheckResult(
-                    "difmap", WARN, f"{difmap_path} started but printed no DifMAP banner ({banner[:60]})",
+                    "difmap", WARN, f"{difmap_path} started but did not identify itself as DifMAP ({banner[:60]})",
                     "run the executable by hand and check it starts as DifMAP",
                 )
             )
@@ -171,14 +173,24 @@ def run_checks(project_root: Path | None, config: LenspipeConfig | None = None) 
         results.append(CheckResult("inputs", FAIL, f"no *.uvfits in {layout.inputs}",
                                    "copy or link <source>.<epoch>.uvfits files into inputs/"))
     else:
-        sources = {p.name.rsplit(".", 2)[0] for p in uvfits}
-        missing = sorted(s for s in sources if not (layout.inputs / f"{s}.gmod").is_file())
-        status = FAIL if missing else OK
+        by_source: dict[str, list[str]] = {}
+        for p in uvfits:
+            by_source.setdefault(p.name.rsplit(".", 2)[0], []).append(p.name)
+        missing = {s: names for s, names in by_source.items() if not (layout.inputs / f"{s}.gmod").is_file()}
         detail = f"{len(uvfits)} UV-FITS file(s), {len(models)} master model(s)"
-        results.append(
-            CheckResult("inputs", status, detail,
-                        f"add inputs/{missing[0]}.gmod with GROUP/COMPONENT labels" if missing else None)
-        )
+        if missing:
+            source, names = next(iter(sorted(missing.items())))
+            example = names[0]
+            fix = (
+                f"{example} is read as source {source!r} (files are <source>.<epoch>.uvfits, so the "
+                f"part before the last dot is the source); add inputs/{source}.gmod or rename the "
+                f"file so its source matches an existing .gmod. Affected: {', '.join(sorted(names))}"
+            )
+            # Only some files affected: the rest of the project still runs.
+            status = WARN if len(missing) < len(by_source) else FAIL
+            results.append(CheckResult("inputs", status, detail, fix))
+        else:
+            results.append(CheckResult("inputs", OK, detail))
         largest = max(p.stat().st_size for p in uvfits)
         decision = decide_shards(
             config.stage2.shards, 3072, input_bytes=largest,
@@ -186,14 +198,22 @@ def run_checks(project_root: Path | None, config: LenspipeConfig | None = None) 
             memory_fraction=config.stage2.memory_fraction,
             memory_multiple=config.stage2.memory_multiple,
         )
+        if config.stage2.memory_multiple == 3.0:
+            fix = (
+                "stage2.memory_multiple is pinned to 3.0 (the old default guess); set it to \"auto\" "
+                "in lenspipe.toml so shards are sized from DifMAP's measured footprint"
+            )
+        elif decision.memory_multiple_source and "measured" in decision.memory_multiple_source:
+            fix = None
+        else:
+            fix = "the first Stage 2 run measures DifMAP's real footprint; later runs size shards from it"
         results.append(
             CheckResult(
-                "sharding", OK,
+                "sharding", WARN if config.stage2.memory_multiple == 3.0 else OK,
                 f"largest input {_human(largest)}; Stage 2 would use {decision.shards} shard(s) per epoch "
                 f"with {config.run.epoch_workers} epoch(s) at once "
                 f"(memory multiple {decision.memory_multiple:g}: {decision.memory_multiple_source})",
-                None if decision.memory_multiple_source and "measured" in decision.memory_multiple_source
-                else "the first Stage 2 run measures DifMAP's real footprint; later runs size shards from it",
+                fix,
             )
         )
     try:

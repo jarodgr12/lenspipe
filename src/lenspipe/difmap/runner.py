@@ -16,7 +16,13 @@ from pathlib import Path
 
 __all__ = ["DifmapNotFound", "DifmapResult", "difmap_version", "resolve_executable", "run_difmap"]
 
-_VERSION_PATTERN = re.compile(r"difmap\s+(?:version\s+)?v?([0-9][A-Za-z0-9._-]*)", re.IGNORECASE)
+# Real banner: "Caltech difference mapping program - version 2.5q (3 Dec 2022)".
+_VERSION_PATTERN = re.compile(
+    r"(?:difference mapping program|difmap)[^\n]*?\bversion\s+v?([0-9][A-Za-z0-9._-]*)"
+    r"|difmap\s+v?([0-9][A-Za-z0-9._-]*)",
+    re.IGNORECASE,
+)
+_DIFMAP_SIGNS = ("difference mapping program", "Quitting program", "Exiting program", "Started logfile")
 
 
 class DifmapNotFound(FileNotFoundError):
@@ -67,27 +73,52 @@ def resolve_executable(executable: str) -> str:
     raise DifmapNotFound(f"DifMAP executable not found: {executable}")
 
 
-def difmap_version(executable: str, timeout_s: float = 30.0) -> dict[str, str | None]:
-    """Probe DifMAP for its banner; never raises."""
+def difmap_version(executable: str, timeout_s: float = 30.0) -> dict[str, str | bool | None]:
+    """Probe DifMAP for its version; never raises.
+
+    DifMAP may exit on ``quit`` without flushing its buffered stdout, so the
+    banner is also read from the ``difmap.log_N`` file it writes in its working
+    directory. The probe runs in a temporary directory so that file does not
+    litter the caller's cwd. ``is_difmap`` is True when the output carries
+    DifMAP's own messages even if no version could be parsed.
+    """
+    import tempfile
+
     try:
         path = resolve_executable(executable)
-        completed = subprocess.run(
-            [path],
-            input="quit\n",
-            text=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            timeout=timeout_s,
-            check=False,
-        )
-    except (DifmapNotFound, OSError, subprocess.TimeoutExpired):
-        return {"executable": executable, "version": None, "banner": None}
-    banner = next((line.strip() for line in completed.stdout.splitlines() if line.strip()), None)
-    match = _VERSION_PATTERN.search(completed.stdout[:4000])
+    except DifmapNotFound:
+        return {"executable": executable, "version": None, "banner": None, "is_difmap": False}
+    text = ""
+    with tempfile.TemporaryDirectory(prefix="lenspipe-difmap-probe-") as scratch:
+        try:
+            completed = subprocess.run(
+                [path],
+                input="quit\n",
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                timeout=timeout_s,
+                check=False,
+                cwd=scratch,
+            )
+            text = completed.stdout or ""
+        except (OSError, subprocess.TimeoutExpired):
+            return {"executable": executable, "version": None, "banner": None, "is_difmap": False}
+        for own_log in sorted(Path(scratch).glob("difmap.log*")):
+            try:
+                text = own_log.read_text(errors="replace")[:4000] + "\n" + text
+            except OSError:
+                pass
+    banner = next(
+        (line.strip() for line in text.splitlines() if line.strip() and not line.startswith("!")), None
+    )
+    match = _VERSION_PATTERN.search(text[:8000])
+    version = (match.group(1) or match.group(2)) if match else None
     return {
         "executable": executable,
-        "version": match.group(1) if match else None,
+        "version": version,
         "banner": banner,
+        "is_difmap": bool(version) or any(sign in text for sign in _DIFMAP_SIGNS),
     }
 
 
