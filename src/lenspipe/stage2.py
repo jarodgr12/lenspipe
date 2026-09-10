@@ -793,6 +793,7 @@ def run_epoch(
             cancel_event=cancel_event,
             stream=config.project.difmap.stream,
             nice=config.run.nice,
+            cwd=work_dir,  # DifMAP's own difmap.log_N files land in the work dir, not the user's cwd
         )
         if result.ok:
             mark_done(

@@ -21,7 +21,8 @@ import sys
 import time
 from pathlib import Path
 
-BANNER = "Caltech difmap 2.5k (fake-difmap for lenspipe tests)"
+# Same wording as the real program, whose banner does not contain the word "difmap".
+BANNER = "Caltech difference mapping program - version 2.5k (fake-difmap for lenspipe tests)"
 SPLIT_WARNING = (
     "Your choice of large map pixels excluded 12.3% of the data.\n"
     "The y-axis pixel size should ideally be below 24.97 milli-arcsec."
@@ -177,6 +178,11 @@ def write_fits_like(path: Path, label: str) -> None:
 def main() -> int:
     state = State()
     emit(BANNER)
+    # Like the real program: a session log in the working directory, opened at start.
+    try:
+        Path("difmap.log_1").write_text(f"! Started logfile: difmap.log_1\n! {BANNER}\n", encoding="utf-8")
+    except OSError:
+        pass
     for raw in sys.stdin:
         line = raw.strip()
         if not line or line.startswith("!"):
