@@ -80,16 +80,21 @@ def _command_line(pid: int) -> str | None:
     return output or None
 
 
-_SHELLS = {"sh", "bash", "zsh", "dash", "fish", "ksh", "nohup", "env", "timeout", "uv", "sudo", "script"}
+_WRAPPERS = {
+    "sh", "bash", "zsh", "dash", "fish", "ksh", "csh", "tcsh", "nohup", "env", "timeout", "uv",
+    "sudo", "script", "tmux", "screen", "ssh", "grep", "egrep", "pgrep", "tail", "less", "cat",
+    "watch", "xargs", "time",
+}
 
 
 def looks_like_console_command(command: str) -> bool:
     """True only for the console process itself, never for a shell or wrapper that launched it.
 
     Accepted shapes: ``<python> <...>/lenspipe ui ...``, ``lenspipe ui ...`` and
-    ``<python> -m lenspipe ui ...``. The first token must be a python or the
-    lenspipe entry point, so ``bash -c 'lenspipe ui ...'`` or ``uv run lenspipe ui``
-    wrappers are not matched (the python they start is).
+    ``<python> -m lenspipe ui ...``. Nothing before the ``lenspipe ui`` pair may
+    be a shell or wrapper name, so ``bash -c 'lenspipe ui ...'`` and ``uv run
+    lenspipe ui`` are not matched (the python they start is). Interpreter names
+    are deliberately not required: they vary between platforms and installs.
     """
     tokens = command.split()
     if len(tokens) < 2:
@@ -107,12 +112,7 @@ def looks_like_console_command(command: str) -> bool:
     # Paths may contain spaces (they split into several tokens), so inspect every
     # token before the pair rather than trusting the first one.
     prefix = [Path(token).name for token in tokens[:pair_at]]
-    if any(name in _SHELLS for name in prefix):
-        return False
-    has_interpreter = any(name.startswith("python") for name in prefix) or (
-        pair_at == 0 and Path(tokens[0]).name == "lenspipe"
-    )
-    return has_interpreter or Path(tokens[pair_at]).name == "lenspipe" and pair_at == 0
+    return not any(name in _WRAPPERS for name in prefix)
 
 
 def _is_console_process(pid: int) -> bool:

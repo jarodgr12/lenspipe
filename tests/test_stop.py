@@ -42,6 +42,11 @@ def _alive(pid: int) -> bool:
     return True
 
 
+def _ps(pid: int) -> str:
+    """What `ps` reports for the fake console; shown when a lookup assertion fails."""
+    return subprocess.run(["ps", "-o", "command=", "-p", str(pid)], text=True, capture_output=True).stdout
+
+
 def test_registered_console_is_found_and_stopped(registry: Path, tmp_path: Path) -> None:
     root = tmp_path / "proj"
     root.mkdir()
@@ -49,7 +54,8 @@ def test_registered_console_is_found_and_stopped(registry: Path, tmp_path: Path)
     try:
         console_registry.register("127.0.0.1", 8912, root, pid=process.pid)
         found = console_registry.find_consoles(root=root)
-        assert [c.pid for c in found] == [process.pid] and found[0].source == "registry"
+        assert [c.pid for c in found] == [process.pid], _ps(process.pid)
+        assert found[0].source == "registry"
         assert console_registry.find_consoles(port=1) == []
         assert console_registry.stop_console(found[0])
         process.wait(timeout=10)
@@ -66,7 +72,7 @@ def test_unregistered_console_is_found_by_process_scan(registry: Path, tmp_path:
     process = _fake_console(root, 8913)
     try:
         found = [c for c in console_registry.find_consoles(port=8913)]
-        assert [c.pid for c in found] == [process.pid]
+        assert [c.pid for c in found] == [process.pid], _ps(process.pid)
         assert found[0].source == "scan" and found[0].root == str(root.resolve())
         assert console_registry.stop_console(found[0])
         process.wait(timeout=10)
@@ -93,7 +99,7 @@ def test_stop_command_end_to_end(registry: Path, tmp_path: Path) -> None:
     try:
         console_registry.register("127.0.0.1", 8915, root, pid=process.pid)
         listing = runner.invoke(app, ["stop", str(root), "--list"])
-        assert listing.exit_code == 0 and str(process.pid) in listing.output
+        assert listing.exit_code == 0 and str(process.pid) in listing.output, (listing.output, _ps(process.pid))
         assert _alive(process.pid)
 
         result = runner.invoke(app, ["stop", str(root)])
@@ -123,7 +129,9 @@ def test_ui_refuses_second_console_on_same_port(registry: Path, tmp_path: Path) 
         console_registry.register("127.0.0.1", 8916, root, pid=process.pid)
         result = runner.invoke(app, ["ui", str(root), "--port", "8916", "--no-browser"])
         assert result.exit_code == 1
-        assert "already listening on port 8916" in result.output and "lenspipe stop" in result.output
+        assert "already listening on port 8916" in result.output and "lenspipe stop" in result.output, (
+            result.output, _ps(process.pid)
+        )
     finally:
         listener.close()
         process.kill()
