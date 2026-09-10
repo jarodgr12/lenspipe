@@ -122,11 +122,15 @@ class ShardDecision:
     requested: int | str
     estimated_bytes_per_process: int | None
     memory_budget_bytes: int | None
+    memory_multiple: float | None = None
+    memory_multiple_source: str | None = None
 
     def describe(self) -> str:
         parts = [f"shards={self.shards}", f"requested={self.requested}", f"cpu_cap={self.cpu_cap}"]
         if self.memory_cap is not None:
             parts.append(f"memory_cap={self.memory_cap}")
+        if self.memory_multiple is not None:
+            parts.append(f"memory_multiple={self.memory_multiple:g} [{self.memory_multiple_source}]")
         return " ".join(parts)
 
     def to_dict(self) -> dict[str, Any]:
@@ -137,6 +141,8 @@ class ShardDecision:
             "memory_cap": self.memory_cap,
             "estimated_bytes_per_process": self.estimated_bytes_per_process,
             "memory_budget_bytes": self.memory_budget_bytes,
+            "memory_multiple": self.memory_multiple,
+            "memory_multiple_source": self.memory_multiple_source,
         }
 
 
@@ -147,7 +153,7 @@ def decide_shards(
     input_bytes: int | None = None,
     epoch_workers: int = 1,
     memory_fraction: float = 0.5,
-    memory_multiple: float = 3.0,
+    memory_multiple: float | str = 3.0,
     total_memory_bytes: int | None = None,
     cpu_count: int | None = None,
 ) -> ShardDecision:
@@ -165,11 +171,14 @@ def decide_shards(
     cpu_cap = max(1, min(8, (cores - 1) // max(1, epoch_workers)))
     total = total_memory_bytes if total_memory_bytes is not None else physical_memory_bytes()
 
+    from lenspipe.memory_calibration import effective_multiple
+
+    multiple, source = effective_multiple(memory_multiple)
     memory_cap: int | None = None
     estimate: int | None = None
     budget: int | None = None
     if total and input_bytes:
-        estimate = max(1, int(input_bytes * memory_multiple))
+        estimate = max(1, int(input_bytes * multiple))
         budget = int(total * memory_fraction / max(1, epoch_workers))
         memory_cap = max(1, budget // estimate)
 
@@ -178,7 +187,7 @@ def decide_shards(
     else:
         shards = int(requested)
     shards = max(1, min(shards, max(1, fit_count)))
-    return ShardDecision(shards, cpu_cap, memory_cap, requested, estimate, budget)
+    return ShardDecision(shards, cpu_cap, memory_cap, requested, estimate, budget, multiple, source)
 
 
 def auto_shards(requested: int | str, fit_count: int) -> int:

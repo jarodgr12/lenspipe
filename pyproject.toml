@@ -1,6 +1,6 @@
 [project]
 name = "lenspipe"
-version = "2.0.4"
+version = "2.0.5"
 description = "DifMAP spectral pipeline for multi-epoch lensed-image spectra: self-calibration, per-channel model fitting, science plots, and a local job console."
 readme = "README.md"
 requires-python = ">=3.11"

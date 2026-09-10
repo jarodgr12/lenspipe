@@ -3,6 +3,18 @@
 Each entry says whether existing products need re-running. The `lenspipe`
 version that made a product is recorded in its metadata JSON.
 
+## 2.0.5 — 2026-09-10
+
+**Re-run needed:** no.
+
+- Changed: `stage2.memory_multiple` defaults to `"auto"`. Every Stage 2 run
+  records DifMAP's peak memory (largest process, from the OS) against the
+  input size in `~/.lenspipe/difmap_memory.json`; `auto` sizes shards from the
+  largest ratio measured on this machine with a 25 % margin, and from the old
+  conservative 3.0 until a measurement exists. Inputs under 200 MB are not
+  used for calibration. The peak, input size and ratio are also written to the
+  Stage 2 metadata, and `doctor` shows which multiple is in effect.
+
 ## 2.0.4 — 2026-09-10
 
 **Re-run needed:** no.

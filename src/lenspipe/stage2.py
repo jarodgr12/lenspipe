@@ -30,6 +30,7 @@ from lenspipe.difmap import (
 )
 from lenspipe.difmap.runner import DifmapNotFound
 from lenspipe.difmap.scripts import fit_model_path, stage2_commands
+from lenspipe.memory_calibration import record_measurement
 from lenspipe.models import (
     ModelFormatError,
     ModelHierarchy,
@@ -471,6 +472,8 @@ def _write_metadata(
     recovered: bool,
     shard_decision: dict[str, Any] | None = None,
     resumed: bool = False,
+    peak_rss_bytes: int | None = None,
+    input_bytes: int | None = None,
 ) -> None:
     stage2 = config.stage2
     provenance = {
@@ -520,6 +523,11 @@ def _write_metadata(
                 "duration_s": None if duration_s is None else round(duration_s, 3),
                 "shard_decision": shard_decision,
                 "resumed": resumed,
+                "difmap_peak_rss_bytes": peak_rss_bytes,
+                "input_bytes": input_bytes,
+                "measured_memory_multiple": (
+                    round(peak_rss_bytes / input_bytes, 3) if peak_rss_bytes and input_bytes else None
+                ),
             },
             "provenance": provenance,
             "config": stage2.model_dump(mode="json"),
@@ -797,6 +805,7 @@ def run_epoch(
                     "last_fit": block[-1][0],
                     "command_script_sha256": hashlib.sha256(commands.encode("utf-8")).hexdigest(),
                     "finished_utc": utc_now(),
+                    "peak_rss_bytes": result.peak_rss_bytes,
                 },
             )
         return index, result
@@ -839,6 +848,19 @@ def run_epoch(
     log_text = "\n".join(combined_lines) + "\n"
     paths.log_file.write_text(log_text, encoding="utf-8")
     duration_s = sum(float(record.get("duration_s", 0.0)) for record in done.values())
+    peaks = [int(r["peak_rss_bytes"]) for r in done.values() if r.get("peak_rss_bytes")]
+    peak_rss_bytes = max(peaks) if peaks else None
+    input_bytes = paths.calibrated_uvfits.stat().st_size
+    calibration = record_measurement(peak_rss_bytes, input_bytes)
+    if peak_rss_bytes:
+        reporter.log(
+            f"[{label}] DifMAP peak memory {peak_rss_bytes / 2**30:.2f} GiB for a "
+            f"{input_bytes / 2**30:.2f} GiB input (ratio {peak_rss_bytes / input_bytes:.2f})"
+            + (
+                f"; memory_multiple 'auto' will use {calibration.multiple:g} x safety from now on"
+                if calibration is not None else ""
+            )
+        )
     command_sha = hashlib.sha256(
         "".join(str(done[index].get("command_script_sha256", "")) for index in sorted(done)).encode("utf-8")
     ).hexdigest()
@@ -922,6 +944,7 @@ def run_epoch(
         stage1_metadata=prepared.stage1_metadata, shards=len(blocks), difmap_info=difmap_info,
         command_sha256=command_sha, duration_s=duration_s, recovered=False,
         shard_decision=decision.to_dict(), resumed=resumed,
+        peak_rss_bytes=peak_rss_bytes, input_bytes=input_bytes,
     )
     _write_manifest(paths, retained_models_directory)
     shutil.rmtree(work_dir, ignore_errors=True)
