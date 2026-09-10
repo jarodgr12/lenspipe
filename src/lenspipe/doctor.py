@@ -190,7 +190,10 @@ def run_checks(project_root: Path | None, config: LenspipeConfig | None = None) 
             CheckResult(
                 "sharding", OK,
                 f"largest input {_human(largest)}; Stage 2 would use {decision.shards} shard(s) per epoch "
-                f"with {config.run.epoch_workers} epoch(s) at once",
+                f"with {config.run.epoch_workers} epoch(s) at once "
+                f"(memory multiple {decision.memory_multiple:g}: {decision.memory_multiple_source})",
+                None if decision.memory_multiple_source and "measured" in decision.memory_multiple_source
+                else "the first Stage 2 run measures DifMAP's real footprint; later runs size shards from it",
             )
         )
     try:

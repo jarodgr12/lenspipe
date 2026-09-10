@@ -153,14 +153,21 @@ class Stage2Config(_Model):
         le=1,
         description="Fraction of physical RAM that DifMAP processes may use in total.",
     )
-    memory_multiple: float = Field(
-        3.0,
-        gt=0,
+    memory_multiple: float | Literal["auto"] = Field(
+        "auto",
         description=(
-            "Estimated DifMAP memory per loaded dataset, as a multiple of the UV-FITS file size. "
-            "SHORTCUT: unmeasured default; tune it after watching a real epoch."
+            "DifMAP memory per loaded dataset as a multiple of the UV-FITS size. 'auto' uses the "
+            "peak measured on this machine by earlier runs (3.0 until one exists); a number "
+            "overrides it."
         ),
     )
+
+    @field_validator("memory_multiple")
+    @classmethod
+    def _positive_multiple(cls, value: float | str) -> float | str:
+        if value != "auto" and float(value) <= 0:
+            raise ValueError("stage2.memory_multiple must be positive or 'auto'")
+        return value
 
     @model_validator(mode="after")
     def _check(self) -> Stage2Config:
@@ -384,7 +391,7 @@ input_pattern = "*.cal.uvf"
 plot_spectrum = true                # quick-look PNGs after each epoch
 plot_error_bars = true              # residual-RMS error bars on those plots
 memory_fraction = 0.5               # share of physical RAM DifMAP processes may use in total
-memory_multiple = 3.0               # estimated DifMAP RSS per dataset as a multiple of the UV-FITS size
+memory_multiple = "auto"            # DifMAP RSS per dataset / UV-FITS size: measured on this machine, else 3.0
 
 [stage3]
 reference_frequency_ghz = 15.0

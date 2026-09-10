@@ -7,6 +7,7 @@ import re
 import shutil
 import signal
 import subprocess
+import sys
 import threading
 import time
 from collections.abc import Callable
@@ -29,10 +30,30 @@ class DifmapResult:
     log_path: Path
     duration_s: float
     cancelled: bool = False
+    peak_rss_bytes: int | None = None  # largest resident set of any child so far (see below)
 
     @property
     def ok(self) -> bool:
         return self.returncode == 0 and not self.cancelled
+
+
+def children_peak_rss_bytes() -> int | None:
+    """Peak resident memory of the largest child process this process has reaped.
+
+    The OS keeps this as the maximum over all terminated children, so after a
+    DifMAP run it is the footprint of the biggest DifMAP so far. It is what the
+    shard sizing needs; per-shard attribution is not required.
+    """
+    try:
+        import resource
+
+        peak = resource.getrusage(resource.RUSAGE_CHILDREN).ru_maxrss
+    except (ImportError, OSError, ValueError):
+        return None
+    if peak <= 0:
+        return None
+    # Linux reports kibibytes, macOS bytes.
+    return int(peak) if sys.platform == "darwin" else int(peak) * 1024
 
 
 def resolve_executable(executable: str) -> str:
@@ -158,6 +179,7 @@ def run_difmap(
         log_path=log_path,
         duration_s=time.monotonic() - start,
         cancelled=cancelled,
+        peak_rss_bytes=children_peak_rss_bytes(),
     )
 
 

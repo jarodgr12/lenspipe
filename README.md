@@ -133,7 +133,7 @@ Settings that did not exist before:
 | Setting | Default | Meaning |
 |---------|---------|---------|
 | `stage2.shards` | `auto` | DifMAP processes per epoch. `auto` takes cores - 1 (max 8) and then caps by memory. Results are independent of the shard count. |
-| `stage2.memory_fraction`, `memory_multiple` | 0.5, 3.0 | Memory budget for the shard cap: a fraction of physical RAM, shared across concurrent epochs, with each DifMAP estimated at `memory_multiple` times the UV-FITS size. The multiple is a placeholder until measured on a real epoch. |
+| `stage2.memory_fraction`, `memory_multiple` | 0.5, `auto` | Memory budget for the shard cap: a fraction of physical RAM, shared across concurrent epochs, with each DifMAP estimated at `memory_multiple` times the UV-FITS size. `auto` learns the multiple from the peak memory of earlier runs on this machine (3.0 until then); a number pins it. |
 | `run.epoch_workers` | 2 | Epochs processed concurrently in stages 1 and 2; the automatic shard count shares the spare cores between them |
 | `run.nice` | 10 | Scheduling priority for jobs and DifMAP (0 normal, 19 lowest). Keeps the console responsive under load |
 | `run.plot_workers` | 4 | Processes writing Stage 3 per-visit figures |
