@@ -1,4 +1,10 @@
-"""Results page: browse Stage 2 / Stage 3 plots and tables for one epoch or the combined set."""
+"""Results page: browse Stage 2 / Stage 3 plots and tables for one epoch or the combined set.
+
+Everything that touches the filesystem runs in a worker thread, figures are
+shown as cached thumbnails linking to the full image, and tables are read only
+when their panel is opened. The page must stay responsive while DifMAP jobs
+saturate the machine.
+"""
 
 from __future__ import annotations
 
@@ -11,8 +17,9 @@ from nicegui import run, ui
 
 from lenspipe.ui.layout import MONO, frame
 from lenspipe.ui.state import console
+from lenspipe.ui.thumbnails import thumbnail_for
 
-MAX_ROWS = 500
+MAX_ROWS = 200
 
 
 @dataclass(frozen=True)
@@ -66,30 +73,47 @@ def resolve_target(root: Path, epoch_key: str, stage: int, product_key: str) -> 
     return Target(root / "stage3" / epoch_key / Path(product_key))
 
 
+def _epoch_options(summary: dict[str, Any]) -> dict[str, str]:
+    options: dict[str, str] = {}
+    for row in summary["epochs"]:
+        if row["stage2"] or row["stage3"]:
+            key = f"{row['source']}.{row['epoch']}"
+            options[key] = key
+    for item in summary["combined"]:
+        options.setdefault(f"combined:{item['source']}", f"combined  {item['source']}")
+    return options
+
+
+def _scan(target: Target, root: Path) -> tuple[list[tuple[Path, Path, Path | None]], list[Path]]:
+    """Filesystem work for one target, run in a worker thread: figures with thumbnails, and tables."""
+    figures = []
+    for png in target.pngs():
+        pdf = png.with_suffix(".pdf")
+        figures.append((png, thumbnail_for(root, png), pdf if pdf.is_file() else None))
+    return figures, target.csvs()
+
+
+def _read_table(csv: Path) -> tuple[pd.DataFrame, int]:
+    frame_ = pd.read_csv(csv)
+    return frame_.head(MAX_ROWS), len(frame_)
+
+
 @ui.page("/results")
 def results_page() -> None:
     with frame("Results", "/results"):
-        summary = console.inventory()
-        epoch_options: dict[str, str] = {}
-        for row in summary["epochs"]:
-            if row["stage2"] or row["stage3"]:
-                key = f"{row['source']}.{row['epoch']}"
-                epoch_options[key] = key
-        for item in summary["combined"]:
-            epoch_options.setdefault(f"combined:{item['source']}", f"combined  {item['source']}")
-
+        state: dict[str, Any] = {"summary": None}
         with ui.row().classes("w-full items-center gap-4"):
-            epoch = ui.select(epoch_options, label="Epoch", value=next(iter(epoch_options), None)).props(
-                "dense outlined"
-            ).classes("w-64")
+            epoch = ui.select({}, label="Epoch").props("dense outlined").classes("w-64")
             stage = ui.select({2: "Stage 2", 3: "Stage 3"}, label="Stage", value=2).props(
                 "dense outlined"
             ).classes("w-36")
             product = ui.select({}, label="Product").props("dense outlined").classes("w-72")
             path_label = ui.label().classes(MONO + " opacity-60")
+        status = ui.label("Loading products...").classes("text-sm opacity-70")
         content = ui.column().classes("w-full gap-3")
 
         def sync_products() -> None:
+            summary = state["summary"] or {"epochs": [], "combined": []}
             key = epoch.value or ""
             if key.startswith("combined:"):
                 stage.set_value(3)
@@ -110,46 +134,69 @@ def results_page() -> None:
                 return
             target = resolve_target(console.root, epoch.value, int(stage.value or 2), str(product.value))
             path_label.set_text(str(target.directory))
-            pngs, csvs = target.pngs(), target.csvs()
+            status.set_text("Reading directory...")
+            figures, csvs = await run.io_bound(_scan, target, console.root)
+            status.set_text("")
             with content:
-                if not pngs and not csvs:
+                if not figures and not csvs:
                     ui.label("Nothing to show in this directory.").classes("opacity-70")
-                if pngs:
-                    ui.label(f"{len(pngs)} figure(s)").classes("text-subtitle2")
+                if figures:
+                    ui.label(f"{len(figures)} figure(s); click one for full size").classes("text-subtitle2")
                     with ui.grid().classes("w-full grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3"):
-                        for png in pngs:
+                        for png, thumb, pdf in figures:
                             with ui.card().classes("q-pa-sm gap-1").props("flat bordered"):
-                                ui.image(console.file_url(png)).classes("w-full")
+                                with ui.link(target=console.file_url(png), new_tab=True):
+                                    ui.image(console.file_url(thumb)).classes("w-full").props('loading="lazy"')
                                 with ui.row().classes("w-full items-center no-wrap gap-2"):
                                     ui.label(png.name).classes("font-mono text-xs truncate flex-grow")
-                                    pdf = png.with_suffix(".pdf")
-                                    if pdf.is_file():
+                                    if pdf is not None:
                                         ui.link("PDF", console.file_url(pdf), new_tab=True).classes("text-xs")
                 if csvs:
-                    ui.label(f"{len(csvs)} table(s)").classes("text-subtitle2")
+                    ui.label(f"{len(csvs)} table(s); open a panel to load it").classes("text-subtitle2")
                 for csv in csvs:
                     relative = csv.relative_to(target.directory).as_posix()
-                    with ui.expansion(relative).classes("w-full").props("dense") as panel:
-                        panel.classes("font-mono text-sm")
+                    panel = ui.expansion(relative).classes("w-full font-mono text-sm").props("dense")
+                    holder = ui.column().classes("w-full gap-1")
+                    holder.move(panel)
+
+                    async def load_table(event, csv=csv, holder=holder) -> None:
+                        if not event.value or holder.default_slot.children:
+                            return
+                        with holder:
+                            spinner = ui.spinner(size="sm")
                         try:
-                            frame_ = await run.io_bound(pd.read_csv, csv)
+                            head, total = await run.io_bound(_read_table, csv)
                         except Exception as exc:  # noqa: BLE001 - shown inline
-                            ui.label(f"Could not read: {exc}").classes("text-negative")
-                            continue
-                        with ui.row().classes("w-full items-center gap-3 text-xs"):
-                            ui.label(f"{len(frame_)} rows x {len(frame_.columns)} columns")
-                            if len(frame_) > MAX_ROWS:
-                                ui.label(f"showing first {MAX_ROWS}").classes("opacity-60")
-                            ui.link("Download CSV", console.file_url(csv), new_tab=True)
-                        table = ui.table.from_pandas(frame_.head(MAX_ROWS), pagination=25)
-                        table.props("dense flat bordered").classes("w-full text-xs")
+                            spinner.delete()
+                            with holder:
+                                ui.label(f"Could not read: {exc}").classes("text-negative")
+                            return
+                        spinner.delete()
+                        with holder:
+                            with ui.row().classes("w-full items-center gap-3 text-xs"):
+                                ui.label(f"{total} rows x {len(head.columns)} columns")
+                                if total > MAX_ROWS:
+                                    ui.label(f"showing first {MAX_ROWS}").classes("opacity-60")
+                                ui.link("Download CSV", console.file_url(csv), new_tab=True)
+                            table = ui.table.from_pandas(head, pagination=25)
+                            table.props("dense flat bordered").classes("w-full text-xs")
+
+                    panel.on_value_change(load_table)
 
         async def on_context_change() -> None:
+            sync_products()
+            await render()
+
+        async def load() -> None:
+            state["summary"] = await run.io_bound(console.inventory)
+            options = _epoch_options(state["summary"])
+            epoch.set_options(options)
+            if epoch.value not in options:
+                epoch.set_value(next(iter(options), None))
             sync_products()
             await render()
 
         epoch.on_value_change(on_context_change)
         stage.on_value_change(on_context_change)
         product.on_value_change(render)
-        sync_products()
-        ui.timer(0.0, render, once=True)
+        ui.timer(0.0, load, once=True)
