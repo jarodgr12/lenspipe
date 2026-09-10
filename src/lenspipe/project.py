@@ -310,7 +310,7 @@ def _attach_freshness(summary: dict[str, Any], root: Path) -> None:
     """Annotate inventory entries with provenance status (stat-only, so it is cheap)."""
     from lenspipe.provenance import verify_project
 
-    checks = verify_project(root)
+    checks = verify_project(root, hash_on_change=False)  # never read GB files for a listing
     counts: dict[str, int] = {}
     by_epoch = {f"{row['source']}.{row['epoch']}": row for row in summary["epochs"]}
     for check in checks:

@@ -35,8 +35,15 @@ def fingerprint(path: Path, *, with_hash: bool = True) -> dict[str, Any]:
     return record
 
 
-def _changed(recorded: dict[str, Any] | None, *, force_hash: bool = False) -> str | None:
-    """Return None when the file matches its recorded fingerprint, else a reason."""
+def _changed(
+    recorded: dict[str, Any] | None, *, force_hash: bool = False, hash_on_change: bool = True
+) -> str | None:
+    """Return None when the file matches its recorded fingerprint, else a reason.
+
+    ``hash_on_change=False`` never reads file contents: a size or mtime change is
+    reported as such without confirming it by hash. That keeps the check cheap
+    enough for interactive use on multi-gigabyte inputs.
+    """
     if not recorded or "path" not in recorded:
         return "no fingerprint recorded"
     path = Path(recorded["path"])
@@ -47,7 +54,7 @@ def _changed(recorded: dict[str, Any] | None, *, force_hash: bool = False) -> st
     if same_stat and not force_hash:
         return None
     recorded_hash = recorded.get("sha256")
-    if recorded_hash is None:
+    if recorded_hash is None or not hash_on_change:
         return f"size or mtime changed: {path.name}"
     if file_sha256(path) == recorded_hash:
         return None
@@ -88,19 +95,21 @@ def _load(path: Path) -> dict[str, Any] | None:
     return payload if isinstance(payload, dict) else None
 
 
-def _check_provenance(payload: dict[str, Any], force_hash: bool) -> tuple[str, list[str]]:
+def _check_provenance(
+    payload: dict[str, Any], force_hash: bool, hash_on_change: bool = True
+) -> tuple[str, list[str]]:
     provenance = payload.get("provenance")
     if not isinstance(provenance, dict) or not provenance:
         return UNKNOWN, ["produced before provenance was recorded"]
     reasons: list[str] = []
     for name, recorded in provenance.items():
         if isinstance(recorded, dict) and "path" in recorded:
-            reason = _changed(recorded, force_hash=force_hash)
+            reason = _changed(recorded, force_hash=force_hash, hash_on_change=hash_on_change)
             if reason:
                 reasons.append(f"{name}: {reason}")
         elif isinstance(recorded, dict):
             for sub_name, sub_recorded in recorded.items():
-                reason = _changed(sub_recorded, force_hash=force_hash)
+                reason = _changed(sub_recorded, force_hash=force_hash, hash_on_change=hash_on_change)
                 if reason:
                     reasons.append(f"{name}[{sub_name}]: {reason}")
     if any("missing:" in reason for reason in reasons):
@@ -108,8 +117,15 @@ def _check_provenance(payload: dict[str, Any], force_hash: bool) -> tuple[str, l
     return (STALE if reasons else FRESH), reasons
 
 
-def verify_project(project_root: Path, *, force_hash: bool = False) -> list[Check]:
-    """Check every recorded product against its inputs; downstream of stale is upstream-stale."""
+def verify_project(
+    project_root: Path, *, force_hash: bool = False, hash_on_change: bool = True
+) -> list[Check]:
+    """Check every recorded product against its inputs; downstream of stale is upstream-stale.
+
+    ``hash_on_change=False`` is the cheap mode for interactive listings: it never
+    reads file contents, so a touched-but-identical input shows as stale until
+    ``lenspipe verify`` confirms it.
+    """
     layout = Layout.at(project_root)
     checks: list[Check] = []
     epoch_status: dict[tuple[str, str], str] = {}
@@ -119,7 +135,7 @@ def verify_project(project_root: Path, *, force_hash: bool = False) -> list[Chec
         if payload is None:
             continue
         source, epoch = str(payload.get("source", "")), str(payload.get("epoch", ""))
-        status, reasons = _check_provenance(payload, force_hash)
+        status, reasons = _check_provenance(payload, force_hash, hash_on_change)
         checks.append(Check(1, source, epoch, None, status, reasons, str(meta)))
         epoch_status[(source, epoch)] = status
 
@@ -131,7 +147,7 @@ def verify_project(project_root: Path, *, force_hash: bool = False) -> list[Chec
         source, epoch = str(payload.get("source", "")), str(payload.get("epoch", ""))
         prefix = f"{source}.{epoch}."
         product = meta.name[len(prefix) : -len(".stage2.metadata.json")]
-        status, reasons = _check_provenance(payload, force_hash)
+        status, reasons = _check_provenance(payload, force_hash, hash_on_change)
         upstream = epoch_status.get((source, epoch))
         if status == FRESH and upstream in {STALE, UPSTREAM, MISSING}:
             status, reasons = UPSTREAM, [f"stage 1 for {source}.{epoch} is {upstream}"]
@@ -147,7 +163,7 @@ def verify_project(project_root: Path, *, force_hash: bool = False) -> list[Chec
             product = payload.get("product_tag")
             tag = payload.get("analysis_tag")
             label = f"{product}/{tag}" if tag else str(product)
-            status, reasons = _check_provenance(payload, force_hash)
+            status, reasons = _check_provenance(payload, force_hash, hash_on_change)
             if meta.name.endswith(".combined.stage3.metadata.json"):
                 epochs = [str(e) for e in payload.get("epochs", [])]
                 upstream = [

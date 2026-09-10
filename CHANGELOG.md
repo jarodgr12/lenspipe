@@ -3,6 +3,18 @@
 Each entry says whether existing products need re-running. The `lenspipe`
 version that made a product is recorded in its metadata JSON.
 
+## 2.0.6 — 2026-09-10
+
+**Re-run needed:** no.
+
+- Fixed: the Results page could time out. It built its product list on the
+  event loop, and that listing re-hashed any multi-gigabyte input whose size
+  or mtime had changed; it also pushed every full-resolution figure and every
+  table at once. Listings now never read file contents (a touched input shows
+  as "stale" until `lenspipe verify` confirms it), the page loads in a worker
+  thread, figures are cached thumbnails linking to the full image, and tables
+  load when their panel is opened.
+
 ## 2.0.5 — 2026-09-10
 
 **Re-run needed:** no.
