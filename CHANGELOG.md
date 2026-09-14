@@ -3,6 +3,20 @@
 Each entry says whether existing products need re-running. The `lenspipe`
 version that made a product is recorded in its metadata JSON.
 
+## 2.0.8 — 2026-09-14
+
+**Re-run needed:** no (Stage 2 metadata gains a `spectral_windows` field on
+the next run; older products fall back to the IF width or 64 channels).
+
+- Added: interactive Stage 3 figures on the console's Results page. Per-visit
+  spectra with their power-law fits and flux ratios with their weighted means,
+  and for the combined set the averaged spectra, averaged ratios and the
+  versus-MJD series. Hovering a point shows the image, frequency, value and
+  error, the fit index, and the spectral window and channel it came from.
+  The static PDF/PNG figures are unchanged.
+- Added: Stage 2 metadata records the spectral-window layout (`n_spw`,
+  `channels_per_spw`) read from the UV-FITS header.
+
 ## 2.0.7 — 2026-09-10
 
 **Re-run needed:** no.

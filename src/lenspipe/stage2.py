@@ -53,6 +53,7 @@ from lenspipe.stage2_shards import (
 from lenspipe.uvfits import (
     get_observation_mjd,
     get_uvfits_frequencies,
+    get_uvfits_spw_layout,
     representative_channel_width,
 )
 
@@ -474,6 +475,7 @@ def _write_metadata(
     resumed: bool = False,
     peak_rss_bytes: int | None = None,
     input_bytes: int | None = None,
+    spw_layout: dict[str, int] | None = None,
 ) -> None:
     stage2 = config.stage2
     provenance = {
@@ -498,6 +500,7 @@ def _write_metadata(
                 stage2.channels_per_if - 2 * stage2.exclude_edge_channels if mode == "if" else 1
             ),
             "total_channels": total_channels,
+            "spectral_windows": spw_layout,  # {"n_spw", "channels_per_spw"} from the UV-FITS header
             "n_fits": fit_count,
             "stage1_model": paths.stage1_model.name,
             "stage1_metadata": paths.stage1_metadata.name,
@@ -575,6 +578,7 @@ class _Prepared:
     fit_ranges: list[tuple[int, int, int]]
     row_labels: list[str]
     grouped_labels: list[str]
+    spw_layout: dict[str, int] | None = None
 
     @property
     def output_labels(self) -> list[str]:
@@ -605,6 +609,11 @@ def _prepare(paths: Stage2Paths, config: Stage2Config, reporter: Reporter) -> _P
         exclude_edge_channels=config.exclude_edge_channels if config.mode == "if" else 0,
     )
     row_labels, grouped_labels = _labels(hierarchy)
+    try:
+        spw_layout = get_uvfits_spw_layout(paths.calibrated_uvfits)
+    except Exception as exc:  # noqa: BLE001 - informational only
+        reporter.warn(f"could not read the spectral-window layout: {exc}")
+        spw_layout = None
     return _Prepared(
         hierarchy=hierarchy,
         stage1_metadata=stage1_metadata,
@@ -614,6 +623,7 @@ def _prepare(paths: Stage2Paths, config: Stage2Config, reporter: Reporter) -> _P
         fit_ranges=fit_ranges,
         row_labels=row_labels,
         grouped_labels=grouped_labels,
+        spw_layout=spw_layout,
     )
 
 
@@ -945,7 +955,7 @@ def run_epoch(
         stage1_metadata=prepared.stage1_metadata, shards=len(blocks), difmap_info=difmap_info,
         command_sha256=command_sha, duration_s=duration_s, recovered=False,
         shard_decision=decision.to_dict(), resumed=resumed,
-        peak_rss_bytes=peak_rss_bytes, input_bytes=input_bytes,
+        peak_rss_bytes=peak_rss_bytes, input_bytes=input_bytes, spw_layout=prepared.spw_layout,
     )
     _write_manifest(paths, retained_models_directory)
     shutil.rmtree(work_dir, ignore_errors=True)
@@ -1008,6 +1018,7 @@ def _recover(
         fit_count=len(prepared.fit_ranges), observation_mjd=prepared.observation_mjd,
         hierarchy=prepared.hierarchy, stage1_metadata=prepared.stage1_metadata, shards=0,
         difmap_info=None, command_sha256=None, duration_s=None, recovered=True,
+        spw_layout=prepared.spw_layout,
     )
     _write_manifest(paths, None)
     return Stage2Result(
