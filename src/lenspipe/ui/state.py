@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from nicegui import app
-from starlette.routing import Mount
+from starlette.routing import Mount, Route
 
 from lenspipe.config import LenspipeConfig, load_config
 from lenspipe.jobs import JobManager, JobRecord
@@ -77,12 +77,16 @@ class Console:
         return Path.cwd().resolve()
 
     def _mount_files(self) -> None:
-        # Starlette keeps routes in a plain list, so the previous mount can be dropped
-        # before the new root is served read-only under the same prefix.
+        # Starlette keeps routes in a plain list, so the previous project's handler can be
+        # dropped before the new root is served read-only under the same prefix. NiceGUI
+        # registers static files as a Mount in older releases and as a plain GET route in
+        # newer ones; whichever is left in place would keep winning the route match and
+        # every image on the Results page would come back 404 after switching projects.
+        stale = {FILES_PREFIX, f"{FILES_PREFIX}/{{path:path}}"}
         app.router.routes[:] = [
             route
             for route in app.router.routes
-            if not (isinstance(route, Mount) and route.path == FILES_PREFIX)
+            if not (isinstance(route, Mount | Route) and route.path in stale)
         ]
         app.add_static_files(FILES_PREFIX, str(self.root), max_cache_age=0)
 
