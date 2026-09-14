@@ -122,3 +122,26 @@ def test_chain_releases_next_stage_only_after_completion(tmp_path: Path, monkeyp
     assert not any(r.title == "skipped" for r in console.manager.list())
     assert console.notices and "skipped" in console.notices[-1]
     assert (tmp_path / "recent.json").is_file()
+
+
+def test_switching_project_serves_files_from_the_new_root(tmp_path: Path) -> None:
+    """Images and PDFs on the Results page are served from whichever project is open now."""
+    from nicegui import app
+    from starlette.testclient import TestClient
+
+    first, second = tmp_path / "first", tmp_path / "second"
+    for root, text in ((first, "one"), (second, "two")):
+        (root / "stage3" / "plots").mkdir(parents=True)
+        (root / "stage3" / "plots" / "fig.png").write_bytes(text.encode())
+    (second / ".cache" / "thumbnails").mkdir(parents=True)
+    (second / ".cache" / "thumbnails" / "abc.png").write_bytes(b"thumb")
+
+    console = Console()
+    console.open_root(first)
+    console.open_root(second)
+    client = TestClient(app)
+    assert client.get(console.file_url(second / "stage3" / "plots" / "fig.png")).content == b"two"
+    assert client.get(console.file_url(second / ".cache" / "thumbnails" / "abc.png")).content == b"thumb"
+    assert client.get("/files/%2e%2e/first/stage3/plots/fig.png").status_code == 404  # no escaping the root
+    matching = [r for r in app.router.routes if getattr(r, "path", "").startswith("/files")]
+    assert len(matching) == 1

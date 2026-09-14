@@ -3,6 +3,19 @@
 Each entry says whether existing products need re-running. The `lenspipe`
 version that made a product is recorded in its metadata JSON.
 
+## 2.0.9 — 2026-09-14
+
+**Re-run needed:** no.
+
+- Fixed: figures and PDFs on the Results page came back blank or 404 after
+  switching to another project directory from the console. The previous
+  project's file route stayed registered ahead of the new one; it is now
+  replaced. Restarting `lenspipe ui` inside the project was the workaround.
+- Fixed: a console stopped while it was writing a preview could leave a
+  truncated thumbnail that was then served blank for as long as the figure
+  existed. Thumbnails are written atomically and empty cache files are
+  regenerated.
+
 ## 2.0.8 — 2026-09-14
 
 **Re-run needed:** no (Stage 2 metadata gains a `spectral_windows` field on
