@@ -153,7 +153,9 @@ page switches between projects. Five pages: Project (inventory by epoch and stag
 Parameters (forms generated from the configuration schema, saved to
 `lenspipe.toml`), Run (choose stages, epochs and options, preview the exact
 command, submit), Jobs (queue, live progress and log tail, cancel, re-run) and
-Results (figure gallery and tables).
+Results (figure gallery and tables). For Stage 3 products the Results page
+also shows interactive versions of the spectra, flux ratios and combined
+series; hovering a point gives its fit index, spectral window and channel.
 
 Stop the console with `lenspipe stop <project>` (or `lenspipe stop --port 8080`),
 which works even if the terminal that started it has gone. Running jobs are

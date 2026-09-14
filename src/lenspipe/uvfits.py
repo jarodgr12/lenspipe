@@ -74,6 +74,31 @@ def get_uvfits_frequencies(path: Path) -> list[float]:
         ]
 
 
+def get_uvfits_spw_layout(path: Path) -> dict[str, int]:
+    """Number of spectral windows (IFs) and channels per window, from the header and FQ table."""
+    with fits.open(path, memmap=True) as hdul:
+        header = hdul[0].header
+        freq_axis = header_axis_number(header, "FREQ")
+        channels = int(header.get(f"NAXIS{freq_axis}", 1)) if freq_axis else 1
+        n_spw = 1
+        if_axis = header_axis_number(header, "IF")
+        if if_axis:
+            n_spw = int(header.get(f"NAXIS{if_axis}", 1))
+        for hdu in hdul[1:]:
+            extname = str(hdu.header.get("EXTNAME", "")).strip().upper()
+            if extname in {"AIPS FQ", "FQ"} and hdu.data is not None:
+                names = {name.upper(): name for name in hdu.columns.names}
+                if_name = names.get("IF FREQ")
+                if if_name is not None:
+                    raw = hdu.data[if_name][0]
+                    try:
+                        n_spw = len(raw)
+                    except TypeError:
+                        n_spw = 1
+                break
+    return {"n_spw": max(1, n_spw), "channels_per_spw": max(1, channels)}
+
+
 def get_observation_mjd(path: Path) -> float | None:
     """Read MJD-OBS or convert DATE-OBS from the UV-FITS primary header."""
     with fits.open(path, memmap=True) as hdul:

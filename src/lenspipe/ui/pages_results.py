@@ -98,13 +98,31 @@ def _read_table(csv: Path) -> tuple[pd.DataFrame, int]:
     return frame_.head(MAX_ROWS), len(frame_)
 
 
+def _interactive_figures(directory: Path) -> dict[str, dict[str, Any]]:
+    """Plotly figures for a Stage 3 directory: per-visit spectra and ratios, or the combined set."""
+    from lenspipe.ui.interactive import combined_figures, load_visit, ratio_figure, spectrum_figure
+
+    if next(directory.glob("*.combined.stage3.metadata.json"), None) is not None:
+        return combined_figures(directory)
+    if next(directory.glob("*.stage3.metadata.json"), None) is None:
+        return {}
+    visit = load_visit(directory)
+    figures = {"Spectra": spectrum_figure(visit)}
+    ratios = ratio_figure(visit)
+    if ratios is not None:
+        figures["Flux ratios"] = ratios
+    return figures
+
+
 @ui.page("/results")
-def results_page() -> None:
+def results_page(epoch: str | None = None, stage: int = 2, product: str | None = None) -> None:
+    """Browse products. Query parameters preselect a view, e.g. ``/results?epoch=MG0414.A&stage=3``."""
+    requested = {"epoch": epoch, "stage": 3 if int(stage) == 3 else 2, "product": product}
     with frame("Results", "/results"):
         state: dict[str, Any] = {"summary": None}
         with ui.row().classes("w-full items-center gap-4"):
             epoch = ui.select({}, label="Epoch").props("dense outlined").classes("w-64")
-            stage = ui.select({2: "Stage 2", 3: "Stage 3"}, label="Stage", value=2).props(
+            stage = ui.select({2: "Stage 2", 3: "Stage 3"}, label="Stage", value=requested["stage"]).props(
                 "dense outlined"
             ).classes("w-36")
             product = ui.select({}, label="Product").props("dense outlined").classes("w-72")
@@ -126,8 +144,12 @@ def results_page() -> None:
                 product.set_value(next(iter(options), None))
 
         async def render() -> None:
-            content.clear()
+            # Several widgets change value during load and each triggers a render; only the
+            # latest one may draw, otherwise the figures appear once per overlapping call.
+            state["render"] = state.get("render", 0) + 1
+            my_render = state["render"]
             if not epoch.value or product.value is None:
+                content.clear()
                 with content:
                     ui.label("No Stage 2 or Stage 3 products yet.").classes("opacity-70")
                 path_label.set_text("")
@@ -136,8 +158,25 @@ def results_page() -> None:
             path_label.set_text(str(target.directory))
             status.set_text("Reading directory...")
             figures, csvs = await run.io_bound(_scan, target, console.root)
+            interactive: dict[str, dict[str, Any]] = {}
+            interactive_error: str | None = None
+            if int(stage.value or 2) == 3:
+                try:
+                    interactive = await run.io_bound(_interactive_figures, target.directory)
+                except Exception as exc:  # noqa: BLE001 - static figures still show
+                    interactive_error = f"{type(exc).__name__}: {exc}"
+            if my_render != state["render"]:
+                return
             status.set_text("")
+            content.clear()
             with content:
+                if interactive:
+                    with ui.expansion("Interactive (hover a point for spw and channel)", icon="insights", value=True).classes("w-full"):
+                        for title, figure in interactive.items():
+                            ui.label(title).classes("text-subtitle2 q-mt-sm")
+                            ui.plotly(figure).classes("w-full").style("height: 420px")
+                elif interactive_error:
+                    ui.label(f"Interactive view unavailable: {interactive_error}").classes("text-warning text-sm")
                 if not figures and not csvs:
                     ui.label("Nothing to show in this directory.").classes("opacity-70")
                 if figures:
@@ -191,9 +230,14 @@ def results_page() -> None:
             state["summary"] = await run.io_bound(console.inventory)
             options = _epoch_options(state["summary"])
             epoch.set_options(options)
-            if epoch.value not in options:
+            wanted_epoch = requested["epoch"]
+            if wanted_epoch in options:
+                epoch.set_value(wanted_epoch)
+            elif epoch.value not in options:
                 epoch.set_value(next(iter(options), None))
             sync_products()
+            if requested["product"] in (product.options or {}):
+                product.set_value(requested["product"])
             await render()
 
         epoch.on_value_change(on_context_change)
