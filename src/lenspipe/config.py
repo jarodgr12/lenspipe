@@ -137,6 +137,13 @@ class Stage2Config(_Model):
     cell_mas: float | None = Field(25.0, description="Cell size in mas; None lets DifMAP choose.")
     weighting: str = "uvw 0,-1,false"
     modelfit_iterations: int = Field(20, ge=1)
+    unflag: bool = Field(
+        False,
+        description=(
+            "Run 'unflag *' after observe, before the per-channel fits. Off (the legacy behaviour) "
+            "fits with whatever flags Stage 1 wrote into the calibrated file."
+        ),
+    )
     shards: int | Literal["auto"] = Field(
         "auto",
         description="DifMAP processes per epoch; 'auto' uses cores minus one, at most 8.",
@@ -384,6 +391,7 @@ map_pixels = 1024
 cell_mas = 25.0
 weighting = "uvw 0,-1,false"
 modelfit_iterations = 20
+unflag = false                      # true: "unflag *" before the fits (legacy: keep Stage 1's flags)
 shards = "auto"                     # DifMAP processes per epoch; "auto" = cores - 1 (max 8),
                                     # further capped so shards x epoch_workers fit in memory
 keep_models = false

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 from nicegui import run, ui
 
 from lenspipe.config import LenspipeConfig
@@ -10,6 +12,8 @@ from lenspipe.stage3.io import available_stage2_products
 from lenspipe.ui.commands import RunRequest, build_steps, calibrate_step, command_line
 from lenspipe.ui.layout import frame
 from lenspipe.ui.state import console
+
+FIGURE_FORMATS = ["pdf", "png", "svg"]
 
 
 def _stage2_products() -> list[str]:
@@ -20,7 +24,9 @@ def _stage2_products() -> list[str]:
     return sorted({tag for tags in products.values() for tag in tags})
 
 
-def _expected_tag(config: LenspipeConfig, mode: str, channels_per_if: int | None, channels: str | None) -> str:
+def _expected_tag(
+    config: LenspipeConfig, mode: str, channels_per_if: int | None, channels: str | None, edge: int | None
+) -> str:
     data = config.stage2.model_dump()
     data["mode"] = mode
     if mode == "channel":
@@ -29,10 +35,26 @@ def _expected_tag(config: LenspipeConfig, mode: str, channels_per_if: int | None
         data["channels"] = None
         if channels_per_if:
             data["channels_per_if"] = int(channels_per_if)
+        if edge is not None:
+            data["exclude_edge_channels"] = int(edge)
     try:
         return product_tag(type(config.stage2).model_validate(data))
     except ValueError:
         return product_tag(config.stage2)
+
+
+def _override(value: Any, default: Any) -> Any:
+    """A per-run value only becomes a flag when it differs from lenspipe.toml."""
+    return None if value == default else value
+
+
+def _int_or_none(value: Any) -> int | None:
+    return int(value) if value not in (None, "") else None
+
+
+def _epoch_exclusions(text: str) -> list[str]:
+    """Split ``E:897-960 F:1-4`` (whitespace or semicolons) into repeatable EPOCH:SPEC flags."""
+    return [item for item in text.replace(";", " ").split() if item]
 
 
 @ui.page("/run")
@@ -48,6 +70,7 @@ def run_page() -> None:
             item["epoch"]: f"{item['source']}.{item['epoch']}" for item in summary["epochs"]
         }
         cpus = console.cpu_count()
+        dense = "dense outlined"
 
         with ui.row().classes("w-full no-wrap gap-6 items-start"):
             with ui.column().classes("gap-3 flex-1 min-w-0"):
@@ -67,40 +90,98 @@ def run_page() -> None:
                         dry_run = ui.switch("Dry run (print DifMAP commands only)")
                         workers = ui.number(
                             "Epochs in parallel", value=config.run.epoch_workers, min=1, step=1
-                        ).props("dense outlined").classes("w-40")
+                        ).props(dense).classes("w-40")
                         ui.label(f"{cpus} CPUs").classes("text-caption opacity-70")
+
+                with ui.card().classes("w-full q-pa-md gap-2").props("flat bordered") as stage1_card:
+                    ui.label("Stage 1").classes("text-subtitle2")
+                    with ui.row().classes("gap-4 items-center"):
+                        final_if = ui.switch(
+                            "Final per-IF self-cal", value=config.stage1.final_if_selfcal.enabled
+                        )
+                        ui.label(
+                            f"{config.stage1.final_if_selfcal.if_count} IFs x "
+                            f"{config.stage1.final_if_selfcal.channels_per_if} channels; "
+                            "self-cal schedule and unflag are set on the Parameters page"
+                        ).classes("text-caption opacity-70")
 
                 with ui.card().classes("w-full q-pa-md gap-2").props("flat bordered") as stage2_card:
                     ui.label("Stage 2").classes("text-subtitle2")
                     with ui.row().classes("gap-4 items-center"):
                         mode = ui.select(["if", "channel"], label="Mode", value=config.stage2.mode).props(
-                            "dense outlined"
+                            dense
                         ).classes("w-32")
                         channels_per_if = ui.number(
                             "Channels per IF", value=config.stage2.channels_per_if, min=1, step=1
-                        ).props("dense outlined").classes("w-40")
+                        ).props(dense).classes("w-40")
                         channels = ui.input(
                             "Channels", value=config.stage2.channels or "", placeholder="1-10,15"
-                        ).props("dense outlined").classes("w-40")
+                        ).props(dense).classes("w-40")
                         shards = ui.input(
                             "Shards", value=str(config.stage2.shards), placeholder="auto"
-                        ).props("dense outlined").classes("w-28")
+                        ).props(dense).classes("w-28")
                         ui.label(f"'auto' or 1-{cpus} ({cpus} CPUs)").classes("text-caption opacity-70")
+                    with ui.expansion("Advanced", icon="tune").classes("w-full").props("dense"):
+                        with ui.row().classes("gap-4 items-center q-pt-sm"):
+                            edge = ui.number(
+                                "Edge channels dropped per IF", value=config.stage2.exclude_edge_channels,
+                                min=0, step=1,
+                            ).props(dense).classes("w-56")
+                            iterations = ui.number(
+                                "Modelfit iterations", value=config.stage2.modelfit_iterations, min=1, step=1
+                            ).props(dense).classes("w-44")
+                        with ui.row().classes("gap-6 items-center"):
+                            unflag = ui.switch("Unflag before fitting", value=config.stage2.unflag)
+                            keep_models = ui.switch("Keep every fitted model", value=config.stage2.keep_models)
+                            plots = ui.switch("Quick-look plots", value=config.stage2.plot_spectrum)
+                            s2_error_bars = ui.switch("Error bars", value=config.stage2.plot_error_bars)
+                        ui.label(
+                            "Unflag runs 'unflag *' on the calibrated file before the fits; off keeps "
+                            "the flags Stage 1 wrote. Changing it changes every channel flux."
+                        ).classes("text-caption opacity-70")
 
                 with ui.card().classes("w-full q-pa-md gap-2").props("flat bordered") as stage3_card:
                     ui.label("Stage 3").classes("text-subtitle2")
                     with ui.row().classes("gap-4 items-center"):
                         error_source = ui.select(
                             ["rms", "difmap"], label="Error source", value=config.stage3.error_source
-                        ).props("dense outlined").classes("w-36")
+                        ).props(dense).classes("w-36")
                         product = ui.select(
                             _stage2_products(), label="Stage 2 product", with_input=True,
                             new_value_mode="add-unique",
-                        ).props("dense outlined").classes("w-56")
+                        ).props(dense).classes("w-56")
                         plot_workers = ui.number(
                             "Plot processes", value=config.run.plot_workers, min=1, step=1
-                        ).props("dense outlined").classes("w-36")
+                        ).props(dense).classes("w-36")
                         ui.label(f"{cpus} CPUs").classes("text-caption opacity-70")
+                    with ui.expansion("Advanced", icon="tune").classes("w-full").props("dense"):
+                        with ui.row().classes("gap-4 items-center q-pt-sm"):
+                            fit_method = ui.select(
+                                ["least_squares", "emcee"], label="Fit method", value=config.stage3.fit_method
+                            ).props(dense).classes("w-44")
+                            reference_frequency = ui.number(
+                                "Reference frequency (GHz)", value=config.stage3.reference_frequency_ghz,
+                                min=0.001, step=0.1, format="%.3f",
+                            ).props(dense).classes("w-52")
+                            formats = ui.select(
+                                FIGURE_FORMATS, label="Figure formats", multiple=True,
+                                value=list(config.stage3.figure_formats),
+                            ).props("dense outlined use-chips options-dense").classes("w-56")
+                        with ui.row().classes("gap-4 items-center"):
+                            exclude_channels = ui.input(
+                                "Exclude fit indices (all epochs)", value=config.stage3.exclude_channels or "",
+                                placeholder="1-4,61-64",
+                            ).props(dense).classes("w-64")
+                            exclude_epoch_channels = ui.input(
+                                "Per-epoch exclusions", value=" ".join(config.stage3.exclude_epoch_channels),
+                                placeholder="E:897-960 F:1-4",
+                            ).props(dense).classes("w-72")
+                        with ui.row().classes("gap-6 items-center"):
+                            annotations = ui.switch("Annotated spectra", value=config.stage3.annotations)
+                            s3_error_bars = ui.switch("Error bars", value=config.stage3.plot_error_bars)
+                        ui.label(
+                            "Exclusions are fit indices (channel or IF numbers) as in stage3.exclude_channels."
+                        ).classes("text-caption opacity-70")
 
                 with ui.row().classes("gap-2 items-center"):
                     submit_button = ui.button("Submit", icon="play_arrow", on_click=lambda: submit()).props(
@@ -115,7 +196,7 @@ def run_page() -> None:
                             f"{config.casa.interpreter} {config.casa.script or '<script unset>'}"
                         ).classes("font-mono text-xs opacity-70")
                         with ui.row().classes("gap-4 items-center"):
-                            casa_steps = ui.input("Steps", placeholder="all").props("dense outlined")
+                            casa_steps = ui.input("Steps", placeholder="all").props(dense)
                             casa_list = ui.switch("List steps only")
                             ui.button(
                                 "Submit calibration", icon="play_arrow", on_click=lambda: submit_casa()
@@ -130,30 +211,58 @@ def run_page() -> None:
         def request() -> RunRequest:
             stages = [n for n, box in stage_boxes.items() if box.value]
             mode_value = mode.value or config.stage2.mode
+            s2, s3 = config.stage2, config.stage3
+            chosen_formats = [f for f in FIGURE_FORMATS if f in (formats.value or [])]
             return RunRequest(
                 root=console.root,
                 stages=stages,
                 epochs=list(epochs.value or []),
                 overwrite=bool(overwrite.value),
                 dry_run=bool(dry_run.value),
-                workers=int(workers.value) if workers.value else None,
+                workers=_int_or_none(workers.value),
+                stage1_final_if_selfcal=_override(bool(final_if.value), config.stage1.final_if_selfcal.enabled),
                 stage2_mode=mode_value,
                 stage2_shards=(shards.value or "").strip() or None,
-                stage2_channels_per_if=int(channels_per_if.value) if channels_per_if.value else None,
+                stage2_channels_per_if=_int_or_none(channels_per_if.value),
                 stage2_channels=(channels.value or "").strip() or None,
+                stage2_exclude_edge_channels=_override(_int_or_none(edge.value), s2.exclude_edge_channels),
+                stage2_modelfit_iterations=_override(_int_or_none(iterations.value), s2.modelfit_iterations),
+                stage2_unflag=_override(bool(unflag.value), s2.unflag),
+                stage2_keep_models=_override(bool(keep_models.value), s2.keep_models),
+                stage2_plots=_override(bool(plots.value), s2.plot_spectrum),
+                stage2_error_bars=_override(bool(s2_error_bars.value), s2.plot_error_bars),
                 stage3_error_source=error_source.value,
                 stage3_product=product.value or None,
-                stage3_workers=int(plot_workers.value) if plot_workers.value else None,
+                stage3_workers=_int_or_none(plot_workers.value),
+                stage3_fit_method=_override(fit_method.value, s3.fit_method),
+                stage3_reference_frequency=_override(
+                    float(reference_frequency.value) if reference_frequency.value else None,
+                    s3.reference_frequency_ghz,
+                ),
+                stage3_exclude_channels=_override((exclude_channels.value or "").strip() or None, s3.exclude_channels),
+                stage3_exclude_epoch_channels=(
+                    [] if _epoch_exclusions(exclude_epoch_channels.value or "") == list(s3.exclude_epoch_channels)
+                    else _epoch_exclusions(exclude_epoch_channels.value or "")
+                ),
+                stage3_annotations=_override(bool(annotations.value), s3.annotations),
+                stage3_error_bars=_override(bool(s3_error_bars.value), s3.plot_error_bars),
+                stage3_formats=(
+                    ",".join(chosen_formats)
+                    if chosen_formats and chosen_formats != list(s3.figure_formats) else None
+                ),
             )
 
         def refresh_preview() -> None:
+            stage1_card.set_visibility(stage_boxes[1].value)
             stage2_card.set_visibility(stage_boxes[2].value)
             stage3_card.set_visibility(stage_boxes[3].value)
             channels.set_visibility(mode.value == "channel")
             channels_per_if.set_visibility(mode.value != "channel")
+            edge.set_visibility(mode.value != "channel")
             if stage_boxes[2].value:
                 expected = _expected_tag(
-                    config, mode.value, channels_per_if.value, (channels.value or "").strip() or None
+                    config, mode.value, channels_per_if.value,
+                    (channels.value or "").strip() or None, _int_or_none(edge.value),
                 )
                 options = sorted(set(product.options) | {expected})
                 if options != product.options:
@@ -170,8 +279,10 @@ def run_page() -> None:
             submit_button.set_enabled(bool(steps))
 
         for widget in (
-            *stage_boxes.values(), epochs, overwrite, dry_run, workers, mode, channels_per_if,
-            channels, shards, error_source, product, plot_workers,
+            *stage_boxes.values(), epochs, overwrite, dry_run, workers, final_if, mode, channels_per_if,
+            channels, shards, edge, iterations, unflag, keep_models, plots, s2_error_bars,
+            error_source, product, plot_workers, fit_method, reference_frequency, formats,
+            exclude_channels, exclude_epoch_channels, annotations, s3_error_bars,
         ):
             widget.on_value_change(refresh_preview)
         refresh_preview()
