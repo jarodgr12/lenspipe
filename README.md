@@ -139,6 +139,7 @@ Settings that did not exist before:
 | `run.plot_workers` | 4 | Processes writing Stage 3 per-visit figures |
 | `stage3.figure_formats` | `["pdf","png"]` | Formats written for every Stage 3 figure; `["png"]` roughly halves plot time |
 | `stage2.plot_spectrum`, `stage2.plot_error_bars` | true, true | Quick-look PNGs after each epoch, and whether they carry residual-RMS error bars |
+| `stage2.unflag` | false | Run `unflag *` on the calibrated file before the channel fits. Off keeps the flags Stage 1 wrote (Stage 1 has its own `unflag`, on by default). Also `--unflag/--no-unflag` per run |
 | `stage3.plot_error_bars` | true | Error bars on every Stage 3 figure; off plots the points alone |
 | `project.difmap.stream` | `pipe` | `pty` makes DifMAP line-buffer so progress arrives per fit |
 | `stage3.rcusp_images` | `["A1","A2","B"]` | Group names for the cusp relation; `[]` disables it |
@@ -152,8 +153,14 @@ opens the last project used, or the one given as an argument, and the Project
 page switches between projects. Five pages: Project (inventory by epoch and stage),
 Parameters (forms generated from the configuration schema, saved to
 `lenspipe.toml`), Run (choose stages, epochs and options, preview the exact
-command, submit), Jobs (queue, live progress and log tail, cancel, re-run) and
-Results (figure gallery and tables). For Stage 3 products the Results page
+command, submit), Jobs (queue, live progress and log tail, cancel, re-run,
+resume an interrupted Stage 2) and Results (figure gallery and tables). The
+Run page's "Advanced" groups hold the per-run overrides that the stage
+commands accept: the Stage 1 final per-IF self-cal; Stage 2 edge channels,
+modelfit iterations, unflag, kept models and quick-look toggles; Stage 3 fit
+method, reference frequency, channel exclusions, annotations, error bars and
+figure formats. A value only appears in the command when it differs from
+`lenspipe.toml`. For Stage 3 products the Results page
 also shows interactive versions of the spectra, flux ratios and combined
 series; hovering a point gives its fit index, spectral window and channel.
 
@@ -179,7 +186,9 @@ its outputs. If a run is interrupted, re-running the same command reports the
 interrupted run and stops; `lenspipe stage2 <project> --resume` continues it,
 re-executing only the shards that did not finish. Resume refuses if the data,
 model or Stage 2 settings changed in the meantime; `--overwrite` starts again.
-The work directory is removed once the epoch completes.
+The work directory is removed once the epoch completes. In the console, a
+failed or cancelled Stage 2 job shows a Resume button on the Jobs page that
+submits the same command with `--resume`.
 
 **Log recovery.** `lenspipe stage2 <project> --recover-from-log --overwrite`
 rebuilds the CSV, plots and metadata from an existing `*.stage2.difmap.log`

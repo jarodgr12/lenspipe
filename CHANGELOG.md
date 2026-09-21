@@ -3,6 +3,26 @@
 Each entry says whether existing products need re-running. The `lenspipe`
 version that made a product is recorded in its metadata JSON.
 
+## 2.0.10 — 2026-09-21
+
+**Re-run needed:** no. Stage 2 products made with the default `unflag = false`
+are unchanged.
+
+- Added: `stage2.unflag` (config) and `--unflag/--no-unflag` (per run). On,
+  Stage 2 runs `unflag *` on the calibrated file before the channel fits;
+  off, the legacy behaviour, fits with the flags Stage 1 wrote. The setting is
+  part of the resume fingerprint and recorded in the Stage 2 metadata.
+- Added: "Advanced" groups on the console's Run page for the per-run options
+  the commands already accepted. Stage 1: final per-IF self-cal. Stage 2:
+  edge channels, modelfit iterations, unflag, keep models, quick-look plots,
+  error bars. Stage 3: fit method, reference frequency, channel exclusions
+  (global and per epoch), annotations, error bars, figure formats. A value is
+  passed only when it differs from `lenspipe.toml`, so the command preview
+  stays short.
+- Added: a Resume button on failed or cancelled Stage 2 jobs in the Jobs
+  page. It resubmits the job's own command with `--resume` and without
+  `--overwrite`, continuing from the shard checkpoints.
+
 ## 2.0.9 — 2026-09-14
 
 **Re-run needed:** no.

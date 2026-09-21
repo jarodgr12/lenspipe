@@ -57,6 +57,7 @@ def plan_fingerprint(
         "mode": config.mode,
         "fit_ranges": fit_ranges,
         "modelfit_iterations": config.modelfit_iterations,
+        "unflag": config.unflag,
         "map_pixels": config.map_pixels,
         "cell_mas": config.cell_mas,
         "weighting": config.weighting,

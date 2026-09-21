@@ -7,6 +7,7 @@ from typing import Any
 from nicegui import run, ui
 
 from lenspipe.jobs import JobRecord
+from lenspipe.ui.commands import can_resume, resume_step
 from lenspipe.ui.layout import MONO, duration, fmt_utc, frame, status_chip
 from lenspipe.ui.state import console
 
@@ -82,6 +83,10 @@ def jobs_page(job: str | None = None) -> None:
                         ui.button("Cancel", icon="stop", on_click=lambda: cancel(record.id)).props(
                             "outline color=negative no-caps dense"
                         )
+                    if can_resume(record):
+                        ui.button("Resume", icon="play_arrow", on_click=lambda: resume(record)).props(
+                            "no-caps dense"
+                        ).tooltip("Continue this Stage 2 run from its shard checkpoints")
                     ui.button("Re-run", icon="replay", on_click=lambda: rerun(record)).props(
                         "outline no-caps dense"
                     )
@@ -156,6 +161,14 @@ def jobs_page(job: str | None = None) -> None:
                 console.manager.submit, record.argv, title=record.title, stage=record.stage
             )
             ui.notify(f"Submitted {new.id}", type="positive")
+            await select(new.id)
+
+        async def resume(record: JobRecord) -> None:
+            if console.manager is None:
+                return
+            step = resume_step(record)
+            new = await run.io_bound(console.manager.submit, step.argv, title=step.title, stage=step.stage)
+            ui.notify(f"Resuming as {new.id}", type="positive")
             await select(new.id)
 
         def _read_state() -> list[JobRecord]:
