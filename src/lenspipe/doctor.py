@@ -12,7 +12,14 @@ from pathlib import Path
 from lenspipe import __version__
 from lenspipe.config import CONFIG_FILENAME, LenspipeConfig
 from lenspipe.difmap.runner import difmap_version, resolve_executable
-from lenspipe.project import Layout, decide_shards, physical_memory_bytes
+from lenspipe.project import (
+    DISK_RESERVE_BYTES,
+    SCRATCH_PER_PROCESS,
+    Layout,
+    decide_shards,
+    free_disk_bytes,
+    physical_memory_bytes,
+)
 
 __all__ = ["CheckResult", "detect_casa", "detect_difmap", "run_checks"]
 
@@ -172,6 +179,13 @@ def run_checks(project_root: Path | None, config: LenspipeConfig | None = None) 
     if not uvfits:
         results.append(CheckResult("inputs", FAIL, f"no *.uvfits in {layout.inputs}",
                                    "copy or link <source>.<epoch>.uvfits files into inputs/"))
+        free = free_disk_bytes(layout.root)
+        if free is not None:
+            free_ok = free > DISK_RESERVE_BYTES
+            results.append(
+                CheckResult("disk", OK if free_ok else WARN, f"{_human(free)} free at {layout.root}",
+                            None if free_ok else "less than 5 GiB free; Stage 1 writes a calibrated copy per epoch")
+            )
     else:
         by_source: dict[str, list[str]] = {}
         for p in uvfits:
@@ -192,11 +206,17 @@ def run_checks(project_root: Path | None, config: LenspipeConfig | None = None) 
         else:
             results.append(CheckResult("inputs", OK, detail))
         largest = max(p.stat().st_size for p in uvfits)
+        scratch_where = (
+            Path(config.stage2.scratch_dir).expanduser() if config.stage2.scratch_dir
+            else layout.root / "stage2"
+        )
+        free = free_disk_bytes(scratch_where)
         decision = decide_shards(
             config.stage2.shards, 3072, input_bytes=largest,
             epoch_workers=config.run.epoch_workers,
             memory_fraction=config.stage2.memory_fraction,
             memory_multiple=config.stage2.memory_multiple,
+            free_disk_bytes=free,
         )
         if config.stage2.memory_multiple == 3.0:
             fix = (
@@ -216,13 +236,32 @@ def run_checks(project_root: Path | None, config: LenspipeConfig | None = None) 
                 fix,
             )
         )
-    try:
-        usage = shutil.disk_usage(layout.root)
-        free_ok = usage.free > 5 * (1 << 30)
-        results.append(
-            CheckResult("disk", OK if free_ok else WARN, f"{_human(usage.free)} free at {layout.root}",
-                        None if free_ok else "less than 5 GiB free; Stage 1 writes a calibrated copy per epoch")
-        )
-    except OSError:
-        pass
+        results.append(_disk_check(scratch_where, free, largest, decision.shards, config.run.epoch_workers))
     return results
+
+
+def _disk_check(where: Path, free: int | None, largest: int, shards: int, epoch_workers: int) -> CheckResult:
+    """Compare free disk with what Stage 2's DifMAP processes will hold in scratch copies.
+
+    Every DifMAP process streams its input into a hidden scratch file in its working
+    directory, so a run needs about shards x epochs-at-once x input size there, on
+    top of the calibrated copy Stage 1 writes per epoch.
+    """
+    per_process = int(largest * SCRATCH_PER_PROCESS)
+    processes = shards * max(1, epoch_workers)
+    need = per_process * processes
+    detail = (
+        f"{_human(free) if free is not None else 'unknown'} free at {where}; Stage 2 scratch needs about "
+        f"{_human(need)} for {shards} shard(s) x {epoch_workers} epoch(s) at once "
+        f"(DifMAP keeps a hidden copy of the input, {_human(per_process)}, per process)"
+    )
+    if free is None:
+        return CheckResult("disk", WARN, detail, "could not measure free space")
+    remedy = (
+        "lower stage2.shards or run.epoch_workers, free space, or set stage2.scratch_dir to a larger disk"
+    )
+    if free < per_process:
+        return CheckResult("disk", FAIL, detail, f"not enough room for one DifMAP process; {remedy}")
+    if free < need + DISK_RESERVE_BYTES:
+        return CheckResult("disk", WARN, detail, f"the planned run would fill the disk; {remedy}")
+    return CheckResult("disk", OK, detail)

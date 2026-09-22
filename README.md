@@ -132,7 +132,8 @@ Settings that did not exist before:
 
 | Setting | Default | Meaning |
 |---------|---------|---------|
-| `stage2.shards` | `auto` | DifMAP processes per epoch. `auto` takes cores - 1 (max 8) and then caps by memory. Results are independent of the shard count. |
+| `stage2.shards` | `auto` | DifMAP processes per epoch. `auto` takes cores - 1 (max 8) and then caps by memory and by free disk. Results are independent of the shard count. |
+| `stage2.scratch_dir` | unset | Where DifMAP processes run. DifMAP streams its input into a hidden scratch file in its working directory (about the input size per process), so a run needs roughly shards x concurrent epochs x input size there. Unset means the Stage 2 work directory inside the project; point it at a large or fast disk otherwise. `lenspipe doctor` reports the requirement against the free space. |
 | `stage2.memory_fraction`, `memory_multiple` | 0.5, `auto` | Memory budget for the shard cap: a fraction of physical RAM, shared across concurrent epochs, with each DifMAP estimated at `memory_multiple` times the UV-FITS size. `auto` learns the multiple from the peak memory of earlier runs on this machine (3.0 until then); a number pins it. |
 | `run.epoch_workers` | 2 | Epochs processed concurrently in stages 1 and 2; the automatic shard count shares the spare cores between them |
 | `run.nice` | 10 | Scheduling priority for jobs and DifMAP (0 normal, 19 lowest). Keeps the console responsive under load |
@@ -183,7 +184,8 @@ ssh -L 8080:127.0.0.1:8080 workstation 'cd /data/MG0414 && lenspipe ui . --no-br
 ## Interrupted runs, log recovery and stale products
 
 **Resume.** Stage 2 checkpoints per shard in a hidden work directory next to
-its outputs. If a run is interrupted, re-running the same command reports the
+its outputs (DifMAP also runs there unless `stage2.scratch_dir` says
+otherwise). If a run is interrupted, re-running the same command reports the
 interrupted run and stops; `lenspipe stage2 <project> --resume` continues it,
 re-executing only the shards that did not finish. Resume refuses if the data,
 model or Stage 2 settings changed in the meantime; `--overwrite` starts again.

@@ -3,6 +3,33 @@
 Each entry says whether existing products need re-running. The `lenspipe`
 version that made a product is recorded in its metadata JSON.
 
+## 2.0.12 — 2026-09-22
+
+**Re-run needed:** no.
+
+Reading the DifMAP 2.5q source showed that `observe` streams the whole input
+into a hidden scratch file in the process's working directory, about the size
+of the input, and that DifMAP's memory use is small (per-integration buffers
+plus one IF of visibilities). Stage 2 shards are therefore bounded by disk
+and I/O, not RAM.
+
+- Added: the automatic shard count is also capped by free disk at DifMAP's
+  working directory, keeping a 5 GiB reserve and sharing the space across
+  concurrent epochs. An explicit shard count is still honoured, with a
+  warning when the copies will not fit. The decision (`disk_cap`,
+  `free_disk_bytes`, `scratch_bytes_per_process`) is recorded in the Stage 2
+  metadata.
+- Changed: `lenspipe doctor`'s disk check now states what the planned run
+  needs for its scratch copies against the free space where DifMAP will run:
+  FAIL when not even one process fits, WARN when the plan would fill the
+  disk, with the remedies.
+- Added: `stage2.scratch_dir` to run DifMAP, and therefore keep its scratch
+  copies and `difmap.log_N` files, on another disk. A per-epoch subdirectory
+  is created there and removed when the epoch completes.
+- Changed: Stage 2's `unflag` now sends `unflag *, true`, which covers all
+  channels regardless of the current selection (the bare form applies to the
+  selected channels only). Stage 1 keeps the bare form for legacy parity.
+
 ## 2.0.11 — 2026-09-22
 
 **Re-run needed:** no.
