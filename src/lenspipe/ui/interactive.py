@@ -56,15 +56,20 @@ class SpwLayout:
 
 
 def spw_label(first_channel: int, last_channel: int, layout: SpwLayout) -> str:
-    """'spw 12 ch 37' for one channel, 'spw 12 ch 1-64' for a block (channels are 1-based)."""
+    """CASA-style label for a DifMAP channel range: 'spw 11 ch 36', or 'spw 11 ch 0-63' for a block.
+
+    DifMAP numbers IFs and channels from 1; CASA numbers spectral windows and the
+    channels inside them from 0, and that is the numbering people flag with, so the
+    label follows CASA. The fit index shown next to it stays DifMAP's.
+    """
     cps = layout.channels_per_spw
     spw_first, ch_first = divmod(int(first_channel) - 1, cps)
     spw_last, ch_last = divmod(int(last_channel) - 1, cps)
     if spw_first == spw_last:
         if ch_first == ch_last:
-            return f"spw {spw_first + 1} ch {ch_first + 1}"
-        return f"spw {spw_first + 1} ch {ch_first + 1}-{ch_last + 1}"
-    return f"spw {spw_first + 1} ch {ch_first + 1} to spw {spw_last + 1} ch {ch_last + 1}"
+            return f"spw {spw_first} ch {ch_first}"
+        return f"spw {spw_first} ch {ch_first}-{ch_last}"
+    return f"spw {spw_first} ch {ch_first} to spw {spw_last} ch {ch_last}"
 
 
 @dataclass

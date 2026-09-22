@@ -162,7 +162,8 @@ method, reference frequency, channel exclusions, annotations, error bars and
 figure formats. A value only appears in the command when it differs from
 `lenspipe.toml`. For Stage 3 products the Results page
 also shows interactive versions of the spectra, flux ratios and combined
-series; hovering a point gives its fit index, spectral window and channel.
+series; hovering a point gives its fit index (DifMAP numbering, from 1) and
+its spectral window and channel (CASA numbering, both from 0).
 
 Stop the console with `lenspipe stop <project>` (or `lenspipe stop --port 8080`),
 which works even if the terminal that started it has gone. Running jobs are

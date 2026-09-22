@@ -3,6 +3,15 @@
 Each entry says whether existing products need re-running. The `lenspipe`
 version that made a product is recorded in its metadata JSON.
 
+## 2.0.11 — 2026-09-22
+
+**Re-run needed:** no.
+
+- Fixed: the spw and channel in the interactive figures' hover text were
+  numbered from 1 like DifMAP IFs. They now follow CASA numbering, both from
+  0, so "spw 11 ch 36" is what you would put in a CASA `spw` selection. The
+  fit index next to it is unchanged (DifMAP's, from 1).
+
 ## 2.0.10 — 2026-09-21
 
 **Re-run needed:** no. Stage 2 products made with the default `unflag = false`
