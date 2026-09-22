@@ -31,16 +31,17 @@ def test_spw_layout_from_synthetic_uvfits(project: Path) -> None:
 @pytest.mark.parametrize(
     "first, last, cps, expected",
     [
-        (1, 1, 64, "spw 1 ch 1"),
-        (64, 64, 64, "spw 1 ch 64"),
-        (65, 65, 64, "spw 2 ch 1"),
-        (3033, 3033, 64, "spw 48 ch 25"),
-        (65, 128, 64, "spw 2 ch 1-64"),
-        (67, 126, 64, "spw 2 ch 3-62"),
-        (60, 70, 64, "spw 1 ch 60 to spw 2 ch 6"),
+        (1, 1, 64, "spw 0 ch 0"),
+        (64, 64, 64, "spw 0 ch 63"),
+        (65, 65, 64, "spw 1 ch 0"),
+        (3033, 3033, 64, "spw 47 ch 24"),
+        (65, 128, 64, "spw 1 ch 0-63"),
+        (67, 126, 64, "spw 1 ch 2-61"),
+        (60, 70, 64, "spw 0 ch 59 to spw 1 ch 5"),
     ],
 )
-def test_spw_label(first: int, last: int, cps: int, expected: str) -> None:
+def test_spw_label_uses_casa_zero_based_numbering(first: int, last: int, cps: int, expected: str) -> None:
+    """DifMAP channel 1 is CASA spw 0 ch 0; DifMAP channel 3033 with 64 per spw is spw 47 ch 24."""
     assert spw_label(first, last, SpwLayout(cps, None, "test")) == expected
 
 
@@ -78,7 +79,7 @@ def test_per_visit_figures_have_hover_with_spw_and_channel(stage3_project: Path)
     assert [t["name"] for t in markers] == ["A1", "A2", "B", "C"] and len(lines) == 4
     a1 = markers[0]
     assert len(a1["x"]) == 8 and len(a1["customdata"]) == 8
-    assert a1["customdata"][4][:2] == [5, "spw 2 ch 1"]  # channel 5 of an 8-channel, 2-spw file
+    assert a1["customdata"][4][:2] == [5, "spw 1 ch 0"]  # DifMAP channel 5 of an 8-channel, 2-spw file
     assert "spw" in a1["hovertemplate"] or "customdata[1]" in a1["hovertemplate"]
     assert a1["error_y"]["visible"] is True and len(a1["error_y"]["array"]) == 8
     assert "power law" in lines[0]["hovertemplate"]
@@ -87,7 +88,7 @@ def test_per_visit_figures_have_hover_with_spw_and_channel(stage3_project: Path)
     assert ratios is not None
     ratio_markers = [t for t in ratios["data"] if t["mode"] == "markers"]
     assert [t["name"] for t in ratio_markers] == ["A2/A1", "B/A1", "C/A1"]
-    assert ratio_markers[0]["customdata"][0][1] == "spw 1 ch 1"
+    assert ratio_markers[0]["customdata"][0][1] == "spw 0 ch 0"
     assert any("weighted mean" in t["hovertemplate"] for t in ratios["data"] if t["mode"] == "lines")
 
 
@@ -98,7 +99,7 @@ def test_combined_figures_cover_spectra_ratios_and_mjd_series(stage3_project: Pa
         "Reference-frequency flux vs MJD", "Weighted flux ratios vs MJD", "R_cusp vs MJD",
     }
     average = figures["Average spectrum (all epochs)"]["data"][0]
-    assert average["customdata"][0][1] == "spw 1 ch 1" and average["customdata"][0][2] == 2  # 2 epochs
+    assert average["customdata"][0][1] == "spw 0 ch 0" and average["customdata"][0][2] == 2  # 2 epochs
     mjd = figures["Reference-frequency flux vs MJD"]["data"][0]
     assert len(mjd["x"]) == 2 and mjd["customdata"] == [["A"], ["B"]]
 
