@@ -40,7 +40,14 @@ from lenspipe.models import (
     write_flux_only_model,
 )
 from lenspipe.progress import Reporter
-from lenspipe.project import Layout, decide_shards, parse_epoch_filename, utc_now, write_json
+from lenspipe.project import (
+    Layout,
+    decide_shards,
+    free_disk_bytes,
+    parse_epoch_filename,
+    utc_now,
+    write_json,
+)
 from lenspipe.provenance import fingerprint
 from lenspipe.stage2_shards import (
     ShardPlan,
@@ -676,6 +683,12 @@ def run_epoch(
         return Stage2Result(paths, False, "failed", str(exc))
 
     n_fits = len(prepared.fit_ranges)
+    # DifMAP runs in a working directory of our choosing and keeps a hidden scratch
+    # copy of the input there, so that directory decides both the disk budget and
+    # where difmap.log_N files land. Default: the work dir beside the products.
+    work_dir = work_directory_for(paths.output_directory, paths.product_prefix)
+    scratch_root = Path(stage2.scratch_dir).expanduser() if stage2.scratch_dir else None
+    difmap_cwd = scratch_root / paths.product_prefix if scratch_root else work_dir
     decision = decide_shards(
         stage2.shards,
         n_fits,
@@ -683,6 +696,7 @@ def run_epoch(
         epoch_workers=max(1, epoch_workers),
         memory_fraction=stage2.memory_fraction,
         memory_multiple=stage2.memory_multiple,
+        free_disk_bytes=free_disk_bytes(difmap_cwd),
     )
     if (
         isinstance(stage2.shards, int)
@@ -693,6 +707,22 @@ def run_epoch(
             f"[{label}] {stage2.shards} shards requested but the memory budget suggests at most "
             f"{decision.memory_cap}; proceeding as requested."
         )
+    if decision.disk_cap is not None and decision.scratch_bytes_per_process:
+        scratch_gib = decision.scratch_bytes_per_process / (1 << 30)
+        free_gib = (decision.free_disk_bytes or 0) / (1 << 30)
+        if decision.disk_short:
+            reporter.warn(
+                f"[{label}] each DifMAP process keeps a hidden scratch copy of the input "
+                f"(about {scratch_gib:.1f} GiB) in {difmap_cwd.parent}, but only {free_gib:.1f} GiB "
+                "is free; the run may stop with a disk-full error. Free space or set "
+                "stage2.scratch_dir to a larger disk."
+            )
+        elif isinstance(stage2.shards, int) and stage2.shards > decision.disk_cap:
+            reporter.warn(
+                f"[{label}] {stage2.shards} shards requested but the free disk in {difmap_cwd.parent} "
+                f"({free_gib:.1f} GiB) holds scratch copies for at most {decision.disk_cap}; "
+                "proceeding as requested."
+            )
     shards = decision.shards
     reporter.log(
         f"[{label}] {len(prepared.frequencies)} channels, mode={mode}, fits={n_fits}, "
@@ -710,7 +740,6 @@ def run_epoch(
         )
         return Stage2Result(paths, True, "dry_run", "commands generated", n_fits=n_fits, commands=commands)
 
-    work_dir = work_directory_for(paths.output_directory, paths.product_prefix)
     if overwrite:
         _remove_products(paths, mode, include_log=not recover_from_log)
         if work_dir.exists():
@@ -795,6 +824,7 @@ def run_epoch(
         shard_log = shard_log_path(work_dir, index)
         if shard_log.exists():
             shard_log.unlink()
+        difmap_cwd.mkdir(parents=True, exist_ok=True)
         result = run_difmap(
             config.project.difmap.executable,
             commands,
@@ -803,7 +833,7 @@ def run_epoch(
             cancel_event=cancel_event,
             stream=config.project.difmap.stream,
             nice=config.run.nice,
-            cwd=work_dir,  # DifMAP's own difmap.log_N files land in the work dir, not the user's cwd
+            cwd=difmap_cwd,  # scratch copies and difmap.log_N files land here, not in the user's cwd
         )
         if result.ok:
             mark_done(
@@ -959,6 +989,8 @@ def run_epoch(
     )
     _write_manifest(paths, retained_models_directory)
     shutil.rmtree(work_dir, ignore_errors=True)
+    if difmap_cwd != work_dir:
+        shutil.rmtree(difmap_cwd, ignore_errors=True)  # only DifMAP's own logs remain in it
 
     n_ok = sum(row["fit_status"] == "ok" for row in rows)
     reporter.progress(label, n_fits, n_fits, "completed")

@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import math
 import os
+import shutil
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -21,6 +22,9 @@ __all__ = [
     "json_safe",
     "parse_epoch_filename",
     "physical_memory_bytes",
+    "free_disk_bytes",
+    "DISK_RESERVE_BYTES",
+    "SCRATCH_PER_PROCESS",
     "utc_now",
     "write_json",
 ]
@@ -114,6 +118,29 @@ def physical_memory_bytes() -> int | None:
     return int(pages) * int(page_size)
 
 
+SCRATCH_PER_PROCESS = 1.1
+"""Disk a DifMAP process needs, as a multiple of its input: ``observe`` streams the whole
+file into a hidden ``uvdata.scr`` in its working directory (same visibility layout, so about
+the same size), plus small per-IF paging files."""
+
+DISK_RESERVE_BYTES = 5 * (1 << 30)
+"""Free space the shard planner never allocates to scratch copies."""
+
+
+def free_disk_bytes(path: Path | str) -> int | None:
+    """Free bytes on the filesystem that holds ``path`` (or its nearest existing ancestor)."""
+    candidate = Path(path).expanduser()
+    while not candidate.exists():
+        parent = candidate.parent
+        if parent == candidate:
+            return None
+        candidate = parent
+    try:
+        return shutil.disk_usage(candidate).free
+    except OSError:
+        return None
+
+
 @dataclass(frozen=True)
 class ShardDecision:
     shards: int
@@ -124,11 +151,21 @@ class ShardDecision:
     memory_budget_bytes: int | None
     memory_multiple: float | None = None
     memory_multiple_source: str | None = None
+    disk_cap: int | None = None  # processes whose scratch copies fit in free disk; 0 = not even one
+    free_disk_bytes: int | None = None
+    scratch_bytes_per_process: int | None = None
+
+    @property
+    def disk_short(self) -> bool:
+        """True when the free disk cannot hold even one process's scratch copy."""
+        return self.disk_cap is not None and self.disk_cap < 1
 
     def describe(self) -> str:
         parts = [f"shards={self.shards}", f"requested={self.requested}", f"cpu_cap={self.cpu_cap}"]
         if self.memory_cap is not None:
             parts.append(f"memory_cap={self.memory_cap}")
+        if self.disk_cap is not None:
+            parts.append(f"disk_cap={self.disk_cap}")
         if self.memory_multiple is not None:
             parts.append(f"memory_multiple={self.memory_multiple:g} [{self.memory_multiple_source}]")
         return " ".join(parts)
@@ -139,10 +176,13 @@ class ShardDecision:
             "requested": self.requested,
             "cpu_cap": self.cpu_cap,
             "memory_cap": self.memory_cap,
+            "disk_cap": self.disk_cap,
             "estimated_bytes_per_process": self.estimated_bytes_per_process,
             "memory_budget_bytes": self.memory_budget_bytes,
             "memory_multiple": self.memory_multiple,
             "memory_multiple_source": self.memory_multiple_source,
+            "free_disk_bytes": self.free_disk_bytes,
+            "scratch_bytes_per_process": self.scratch_bytes_per_process,
         }
 
 
@@ -156,14 +196,18 @@ def decide_shards(
     memory_multiple: float | str = 3.0,
     total_memory_bytes: int | None = None,
     cpu_count: int | None = None,
+    free_disk_bytes: int | None = None,
+    disk_reserve_bytes: int = DISK_RESERVE_BYTES,
 ) -> ShardDecision:
-    """Resolve the ``shards`` setting against CPUs, memory and the fit count.
+    """Resolve the ``shards`` setting against CPUs, memory, disk and the fit count.
 
-    Every shard loads the whole dataset in its own DifMAP, so the memory budget
-    (``memory_fraction`` of physical RAM, divided across concurrent epochs) is
-    shared by ``shards`` processes each estimated at ``memory_multiple`` times
-    the input size. An explicit shard count is honoured even when it exceeds
-    the memory cap; ``auto`` never exceeds it.
+    Every shard is its own DifMAP process. In memory each is estimated at
+    ``memory_multiple`` times the input, sharing ``memory_fraction`` of physical RAM
+    divided across concurrent epochs. On disk each keeps a hidden scratch copy of
+    the input in its working directory (``SCRATCH_PER_PROCESS`` times the input),
+    sharing the free space minus a reserve, again divided across concurrent
+    epochs. An explicit shard count is honoured even when it exceeds a cap;
+    ``auto`` never exceeds any of them, but always runs at least one process.
     """
     cores = cpu_count or os.cpu_count() or 2
     # Leave one core for the console and the OS, and share the rest between the
@@ -182,12 +226,26 @@ def decide_shards(
         budget = int(total * memory_fraction / max(1, epoch_workers))
         memory_cap = max(1, budget // estimate)
 
+    disk_cap: int | None = None
+    scratch: int | None = None
+    if free_disk_bytes is not None and input_bytes:
+        scratch = max(1, int(input_bytes * SCRATCH_PER_PROCESS))
+        usable = max(0, free_disk_bytes - disk_reserve_bytes) // max(1, epoch_workers)
+        disk_cap = usable // scratch
+
     if requested == "auto":
-        shards = cpu_cap if memory_cap is None else min(cpu_cap, memory_cap)
+        shards = cpu_cap
+        if memory_cap is not None:
+            shards = min(shards, memory_cap)
+        if disk_cap is not None:
+            shards = min(shards, max(1, disk_cap))
     else:
         shards = int(requested)
     shards = max(1, min(shards, max(1, fit_count)))
-    return ShardDecision(shards, cpu_cap, memory_cap, requested, estimate, budget, multiple, source)
+    return ShardDecision(
+        shards, cpu_cap, memory_cap, requested, estimate, budget, multiple, source,
+        disk_cap, free_disk_bytes, scratch,
+    )
 
 
 def auto_shards(requested: int | str, fit_count: int) -> int:

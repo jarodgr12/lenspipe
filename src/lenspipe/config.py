@@ -148,6 +148,14 @@ class Stage2Config(_Model):
         "auto",
         description="DifMAP processes per epoch; 'auto' uses cores minus one, at most 8.",
     )
+    scratch_dir: str | None = Field(
+        None,
+        description=(
+            "Directory in which DifMAP processes run. DifMAP keeps a hidden scratch copy of the "
+            "input (about its size) in its working directory, so point this at a large or fast "
+            "disk; None uses the Stage 2 work directory inside the project."
+        ),
+    )
     keep_models: bool = Field(False, description="Retain every fitted model under models_<mode>/.")
     input_pattern: str = "*.cal.uvf"
     plot_spectrum: bool = Field(True, description="Write the quick-look PNG plots after each epoch.")
@@ -393,7 +401,8 @@ weighting = "uvw 0,-1,false"
 modelfit_iterations = 20
 unflag = false                      # true: "unflag *" before the fits (legacy: keep Stage 1's flags)
 shards = "auto"                     # DifMAP processes per epoch; "auto" = cores - 1 (max 8),
-                                    # further capped so shards x epoch_workers fit in memory
+                                    # further capped so shards x epoch_workers fit in memory and disk
+# scratch_dir = "/scratch/lenspipe" # where DifMAP runs; each process keeps a hidden copy of its input there
 keep_models = false
 input_pattern = "*.cal.uvf"
 plot_spectrum = true                # quick-look PNGs after each epoch

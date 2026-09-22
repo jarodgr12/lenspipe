@@ -154,7 +154,8 @@ def stage2_commands(
     lines = [
         f"observe {calibrated_uvfits}",
         "select i",
-        *(["unflag *"] if config.unflag else []),
+        # ", true" = all channels and IFs, independent of what 'select' currently covers.
+        *(["unflag *, true"] if config.unflag else []),
         mapsize_command(config.map_pixels, config.cell_mas),
         config.weighting,
         "",

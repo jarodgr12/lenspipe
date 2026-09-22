@@ -36,7 +36,7 @@ def test_stage2_unflag_is_off_by_default_and_inserts_one_command_when_on() -> No
     assert Stage2Config().unflag is False
     assert "unflag" not in _commands(Stage2Config(mode="channel"))
     text = _commands(Stage2Config(mode="channel", unflag=True))
-    assert text.startswith("observe /p/stage1/X.A/X.A.cal.uvf\nselect i\nunflag *\n")
+    assert text.startswith("observe /p/stage1/X.A/X.A.cal.uvf\nselect i\nunflag *, true\n")
     assert text.count("unflag *") == 1  # once after observe, not once per fit
 
 
