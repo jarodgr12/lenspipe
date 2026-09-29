@@ -143,7 +143,7 @@ Settings that did not exist before:
 | `stage2.unflag` | false | Run `unflag *` on the calibrated file before the channel fits. Off keeps the flags Stage 1 wrote (Stage 1 has its own `unflag`, on by default). Also `--unflag/--no-unflag` per run |
 | `stage3.plot_error_bars` | true | Error bars on every Stage 3 figure; off plots the points alone |
 | `project.difmap.stream` | `pipe` | `pty` makes DifMAP line-buffer so progress arrives per fit |
-| `stage3.rcusp_images` | `["A1","A2","B"]` | Group names for the cusp relation; `[]` disables it |
+| `stage3.rcusp_images` | `["A1","A2","B"]` | The three images of the cusp relation, in the order (A1, A2, B) with A2 the middle, opposite-parity image. The names must be GROUP labels of the master model, so a source whose images are called A, B, C, D needs e.g. `["A","B","C"]`. When they do not match, Stage 3 logs why R_cusp was skipped, `lenspipe doctor` warns, and the Results page shows the reason. `[]` disables it |
 | `stage3.frequency_frame_ghz`, `frequency_ticks_ghz` | 11.7 to 18.3, 12..18 | Plot frame |
 | `casa.*` | unset | Interpreter, script and observation file for `lenspipe calibrate` |
 

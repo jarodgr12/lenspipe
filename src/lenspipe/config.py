@@ -215,6 +215,12 @@ class EmceeConfig(_Model):
         return self
 
 
+RCUSP_HELP = (
+    "set stage3.rcusp_images to the three cusp images in the order (A1, A2, B), where A2 is the "
+    "middle, opposite-parity image of the merging triple, or to [] to disable R_cusp"
+)
+
+
 class Stage3Config(_Model):
     reference_frequency_ghz: float = Field(15.0, gt=0)
     error_source: Literal["rms", "difmap"] = "rms"
@@ -226,7 +232,11 @@ class Stage3Config(_Model):
     )
     rcusp_images: list[str] = Field(
         default_factory=lambda: ["A1", "A2", "B"],
-        description="Group names (A1, A2, B) for R_cusp; empty list disables it.",
+        description=(
+            "The three image groups of the cusp relation, in the order (A1, A2, B) with A2 the "
+            "middle, opposite-parity image; names must match the GROUP labels of the master "
+            "model. Empty list disables R_cusp."
+        ),
     )
     annotations: bool = Field(True, description="Also write annotated spectrum figures.")
     plot_error_bars: bool = Field(

@@ -23,6 +23,7 @@ __all__ = [
     "SpwLayout",
     "VisitData",
     "combined_figures",
+    "combined_notes",
     "load_visit",
     "ratio_figure",
     "spectrum_figure",
@@ -275,6 +276,23 @@ def _fit_index_layout_from_combined(combined_dir: Path) -> tuple[SpwLayout, dict
             channels = {int(r.fit_index): (int(r.first_channel), int(r.last_channel)) for r in frame.itertuples()}
         break
     return layout, channels
+
+
+def combined_notes(combined_dir: Path) -> list[str]:
+    """Reasons a combined product lacks a figure the reader may be looking for (today: R_cusp)."""
+    meta_path = next(combined_dir.glob("*.combined.stage3.metadata.json"), None)
+    if meta_path is None:
+        return []
+    try:
+        meta = json.loads(meta_path.read_text())
+    except (OSError, ValueError):
+        return []
+    notes: list[str] = []
+    if not meta.get("rcusp_available", True) and meta.get("rcusp_reason"):
+        notes.append(f"R_cusp not computed: {meta['rcusp_reason']}")
+    elif meta.get("rcusp_note"):
+        notes.append(str(meta["rcusp_note"]))
+    return notes
 
 
 def combined_figures(combined_dir: Path) -> dict[str, dict[str, Any]]:

@@ -79,7 +79,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from lenspipe import __version__
-from lenspipe.config import LenspipeConfig
+from lenspipe.config import RCUSP_HELP, LenspipeConfig
 from lenspipe.progress import Reporter
 from lenspipe.project import Layout
 from lenspipe.provenance import fingerprint
@@ -622,6 +622,51 @@ def _rcusp_error_from_fluxes(a1, a2, b, sa1, sa2, sb) -> float:
     d_b = (sign_n * denominator - abs_n) / denominator**2
     variance = (d_a1 * sa1) ** 2 + (d_a2 * sa2) ** 2 + (d_b * sb) ** 2
     return float(np.sqrt(variance)) if variance >= 0 else float("nan")
+
+
+def rcusp_status(analyses: list[Any], images: list[str] | tuple[str, ...]) -> dict[str, Any]:
+    """Say whether R_cusp can be built from these visits, and if not, exactly why.
+
+    ``groups`` are the image groups actually present in the fitted spectra, so the
+    message can be acted on without opening the model file.
+    """
+    images = list(images)
+    groups = list(analyses[0].spectral_fits) if analyses else []
+    status: dict[str, Any] = {"available": False, "reason": None, "groups": groups, "images": images, "note": None}
+    if not images:
+        status["reason"] = "disabled (stage3.rcusp_images is empty)"
+        return status
+    if len(images) != 3:
+        status["reason"] = f"stage3.rcusp_images must name exactly three groups, got {images}"
+        return status
+    if not analyses:
+        status["reason"] = "no visits to combine"
+        return status
+    missing = [name for name in images if name not in groups]
+    if missing:
+        status["reason"] = (
+            f"stage3.rcusp_images names {', '.join(images)} but the model's image groups are "
+            f"{', '.join(groups)}; {', '.join(missing)} not found. To fix: {RCUSP_HELP}."
+        )
+        return status
+    bad_epochs = [
+        item.dataset.epoch
+        for item in analyses
+        if not all(
+            np.isfinite(item.spectral_fits[name].s_ref_jy) and np.isfinite(item.spectral_fits[name].s_ref_error_jy)
+            for name in images
+        )
+    ]
+    if len(bad_epochs) == len(analyses):
+        status["reason"] = (
+            f"the reference-frequency flux fits of {images} are not finite in any visit "
+            f"({', '.join(bad_epochs)}); check the per-visit spectra and fit status"
+        )
+        return status
+    status["available"] = True
+    if bad_epochs:
+        status["note"] = f"R_cusp is undefined for visit(s) {', '.join(bad_epochs)}: a reference flux fit is not finite"
+    return status
 
 
 def _build_rcusp_series(
@@ -1531,7 +1576,12 @@ def write_combined_products(
                 normalised_rows,
             )
 
-        rcusp_series = _build_rcusp_series(analyses, rcusp_images)
+        rcusp_state = rcusp_status(analyses, rcusp_images)
+        if not rcusp_state["available"]:
+            print(f"R_CUSP SKIPPED: {source}.{product_tag}; {rcusp_state['reason']}")
+        elif rcusp_state["note"]:
+            print(f"R_CUSP NOTE: {source}.{product_tag}; {rcusp_state['note']}")
+        rcusp_series = _build_rcusp_series(analyses, rcusp_images) if rcusp_state["available"] else None
         if rcusp_series is not None:
             rcusp_values, rcusp_errors = rcusp_series
             rcusp_fit = fit_constant("R_cusp", rcusp_values, rcusp_errors)
@@ -1639,6 +1689,10 @@ def write_combined_products(
                     "using fitted reference-frequency flux densities."
                 ),
                 "rcusp_available": rcusp_series is not None,
+                "rcusp_images": list(rcusp_images),
+                "rcusp_reason": rcusp_state["reason"],
+                "rcusp_note": rcusp_state["note"],
+                "groups": list(first.spectral_fits),
                 "rms_diagnostics": rms_diagnostic_metadata,
                 "combined_fits": combined_fit_payload,
                 "figure_formats": list(plotting.FIGURE_FORMATS),
@@ -1820,6 +1874,11 @@ def run_stage3(
 
     for (source, product_tag), group in sorted(grouped.items()):
         group.sort(key=lambda item: item.mjd)
+        # Say up front, in the job log, when R_cusp will not be produced: a silent skip
+        # looks like a bug to the person waiting for the plot.
+        rcusp_state = rcusp_status(group, settings.rcusp_images)
+        if not rcusp_state["available"] and settings.rcusp_images:
+            reporter.warn(f"[stage3] R_cusp for {source}.{product_tag} will be skipped: {rcusp_state['reason']}")
         records = [analysis.plot_record() for analysis in group]
         try:
             spectrum_y_limits = calculate_spectrum_y_limits(records)

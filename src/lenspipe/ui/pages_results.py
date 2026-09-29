@@ -114,6 +114,19 @@ def _interactive_figures(directory: Path) -> dict[str, dict[str, Any]]:
     return figures
 
 
+def _interactive_notes(directory: Path) -> list[str]:
+    """Why an expected figure is absent, e.g. R_cusp skipped because the image names do not match."""
+    from lenspipe.ui.interactive import combined_notes
+
+    if next(directory.glob("*.combined.stage3.metadata.json"), None) is None:
+        return []
+    return combined_notes(directory)
+
+
+def _interactive_bundle(directory: Path) -> tuple[dict[str, dict[str, Any]], list[str]]:
+    return _interactive_figures(directory), _interactive_notes(directory)
+
+
 @ui.page("/results")
 def results_page(epoch: str | None = None, stage: int = 2, product: str | None = None) -> None:
     """Browse products. Query parameters preselect a view, e.g. ``/results?epoch=MG0414.A&stage=3``."""
@@ -159,10 +172,11 @@ def results_page(epoch: str | None = None, stage: int = 2, product: str | None =
             status.set_text("Reading directory...")
             figures, csvs = await run.io_bound(_scan, target, console.root)
             interactive: dict[str, dict[str, Any]] = {}
+            interactive_notes: list[str] = []
             interactive_error: str | None = None
             if int(stage.value or 2) == 3:
                 try:
-                    interactive = await run.io_bound(_interactive_figures, target.directory)
+                    interactive, interactive_notes = await run.io_bound(_interactive_bundle, target.directory)
                 except Exception as exc:  # noqa: BLE001 - static figures still show
                     interactive_error = f"{type(exc).__name__}: {exc}"
             if my_render != state["render"]:
@@ -177,6 +191,8 @@ def results_page(epoch: str | None = None, stage: int = 2, product: str | None =
                             ui.plotly(figure).classes("w-full").style("height: 420px")
                 elif interactive_error:
                     ui.label(f"Interactive view unavailable: {interactive_error}").classes("text-warning text-sm")
+                for note in interactive_notes:
+                    ui.label(note).classes("text-sm text-amber-9")
                 if not figures and not csvs:
                     ui.label("Nothing to show in this directory.").classes("opacity-70")
                 if figures:
