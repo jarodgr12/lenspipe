@@ -3,6 +3,22 @@
 Each entry says whether existing products need re-running. The `lenspipe`
 version that made a product is recorded in its metadata JSON.
 
+## 2.0.13 — 2026-09-29
+
+**Re-run needed:** only Stage 3, and only if you want R_cusp on a source whose
+images are not named A1, A2, B (set `stage3.rcusp_images` first).
+
+- Fixed: R_cusp disappeared without a word when the configured image names
+  did not match the master model's GROUP labels. The default names are
+  MG0414's (A1, A2, B); on any other source the product was silently skipped
+  and only `rcusp_available: false` recorded it. Stage 3 now warns in the job
+  log before plotting and prints `R_CUSP SKIPPED` with the groups it found,
+  the combined metadata records `rcusp_images`, `rcusp_reason` and `groups`,
+  the Results page shows the reason under the interactive figures, and
+  `lenspipe doctor` checks `stage3.rcusp_images` against every master model.
+- Changed: when a visit's reference-flux fit is not finite, R_cusp is still
+  produced for the other visits and the affected visits are named in a note.
+
 ## 2.0.12 — 2026-09-22
 
 **Re-run needed:** no.

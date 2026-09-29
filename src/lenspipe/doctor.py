@@ -10,8 +10,9 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from lenspipe import __version__
-from lenspipe.config import CONFIG_FILENAME, LenspipeConfig
+from lenspipe.config import CONFIG_FILENAME, RCUSP_HELP, LenspipeConfig
 from lenspipe.difmap.runner import difmap_version, resolve_executable
+from lenspipe.models import ModelFormatError, parse_master_model
 from lenspipe.project import (
     DISK_RESERVE_BYTES,
     SCRATCH_PER_PROCESS,
@@ -237,7 +238,30 @@ def run_checks(project_root: Path | None, config: LenspipeConfig | None = None) 
             )
         )
         results.append(_disk_check(scratch_where, free, largest, decision.shards, config.run.epoch_workers))
+        results.append(_rcusp_check(models, config.stage3.rcusp_images))
     return results
+
+
+def _rcusp_check(models: list[Path], images: list[str]) -> CheckResult:
+    """R_cusp needs its three image names to be GROUP labels of the master model, else Stage 3 skips it."""
+    if not images:
+        return CheckResult("rcusp", OK, "disabled (stage3.rcusp_images is empty)")
+    details: list[str] = []
+    problems: list[str] = []
+    for gmod in models:
+        try:
+            groups = list(parse_master_model(gmod).groups)
+        except (ModelFormatError, OSError) as exc:
+            details.append(f"{gmod.name}: unreadable ({exc})")
+            continue
+        details.append(f"{gmod.name}: images {', '.join(groups)}")
+        missing = [name for name in images if name not in groups]
+        if missing:
+            problems.append(f"{gmod.name} has no group(s) {', '.join(missing)}")
+    detail = f"R_cusp uses {', '.join(images)}; " + "; ".join(details)
+    if problems:
+        return CheckResult("rcusp", WARN, detail, f"{'; '.join(problems)}: {RCUSP_HELP}")
+    return CheckResult("rcusp", OK, detail)
 
 
 def _disk_check(where: Path, free: int | None, largest: int, shards: int, epoch_workers: int) -> CheckResult:
