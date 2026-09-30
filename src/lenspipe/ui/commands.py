@@ -47,6 +47,7 @@ class RunRequest:
     stage3_image_size: str | None = None
     stage3_image_cmap: str | None = None
     stage3_image_pmax: float | None = None
+    stage3_image_residual_pmax: float | None = None
 
 
 def command_line(argv: list[str]) -> str:
@@ -147,6 +148,7 @@ def build_steps(request: RunRequest) -> tuple[list[ChainStep], list[str]]:
             if request.stage3_image_cmap:
                 argv += ["--image-cmap", request.stage3_image_cmap]
             argv += _number(request.stage3_image_pmax, "--image-pmax")
+            argv += _number(request.stage3_image_residual_pmax, "--image-residual-pmax")
             if request.stage3_workers:
                 argv += ["--workers", str(request.stage3_workers)]
             if request.overwrite:

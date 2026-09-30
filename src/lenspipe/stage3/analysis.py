@@ -1031,8 +1031,8 @@ def _write_visit_image_figure(dataset: Stage2Dataset, plots_dir: Path, settings:
         print(f"IMAGES SKIPPED: {dataset.prefix}; {record['reason']}")
         return record
     try:
-        write_visit_images(
-            clean, residual, plots_dir / f"{dataset.prefix}.images", settings, f"{dataset.source}.{dataset.epoch}"
+        record["files"] = write_visit_images(
+            clean, residual, plots_dir / dataset.prefix, settings, f"{dataset.source}.{dataset.epoch}"
         )
         record["written"] = True
     except Exception as exc:  # noqa: BLE001 - a map figure must not cost the spectra
@@ -1064,7 +1064,7 @@ def _write_all_epochs_image_figure(
         print(f"IMAGES SKIPPED: {source}.{stem}; {record['reason']}")
         return record
     try:
-        write_all_epochs_images(entries, plots_dir / f"{stem}.images_all_epochs", settings, source)
+        record["files"] = write_all_epochs_images(entries, plots_dir / stem, settings, source)
         record["written"] = True
     except Exception as exc:  # noqa: BLE001
         record["reason"] = f"{type(exc).__name__}: {exc}"

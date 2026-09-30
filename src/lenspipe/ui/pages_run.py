@@ -203,9 +203,13 @@ def run_page() -> None:
                             ).props(dense).classes("w-36")
                             image_cmap = ui.input("Colour map", value=config.stage3.images.cmap).props(dense).classes("w-36")
                             image_pmax = ui.number(
-                                "pmax (percentile)", value=config.stage3.images.pmax, min=1, max=100, step=0.1,
+                                "Clean pmax", value=config.stage3.images.pmax, min=1, max=100, step=0.1,
                                 format="%.1f",
-                            ).props(dense).classes("w-40")
+                            ).props(dense).classes("w-32")
+                            image_residual_pmax = ui.number(
+                                "Residual pmax", value=config.stage3.images.residual_pmax, min=1, max=100,
+                                step=0.1, format="%.1f",
+                            ).props(dense).classes("w-36")
 
                 with ui.row().classes("gap-2 items-center"):
                     submit_button = ui.button("Submit", icon="play_arrow", on_click=lambda: submit()).props(
@@ -283,6 +287,10 @@ def run_page() -> None:
                 stage3_image_pmax=_override(
                     float(image_pmax.value) if image_pmax.value not in (None, "") else None, s3.images.pmax
                 ),
+                stage3_image_residual_pmax=_override(
+                    float(image_residual_pmax.value) if image_residual_pmax.value not in (None, "") else None,
+                    s3.images.residual_pmax,
+                ),
             )
 
         def refresh_preview() -> None:
@@ -316,7 +324,7 @@ def run_page() -> None:
             channels, shards, edge, iterations, unflag, keep_models, plots, s2_error_bars,
             error_source, product, plot_workers, fit_method, reference_frequency, formats,
             exclude_channels, exclude_epoch_channels, annotations, s3_error_bars,
-            images_on, image_center, image_size, image_cmap, image_pmax,
+            images_on, image_center, image_size, image_cmap, image_pmax, image_residual_pmax,
         ):
             widget.on_value_change(refresh_preview)
         refresh_preview()
