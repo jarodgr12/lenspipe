@@ -96,6 +96,12 @@ from lenspipe.stage3.fitting import (
     fit_power_law_emcee,
     fit_ratio_power_law,
 )
+from lenspipe.stage3.images import (
+    ImageSettings,
+    stage1_images_for,
+    write_all_epochs_images,
+    write_visit_images,
+)
 from lenspipe.stage3.io import (
     Stage2Dataset,
     discover_stage2_datasets,
@@ -1003,6 +1009,69 @@ def write_combined_rms_diagnostics(
     }
 
 
+def _image_record(settings: ImageSettings | None) -> dict[str, Any]:
+    return {
+        "enabled": bool(settings and settings.enabled),
+        "written": False,
+        "settings": settings.to_dict() if settings else None,
+        "reason": None,
+    }
+
+
+def _write_visit_image_figure(dataset: Stage2Dataset, plots_dir: Path, settings: ImageSettings | None) -> dict[str, Any]:
+    """Clean and residual cutouts for one visit, from the Stage 1 maps; never fatal for the visit."""
+    record = _image_record(settings)
+    if not settings or not settings.enabled:
+        return record
+    clean, residual = stage1_images_for(dataset.project_root, dataset.source, dataset.epoch)
+    record.update({"clean": str(clean), "residual": str(residual)})
+    missing = [path.name for path in (clean, residual) if not path.is_file()]
+    if missing:
+        record["reason"] = f"Stage 1 map(s) not found: {', '.join(missing)}"
+        print(f"IMAGES SKIPPED: {dataset.prefix}; {record['reason']}")
+        return record
+    try:
+        write_visit_images(
+            clean, residual, plots_dir / f"{dataset.prefix}.images", settings, f"{dataset.source}.{dataset.epoch}"
+        )
+        record["written"] = True
+    except Exception as exc:  # noqa: BLE001 - a map figure must not cost the spectra
+        record["reason"] = f"{type(exc).__name__}: {exc}"
+        print(f"IMAGES FAILED: {dataset.prefix}; {record['reason']}")
+    return record
+
+
+def _write_all_epochs_image_figure(
+    analyses: list[EpochAnalysis], plots_dir: Path, stem: str, source: str, settings: ImageSettings | None
+) -> dict[str, Any]:
+    """One grid of every visit's clean and residual cutouts for the combined product."""
+    record = _image_record(settings)
+    if not settings or not settings.enabled:
+        return record
+    entries: list[tuple[str, Path, Path]] = []
+    skipped: list[str] = []
+    for analysis in analyses:
+        dataset = analysis.dataset
+        clean, residual = stage1_images_for(dataset.project_root, dataset.source, dataset.epoch)
+        if clean.is_file() and residual.is_file():
+            entries.append((dataset.epoch, clean, residual))
+        else:
+            skipped.append(dataset.epoch)
+    record["epochs"] = [epoch for epoch, _, _ in entries]
+    if skipped:
+        record["reason"] = f"no Stage 1 maps for epoch(s) {', '.join(skipped)}"
+    if not entries:
+        print(f"IMAGES SKIPPED: {source}.{stem}; {record['reason']}")
+        return record
+    try:
+        write_all_epochs_images(entries, plots_dir / f"{stem}.images_all_epochs", settings, source)
+        record["written"] = True
+    except Exception as exc:  # noqa: BLE001
+        record["reason"] = f"{type(exc).__name__}: {exc}"
+        print(f"IMAGES FAILED: {stem}; {record['reason']}")
+    return record
+
+
 def write_epoch_products(
     analysis: EpochAnalysis,
     reference_frequency_ghz: float,
@@ -1014,6 +1083,7 @@ def write_epoch_products(
     ratio_y_limits: tuple[float, float] | None,
     exclusion_configuration: dict[str, Any],
     analysis_tag: str | None,
+    image_settings: ImageSettings | None = None,
 ) -> bool:
     dataset = analysis.dataset
     final_output = dataset.output_directory
@@ -1125,6 +1195,7 @@ def write_epoch_products(
         plot_epoch_rms_diagnostic(
             analysis, plots_dir / f"{dataset.prefix}.rms_vs_channel"
         )
+        images_record = _write_visit_image_figure(dataset, plots_dir, image_settings)
 
         created = datetime.now(UTC).isoformat()
         stage3_metadata = {
@@ -1194,6 +1265,7 @@ def write_epoch_products(
                 ),
             },
             "figure_formats": list(plotting.FIGURE_FORMATS),
+            "images": images_record,
             "provenance": {
                 "spectrum": fingerprint(dataset.spectrum_csv),
                 "metadata": fingerprint(dataset.metadata_json),
@@ -1247,6 +1319,7 @@ def write_combined_products(
     exclusion_configuration: dict[str, Any],
     analysis_tag: str | None,
     rcusp_images: list[str] | tuple[str, str, str] = ("A1", "A2", "B"),
+    image_settings: ImageSettings | None = None,
 ) -> bool:
     if not analyses:
         return False
@@ -1618,6 +1691,8 @@ def write_combined_products(
                 tables_dir / f"{stem}.rcusp_vs_mjd.json", rcusp_rows
             )
 
+        combined_images_record = _write_all_epochs_image_figure(analyses, plots_dir, stem, source, image_settings)
+
         if combined_fit_rows:
             write_csv(tables_dir / f"{stem}.combined_fits.csv", combined_fit_rows)
             write_json(tables_dir / f"{stem}.combined_fits.json", combined_fit_payload)
@@ -1696,6 +1771,7 @@ def write_combined_products(
                 "rms_diagnostics": rms_diagnostic_metadata,
                 "combined_fits": combined_fit_payload,
                 "figure_formats": list(plotting.FIGURE_FORMATS),
+                "images": combined_images_record,
                 "provenance": {
                     "spectra": {
                         analysis.dataset.epoch: fingerprint(analysis.dataset.spectrum_csv)
@@ -1825,6 +1901,7 @@ def run_stage3(
             for dataset in datasets
         ]
 
+    image_settings = ImageSettings.from_config(settings.images)
     emcee_settings = {
         "n_walkers": settings.emcee.walkers,
         "n_steps": settings.emcee.steps,
@@ -1898,6 +1975,7 @@ def run_stage3(
             ratio_y_limits=ratio_y_limits,
             exclusion_configuration=exclusion_configuration,
             analysis_tag=analysis_tag,
+            image_settings=image_settings,
         )
 
         label = f"stage3 plots {source}.{product_tag}"
@@ -1953,6 +2031,7 @@ def run_stage3(
                 exclusion_configuration=exclusion_configuration,
                 analysis_tag=analysis_tag,
                 rcusp_images=settings.rcusp_images,
+                image_settings=image_settings,
             )
             combined_written += 1
             combined_dir = root / "stage3" / "combined" / source / product_tag

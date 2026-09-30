@@ -37,6 +37,8 @@ class State:
         self.selection: tuple[int, int] | None = None
         self.rms: float = 0.0
         self.fitted = False
+        self.map_pixels: int = 1024
+        self.cell_mas: float = 25.0
 
 
 def emit(text: str) -> None:
@@ -170,9 +172,96 @@ def write_model(state: State, path: Path) -> None:
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
-def write_fits_like(path: Path, label: str) -> None:
+MAP_SIDE = 128  # pixels written whatever mapsize asked for: enough for cutouts, small on disk
+MAP_RA_DEG, MAP_DEC_DEG = 64.24, 5.57  # the synthetic UV-FITS phase centre
+BEAM_DEG = (0.00004, 0.00003, -30.0)  # 144 x 108 mas restoring beam, like a 15 GHz VLA A-array map
+
+
+def _card(key: str, value, comment: str = "") -> bytes:
+    """One 80-character FITS header card in the fixed format astropy expects."""
+    if isinstance(value, bool):
+        text = f"{key:<8}= {'T' if value else 'F':>20}"
+    elif isinstance(value, int):
+        text = f"{key:<8}= {value:>20d}"
+    elif isinstance(value, float):
+        text = f"{key:<8}= {value:>20.10E}"
+    else:
+        text = f"{key:<8}= '{str(value):<8}'"
+    if comment:
+        text = f"{text} / {comment}"
+    return text[:80].ljust(80).encode("ascii")
+
+
+def write_fits_like(path: Path, label: str, state: State) -> None:
+    """A real 4-axis FITS image (RA, Dec, FREQ, STOKES) shaped like DifMAP's wmap/wdmap output.
+
+    The restored map carries BMAJ/BMIN/BPA and NITER; the residual map does not,
+    exactly as DifMAP 2.5q writes them (wmapbeam.c writes the beam keywords only
+    when ``domap && ncmp``). Pixel values are a few Gaussian blobs (clean) or a
+    small deterministic ripple (residual), in Jy/beam.
+    """
+    import struct
+
+    n = MAP_SIDE
+    cell_deg = state.cell_mas / 3.6e6
+    clean = label == "wmap"
+    cards = [
+        _card("SIMPLE", True, f"fake {label}"),
+        _card("BITPIX", -32),
+        _card("NAXIS", 4),
+        _card("NAXIS1", n),
+        _card("NAXIS2", n),
+        _card("NAXIS3", 1),
+        _card("NAXIS4", 1),
+        _card("OBJECT", "MG0414"),
+        _card("BUNIT", "JY/BEAM"),
+        _card("CTYPE1", "RA---SIN"),
+        _card("CRVAL1", MAP_RA_DEG),
+        _card("CDELT1", -cell_deg),
+        _card("CRPIX1", n / 2 + 1.0),
+        _card("CUNIT1", "deg"),
+        _card("CTYPE2", "DEC--SIN"),
+        _card("CRVAL2", MAP_DEC_DEG),
+        _card("CDELT2", cell_deg),
+        _card("CRPIX2", n / 2 + 1.0),
+        _card("CUNIT2", "deg"),
+        _card("CTYPE3", "FREQ"),
+        _card("CRVAL3", 1.5e10),
+        _card("CDELT3", 1.6e7),
+        _card("CRPIX3", 1.0),
+        _card("CTYPE4", "STOKES"),
+        _card("CRVAL4", 1.0),
+        _card("CDELT4", 1.0),
+        _card("CRPIX4", 1.0),
+        _card("EQUINOX", 2000.0),
+    ]
+    if clean:
+        cards += [
+            _card("BMAJ", BEAM_DEG[0], "Clean beam major axis diameter (degrees)."),
+            _card("BMIN", BEAM_DEG[1], "Clean beam minor axis diameter (degrees)."),
+            _card("BPA", BEAM_DEG[2], "Clean beam position angle (degrees)."),
+            _card("NITER", len(state.model_rows) or 1, "Number of model components."),
+        ]
+    cards.append(b"END".ljust(80))
+    header = b"".join(cards)
+    header = header.ljust(((len(header) + 2879) // 2880) * 2880, b" ")
+
+    blobs = [(0.0, 0.0, 0.30), (16.0, 4.0, 0.28), (-12.0, 9.0, 0.10), (-5.0, -14.0, 0.05)]  # pixel offsets, Jy
+    sigma = 2.0
+    values = []
+    for row in range(n):
+        for col in range(n):
+            x = col - n / 2
+            y = row - n / 2
+            if clean:
+                value = sum(peak * math.exp(-((x - dx) ** 2 + (y - dy) ** 2) / (2 * sigma**2)) for dx, dy, peak in blobs)
+            else:
+                value = 0.0005 * math.sin(0.3 * x) * math.cos(0.2 * y)
+            values.append(value)
+    data = struct.pack(f">{n * n}f", *values)
+    data = data.ljust(((len(data) + 2879) // 2880) * 2880, b"\0")
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_bytes(f"SIMPLE  =                    T / fake {label}\n".encode().ljust(2880, b" "))
+    path.write_bytes(header + data)
 
 
 def main() -> int:
@@ -210,6 +299,11 @@ def main() -> int:
         elif command == "unflag":
             emit("Unflagging all data.")
         elif command == "mapsize":
+            fields = [f.strip() for f in argument.split(",") if f.strip()]
+            if fields:
+                state.map_pixels = int(float(fields[0]))
+            if len(fields) > 1:
+                state.cell_mas = float(fields[1])
             emit(f"Map grid = {argument} pixels.")
         elif command == "uvw":
             emit(f"Uniform weighting binwidth: {argument}")
@@ -239,7 +333,7 @@ def main() -> int:
             shutil.copyfile(state.observed, target)
             emit(f"Writing UV FITS file: {argument}")
         elif command in {"wmap", "wdmap"}:
-            write_fits_like(Path(argument), command)
+            write_fits_like(Path(argument), command, state)
             emit(f"Writing {'clean' if command == 'wmap' else 'dirty'} map to FITS file: {argument}")
         elif command == "sleep":
             time.sleep(float(argument))

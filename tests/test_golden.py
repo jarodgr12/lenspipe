@@ -182,7 +182,7 @@ def test_stage3_products_match_legacy(project: Path, fake_difmap: Path, fake_dif
     def figure_names(root: Path) -> set[str]:
         return {
             str(p.relative_to(root)) for p in (root / "stage3").rglob("*.png")
-            if "rms_" not in p.name and p.name not in {
+            if "rms_" not in p.name and ".images" not in p.name and p.name not in {
                 "MG0414.A.channel.png", "MG0414.B.channel.png", "MG0414.channel.png",
             }
         }

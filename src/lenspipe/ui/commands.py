@@ -42,6 +42,11 @@ class RunRequest:
     stage3_annotations: bool | None = None
     stage3_error_bars: bool | None = None
     stage3_formats: str | None = None
+    stage3_images: bool | None = None
+    stage3_image_center: str | None = None
+    stage3_image_size: str | None = None
+    stage3_image_cmap: str | None = None
+    stage3_image_pmax: float | None = None
 
 
 def command_line(argv: list[str]) -> str:
@@ -134,6 +139,14 @@ def build_steps(request: RunRequest) -> tuple[list[ChainStep], list[str]]:
             argv += _toggle(request.stage3_error_bars, "--error-bars", "--no-error-bars")
             if request.stage3_formats:
                 argv += ["--formats", request.stage3_formats]
+            argv += _toggle(request.stage3_images, "--images", "--no-images")
+            if request.stage3_image_center:
+                argv += ["--image-center", request.stage3_image_center]
+            if request.stage3_image_size:
+                argv += ["--image-size", request.stage3_image_size]
+            if request.stage3_image_cmap:
+                argv += ["--image-cmap", request.stage3_image_cmap]
+            argv += _number(request.stage3_image_pmax, "--image-pmax")
             if request.stage3_workers:
                 argv += ["--workers", str(request.stage3_workers)]
             if request.overwrite:

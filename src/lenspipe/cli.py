@@ -364,6 +364,11 @@ def stage3(
     error_bars: Annotated[bool | None, typer.Option("--error-bars/--no-error-bars", help="Error bars on every figure.")] = None,
     formats: Annotated[str | None, typer.Option("--formats", help="Figure formats, e.g. 'png' or 'pdf,png'.")] = None,
     use_tex: Annotated[bool | None, typer.Option("--use-tex/--no-use-tex")] = None,
+    images: Annotated[bool | None, typer.Option("--images/--no-images", help="Clean/residual map figures.")] = None,
+    image_center: Annotated[str | None, typer.Option("--image-center", help="'ra_deg,dec_deg' or sexagesimal; default image centre.")] = None,
+    image_size: Annotated[str | None, typer.Option("--image-size", help="Cutout arcsec: '2' or 'width,height'.")] = None,
+    image_cmap: Annotated[str | None, typer.Option("--image-cmap", help="Matplotlib colour map.")] = None,
+    image_pmax: Annotated[float | None, typer.Option("--image-pmax", help="Colour scale top percentile.")] = None,
     overwrite: Annotated[bool, typer.Option("--overwrite")] = False,
     workers: Annotated[int | None, typer.Option("--workers", help="Plot processes.")] = None,
     list_products: Annotated[bool, typer.Option("--list-products", help="List Stage 2 products and exit.")] = False,
@@ -382,9 +387,23 @@ def stage3(
         for observation, tags in products.items():
             typer.echo(f"{observation}: {', '.join(tags)}")
         return
+    image_overrides = {
+        "enabled": images,
+        "center": image_center,
+        "size_arcsec": (
+            [float(v) for v in image_size.replace("x", ",").split(",") if v.strip()] if image_size else None
+        ),
+        "cmap": image_cmap,
+        "pmax": image_pmax,
+    }
+    image_settings = {
+        **cfg.stage3.images.model_dump(),
+        **{key: value for key, value in image_overrides.items() if value is not None},
+    }
     try:
         cfg = cfg.with_overrides(
             stage3={
+                "images": image_settings if any(v is not None for v in image_overrides.values()) else None,
                 "error_source": error_source,
                 "fit_method": fit_method,
                 "reference_frequency_ghz": reference_frequency,
