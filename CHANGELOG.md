@@ -3,6 +3,28 @@
 Each entry says whether existing products need re-running. The `lenspipe`
 version that made a product is recorded in its metadata JSON.
 
+## 2.0.14 — 2026-09-30
+
+**Re-run needed:** Stage 1 only if you want BMAJ/BMIN/BPA in existing residual
+maps (or add them by hand); Stage 3 to get the new map figures.
+
+- Fixed: the Stage 1 residual map (`<epoch>.resid.fits`) had no BMAJ, BMIN or
+  BPA. DifMAP writes the beam only into the restored map. Stage 1 now copies
+  the three keywords from `<epoch>.cln.fits` onto the residual after DifMAP
+  finishes and records them as `clean_beam_deg` in the Stage 1 metadata.
+- Added: Stage 3 map figures from the Stage 1 FITS images. Each visit gets
+  `<prefix>.images.<fmt>` with the clean and residual cutouts side by side
+  (WCS axes, restoring beam, colour bar in Jy/beam); the combined product
+  gets `<source>.<product>.images_all_epochs.<fmt>`, a grid of every visit.
+  Settings under `[stage3.images]`: `center` (image centre, `ra,dec` in
+  degrees, or sexagesimal), `size_arcsec` (square or `[width, height]`),
+  `cmap`, `pmax`, `vmin`, `enabled`. Also as `--image-center`,
+  `--image-size`, `--image-cmap`, `--image-pmax`, `--images/--no-images` per
+  run, and in the Run page's Stage 3 advanced group. Missing maps skip the
+  figure with an `IMAGES SKIPPED` line; they never fail the visit.
+- Changed (tests only): the fake DifMAP now writes real FITS maps with WCS
+  and, for the restored map, beam keywords, mirroring DifMAP 2.5q.
+
 ## 2.0.13 — 2026-09-29
 
 **Re-run needed:** only Stage 3, and only if you want R_cusp on a source whose

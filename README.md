@@ -10,9 +10,9 @@ a standard project directory:
 
 | Stage | Reads | Does | Writes |
 |------:|-------|------|--------|
-| 1 | `inputs/<source>.gmod`, `inputs/<source>.<epoch>.uvfits` | DifMAP self-calibration and model fitting | `stage1/<source>.<epoch>/` calibrated UV data, fitted model, maps |
+| 1 | `inputs/<source>.gmod`, `inputs/<source>.<epoch>.uvfits` | DifMAP self-calibration and model fitting | `stage1/<source>.<epoch>/` calibrated UV data, fitted model, clean and residual maps (both carry the restoring beam keywords) |
 | 2 | Stage 1 | Fits the frozen model per channel or per IF (flux only), sharded across DifMAP processes | `stage2/<source>.<epoch>/` spectrum CSV, quick-look PNGs |
-| 3 | Stage 2 | Power-law fits, flux ratios, R_cusp, multi-visit summaries | `stage3/<source>.<epoch>/<product>/` and `stage3/combined/` |
+| 3 | Stage 2 (and the Stage 1 maps) | Power-law fits, flux ratios, R_cusp, clean/residual map cutouts, multi-visit summaries | `stage3/<source>.<epoch>/<product>/` and `stage3/combined/` |
 
 A separate CASA module (`casa/`) calibrates raw EVLA data and exports the
 Stage 1 inputs.
@@ -144,6 +144,7 @@ Settings that did not exist before:
 | `stage3.plot_error_bars` | true | Error bars on every Stage 3 figure; off plots the points alone |
 | `project.difmap.stream` | `pipe` | `pty` makes DifMAP line-buffer so progress arrives per fit |
 | `stage3.rcusp_images` | `["A1","A2","B"]` | The three images of the cusp relation, in the order (A1, A2, B) with A2 the middle, opposite-parity image. The names must be GROUP labels of the master model, so a source whose images are called A, B, C, D needs e.g. `["A","B","C"]`. When they do not match, Stage 3 logs why R_cusp was skipped, `lenspipe doctor` warns, and the Results page shows the reason. `[]` disables it |
+| `stage3.images.*` | enabled, image centre, 2 arcsec, `viridis`, 99.5, 0 | Clean and residual map cutouts drawn from the Stage 1 FITS images: `<prefix>.images.<fmt>` per visit and `<source>.<product>.images_all_epochs.<fmt>` in the combined product. `center` is unset for the image centre, `"ra,dec"` in degrees, or sexagesimal; `size_arcsec` is a square or `[width, height]`; `cmap`, `pmax` (top percentile) and `vmin` set the colour scale. Per run: `--image-center`, `--image-size`, `--image-cmap`, `--image-pmax`, `--no-images`, also on the Run page |
 | `stage3.frequency_frame_ghz`, `frequency_ticks_ghz` | 11.7 to 18.3, 12..18 | Plot frame |
 | `casa.*` | unset | Interpreter, script and observation file for `lenspipe calibrate` |
 

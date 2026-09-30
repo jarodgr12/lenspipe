@@ -215,6 +215,44 @@ class EmceeConfig(_Model):
         return self
 
 
+class ImageConfig(_Model):
+    """Clean and residual map figures drawn by Stage 3 from the Stage 1 FITS images."""
+
+    enabled: bool = Field(True, description="Write clean/residual map figures per visit and for all epochs.")
+    center: str | None = Field(
+        None,
+        description=(
+            "Cutout centre: unset for the image centre, 'ra_deg,dec_deg' in degrees, or a "
+            "sexagesimal pair such as '15h58m00s +37d20m00s'."
+        ),
+    )
+    size_arcsec: float | list[float] = Field(
+        2.0, description="Cutout size in arcsec: one number for a square, or [width, height]."
+    )
+    cmap: str = Field("viridis", description="Matplotlib colour map name.")
+    pmax: float = Field(99.5, gt=0, le=100, description="Top of the colour scale as a percentile of the cutout.")
+    vmin: float | None = Field(
+        0.0, description="Bottom of the colour scale in image units; unset uses the (100 - pmax) percentile."
+    )
+
+    @field_validator("size_arcsec")
+    @classmethod
+    def _size(cls, value: float | list[float]) -> float | list[float]:
+        values = [value] if isinstance(value, (int, float)) else list(value)
+        if not values or len(values) > 2 or any(v <= 0 for v in values):
+            raise ValueError("stage3.images.size_arcsec must be a positive number or [width, height]")
+        return float(values[0]) if len(values) == 1 else [float(values[0]), float(values[1])]
+
+    @field_validator("cmap")
+    @classmethod
+    def _cmap(cls, value: str) -> str:
+        from matplotlib import colormaps
+
+        if value not in colormaps:
+            raise ValueError(f"stage3.images.cmap {value!r} is not a matplotlib colour map")
+        return value
+
+
 RCUSP_HELP = (
     "set stage3.rcusp_images to the three cusp images in the order (A1, A2, B), where A2 is the "
     "middle, opposite-parity image of the merging triple, or to [] to disable R_cusp"
@@ -253,6 +291,7 @@ class Stage3Config(_Model):
     exclude_epoch_channels: list[str] = Field(
         default_factory=list, description="Per-epoch exclusions, e.g. ['E:897-960']."
     )
+    images: ImageConfig = Field(default_factory=ImageConfig)
 
     @field_validator("figure_formats")
     @classmethod
@@ -433,6 +472,14 @@ figure_formats = ["pdf", "png"]     # ["png"] for quick iteration runs
 use_tex = false
 # exclude_channels = "1-4,61-64"
 # exclude_epoch_channels = ["E:897-960"]
+
+[stage3.images]                     # clean and residual map figures from the Stage 1 FITS images
+enabled = true
+# center = "64.24,5.57"             # cutout centre in degrees, or "15h58m00s +37d20m00s"; unset = image centre
+size_arcsec = 2.0                   # cutout width (and height) in arcsec, or [width, height]
+cmap = "viridis"                    # any matplotlib colour map
+pmax = 99.5                         # top of the colour scale as a percentile of the cutout
+vmin = 0.0                          # bottom of the colour scale (image units); remove to use the (100 - pmax) percentile
 
 [stage3.emcee]
 walkers = 32

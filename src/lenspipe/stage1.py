@@ -140,6 +140,7 @@ def _write_metadata(
     commands: str,
     difmap_info: dict[str, str | None],
     duration_s: float,
+    beam: dict[str, float] | None = None,
 ) -> None:
     created = utc_now()
     stage1 = config.stage1
@@ -182,6 +183,7 @@ def _write_metadata(
             "master_model_resolved": str(paths.starting_model.resolve()),
             "provenance": provenance,
             "final_residual_rms_jy_per_beam": rms,
+            "clean_beam_deg": beam,  # BMAJ, BMIN, BPA of the restored map, also stamped on the residual
             "difmap": difmap_info,
             "command_script_sha256": hashlib.sha256(commands.encode("utf-8")).hexdigest(),
             "duration_s": round(duration_s, 3),
@@ -218,6 +220,32 @@ def _write_metadata(
             "products": [path.name for path in paths.products() if path != paths.manifest],
         },
     )
+
+
+BEAM_KEYWORDS = ("BMAJ", "BMIN", "BPA")
+
+
+def copy_beam_keywords(clean_image: Path, residual_image: Path) -> dict[str, float] | None:
+    """Stamp the restored map's beam onto the residual map, which DifMAP writes without one.
+
+    ``wdmap`` records no BMAJ/BMIN/BPA because a residual map has no restoring
+    beam of its own, but downstream tools (and people) want the same beam on
+    both images. Returns the beam in degrees, or None if the clean map has none.
+    """
+    from astropy.io import fits
+
+    with fits.open(clean_image, memmap=False) as hdul:
+        header = hdul[0].header
+        if not all(key in header for key in BEAM_KEYWORDS):
+            return None
+        beam = {key: float(header[key]) for key in BEAM_KEYWORDS}
+        comments = {key: header.comments[key] for key in BEAM_KEYWORDS}
+    with fits.open(residual_image, mode="update", memmap=False) as hdul:
+        target = hdul[0].header
+        for key in BEAM_KEYWORDS:
+            target[key] = (beam[key], comments[key] or f"{key} copied from the restored map")
+        hdul.flush()
+    return {"bmaj": beam["BMAJ"], "bmin": beam["BMIN"], "bpa": beam["BPA"]}
 
 
 def run_epoch(
@@ -325,6 +353,14 @@ def run_epoch(
         own_log.unlink(missing_ok=True)
 
     try:
+        beam = copy_beam_keywords(paths.clean_image, paths.residual_image)
+    except (OSError, ValueError) as exc:
+        beam = None
+        reporter.warn(f"[{label}] could not copy the clean beam onto {paths.residual_image.name}: {exc}")
+    if beam is None:
+        reporter.warn(f"[{label}] {paths.clean_image.name} carries no BMAJ/BMIN/BPA; residual map left as written")
+
+    try:
         label_fitted_model(paths.final_model, hierarchy)
         _write_metadata(
             paths,
@@ -335,6 +371,7 @@ def run_epoch(
             commands,
             difmap_version(config.project.difmap.executable),
             result.duration_s,
+            beam=beam,
         )
     except (OSError, ModelFormatError, ValueError) as exc:
         reporter.clear(label)

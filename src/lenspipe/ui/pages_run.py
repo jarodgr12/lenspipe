@@ -52,6 +52,12 @@ def _int_or_none(value: Any) -> int | None:
     return int(value) if value not in (None, "") else None
 
 
+def _size_text(size: float | list[float]) -> str:
+    """Render the configured cutout size the way the Size field and --image-size expect it."""
+    values = [size] if isinstance(size, (int, float)) else list(size)
+    return ",".join(f"{float(v):g}" for v in values)
+
+
 def _epoch_exclusions(text: str) -> list[str]:
     """Split ``E:897-960 F:1-4`` (whitespace or semicolons) into repeatable EPOCH:SPEC flags."""
     return [item for item in text.replace(";", " ").split() if item]
@@ -182,6 +188,24 @@ def run_page() -> None:
                         ui.label(
                             "Exclusions are fit indices (channel or IF numbers) as in stage3.exclude_channels."
                         ).classes("text-caption opacity-70")
+                        ui.label("Clean and residual map figures (from the Stage 1 FITS images)").classes(
+                            "text-caption q-mt-sm"
+                        )
+                        with ui.row().classes("gap-4 items-center"):
+                            images_on = ui.switch("Map figures", value=config.stage3.images.enabled)
+                            image_center = ui.input(
+                                "Centre", value=config.stage3.images.center or "",
+                                placeholder="image centre, or 64.24,5.57, or 15h58m00s +37d20m00s",
+                            ).props(dense).classes("w-80")
+                            image_size = ui.input(
+                                "Size (arcsec)", value=_size_text(config.stage3.images.size_arcsec),
+                                placeholder="2 or 2,1.5",
+                            ).props(dense).classes("w-36")
+                            image_cmap = ui.input("Colour map", value=config.stage3.images.cmap).props(dense).classes("w-36")
+                            image_pmax = ui.number(
+                                "pmax (percentile)", value=config.stage3.images.pmax, min=1, max=100, step=0.1,
+                                format="%.1f",
+                            ).props(dense).classes("w-40")
 
                 with ui.row().classes("gap-2 items-center"):
                     submit_button = ui.button("Submit", icon="play_arrow", on_click=lambda: submit()).props(
@@ -250,6 +274,15 @@ def run_page() -> None:
                     ",".join(chosen_formats)
                     if chosen_formats and chosen_formats != list(s3.figure_formats) else None
                 ),
+                stage3_images=_override(bool(images_on.value), s3.images.enabled),
+                stage3_image_center=_override((image_center.value or "").strip() or None, s3.images.center or None),
+                stage3_image_size=_override(
+                    (image_size.value or "").replace(" ", "") or None, _size_text(s3.images.size_arcsec)
+                ),
+                stage3_image_cmap=_override((image_cmap.value or "").strip() or None, s3.images.cmap),
+                stage3_image_pmax=_override(
+                    float(image_pmax.value) if image_pmax.value not in (None, "") else None, s3.images.pmax
+                ),
             )
 
         def refresh_preview() -> None:
@@ -283,6 +316,7 @@ def run_page() -> None:
             channels, shards, edge, iterations, unflag, keep_models, plots, s2_error_bars,
             error_source, product, plot_workers, fit_method, reference_frequency, formats,
             exclude_channels, exclude_epoch_channels, annotations, s3_error_bars,
+            images_on, image_center, image_size, image_cmap, image_pmax,
         ):
             widget.on_value_change(refresh_preview)
         refresh_preview()
