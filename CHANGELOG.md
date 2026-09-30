@@ -3,6 +3,20 @@
 Each entry says whether existing products need re-running. The `lenspipe`
 version that made a product is recorded in its metadata JSON.
 
+## 2.0.15 — 2026-09-30
+
+**Re-run needed:** Stage 3, to replace the 2.0.14 map figures.
+
+- Changed: the map figures are now A4 pages, one per map. Per visit,
+  `<prefix>.image_clean.<fmt>` and `<prefix>.image_residual.<fmt>` (portrait)
+  replace the side-by-side `<prefix>.images.<fmt>`; in the combined product,
+  `<source>.<product>.images_clean_all_epochs.<fmt>` and
+  `..._residual_all_epochs.<fmt>` (portrait, two visits per row, six per
+  page, `_p2` onwards for more) replace `images_all_epochs`.
+- Added: `stage3.images.residual_pmax`, the residual map's own colour-scale
+  percentile (`pmax` now applies to the clean map only). Also
+  `--image-residual-pmax` per run and a "Residual pmax" field on the Run page.
+
 ## 2.0.14 — 2026-09-30
 
 **Re-run needed:** Stage 1 only if you want BMAJ/BMIN/BPA in existing residual

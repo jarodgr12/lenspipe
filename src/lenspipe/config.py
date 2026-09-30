@@ -230,7 +230,10 @@ class ImageConfig(_Model):
         2.0, description="Cutout size in arcsec: one number for a square, or [width, height]."
     )
     cmap: str = Field("viridis", description="Matplotlib colour map name.")
-    pmax: float = Field(99.5, gt=0, le=100, description="Top of the colour scale as a percentile of the cutout.")
+    pmax: float = Field(99.5, gt=0, le=100, description="Clean map: top of the colour scale as a percentile of the cutout.")
+    residual_pmax: float = Field(
+        99.5, gt=0, le=100, description="Residual map: top of the colour scale as a percentile of the cutout."
+    )
     vmin: float | None = Field(
         0.0, description="Bottom of the colour scale in image units; unset uses the (100 - pmax) percentile."
     )
@@ -478,7 +481,8 @@ enabled = true
 # center = "64.24,5.57"             # cutout centre in degrees, or "15h58m00s +37d20m00s"; unset = image centre
 size_arcsec = 2.0                   # cutout width (and height) in arcsec, or [width, height]
 cmap = "viridis"                    # any matplotlib colour map
-pmax = 99.5                         # top of the colour scale as a percentile of the cutout
+pmax = 99.5                         # clean map: top of the colour scale as a percentile of the cutout
+residual_pmax = 99.5                # residual map: its own top percentile
 vmin = 0.0                          # bottom of the colour scale (image units); remove to use the (100 - pmax) percentile
 
 [stage3.emcee]

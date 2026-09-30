@@ -1,14 +1,16 @@
 """Clean and residual map figures from the Stage 1 FITS images.
 
 Stage 1 leaves two images per epoch: the restored (clean) map and the residual
-map that DifMAP's ``wdmap`` writes. These figures show a cutout of each around
-a chosen centre, with the restoring beam drawn, per visit and as an all-epochs
-grid in the combined product. No APLpy: astropy's WCS axes and Cutout2D do the
-work, so nothing beyond the package's existing dependencies is needed.
+map that DifMAP's ``wdmap`` writes. Stage 3 shows a cutout of each around a
+chosen centre with the restoring beam drawn: one A4 page per map per visit,
+and in the combined product A4 pages per map kind with every visit on them.
+The clean and residual maps have their own colour-scale percentile. No APLpy:
+astropy's WCS axes and Cutout2D do the work.
 """
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -26,6 +28,8 @@ from matplotlib.patches import Ellipse
 from lenspipe.stage3 import plotting
 
 __all__ = [
+    "A4_LANDSCAPE",
+    "A4_PORTRAIT",
     "ImageSettings",
     "MapImage",
     "beam_from_header",
@@ -37,17 +41,23 @@ __all__ = [
 ]
 
 BEAM_KEYS = ("BMAJ", "BMIN", "BPA")
+A4_PORTRAIT = (8.27, 11.69)  # inches
+A4_LANDSCAPE = (11.69, 8.27)
+GRID_COLUMNS = 2  # visits per row on the all-epochs pages
+GRID_ROWS = 3  # rows per page, so six visits per A4 portrait page
+KINDS = ("clean", "residual")
 
 
 @dataclass(frozen=True)
 class ImageSettings:
-    """What to show: a cutout of ``size_arcsec`` around ``center`` with a percentile colour scale."""
+    """What to show: a cutout of ``size_arcsec`` around ``center`` with percentile colour scales."""
 
     enabled: bool = True
     center: str | None = None  # None: image centre; "ra_deg,dec_deg"; or "15h58m00s +37d20m00s"
     size_arcsec: tuple[float, float] = (2.0, 2.0)  # width, height
     cmap: str = "viridis"
-    pmax: float = 99.5
+    pmax: float = 99.5  # clean map
+    residual_pmax: float = 99.5  # residual map
     vmin: float | None = 0.0
 
     @classmethod
@@ -64,8 +74,12 @@ class ImageSettings:
             size_arcsec=pair,
             cmap=str(config.cmap),
             pmax=float(config.pmax),
+            residual_pmax=float(config.residual_pmax),
             vmin=None if config.vmin is None else float(config.vmin),
         )
+
+    def pmax_for(self, kind: str) -> float:
+        return self.residual_pmax if kind == "residual" else self.pmax
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -74,7 +88,9 @@ class ImageSettings:
             "size_arcsec": list(self.size_arcsec),
             "cmap": self.cmap,
             "pmax": self.pmax,
+            "residual_pmax": self.residual_pmax,
             "vmin": self.vmin,
+            "page_inches": {"visit": list(A4_PORTRAIT), "all_epochs": list(A4_PORTRAIT)},
         }
 
 
@@ -136,26 +152,27 @@ def cutout(image: MapImage, center: SkyCoord, size_arcsec: tuple[float, float]) 
     return MapImage(data=cut.data, wcs=cut.wcs, beam=image.beam, bunit=image.bunit)
 
 
-def _colour_limits(data: np.ndarray, settings: ImageSettings) -> tuple[float, float]:
+def _colour_limits(data: np.ndarray, pmax: float, vmin: float | None) -> tuple[float, float]:
     finite = data[np.isfinite(data)]
     if finite.size == 0:
         return 0.0, 1.0
-    vmax = float(np.percentile(finite, settings.pmax))
-    vmin = float(np.percentile(finite, 100.0 - settings.pmax)) if settings.vmin is None else settings.vmin
-    if not vmax > vmin:
-        vmax = vmin + (abs(vmin) or 1.0) * 1e-6
-    return vmin, vmax
+    vmax = float(np.percentile(finite, pmax))
+    low = float(np.percentile(finite, 100.0 - pmax)) if vmin is None else vmin
+    if not vmax > low:
+        vmax = low + (abs(low) or 1.0) * 1e-6
+    return low, vmax
 
 
 def draw_map(
-    ax, image: MapImage, settings: ImageSettings, title: str, *, label_x: bool = True, label_y: bool = True
+    ax, image: MapImage, settings: ImageSettings, title: str, kind: str, *,
+    label_x: bool = True, label_y: bool = True,
 ) -> None:
     """One panel: the image with WCS ticks, the beam in the lower left, a colour bar in the image units.
 
     In a grid only the outer panels carry axis labels, otherwise the declination
     label of one column runs into the colour bar of the column before it.
     """
-    vmin, vmax = _colour_limits(image.data, settings)
+    vmin, vmax = _colour_limits(image.data, settings.pmax_for(kind), settings.vmin)
     shown = ax.imshow(image.data, origin="lower", cmap=settings.cmap, vmin=vmin, vmax=vmax, interpolation="nearest")
     ax.set_title(title)
     ax.coords[0].set_axislabel("Right ascension (J2000)" if label_x else " ")
@@ -191,34 +208,67 @@ def _panel(image_path: Path, settings: ImageSettings) -> MapImage:
 
 
 def write_visit_images(
-    clean_path: Path, residual_path: Path, base_path: Path, settings: ImageSettings, title: str
-) -> None:
-    """Clean and residual cutouts side by side for one visit."""
-    clean = _panel(clean_path, settings)
-    residual = _panel(residual_path, settings)
-    fig = plt.figure(figsize=(11.0, 4.8))
-    for column, (image, label) in enumerate(((clean, "clean"), (residual, "residual")), start=1):
-        ax = fig.add_subplot(1, 2, column, projection=image.wcs)
-        draw_map(ax, image, settings, f"{title}  {label}")
-    fig.subplots_adjust(left=0.08, right=0.97, bottom=0.12, top=0.9, wspace=0.35)
-    plotting.save_figure(fig, base_path, dpi=200)
+    clean_path: Path, residual_path: Path, base_prefix: Path, settings: ImageSettings, title: str
+) -> dict[str, str]:
+    """One A4 portrait page per map for one visit: ``<prefix>.image_clean`` and ``<prefix>.image_residual``.
+
+    Returns the file stem (no extension) written for each kind.
+    """
+    written: dict[str, str] = {}
+    for kind, path in zip(KINDS, (clean_path, residual_path), strict=True):
+        image = _panel(path, settings)
+        fig = plt.figure(figsize=A4_PORTRAIT)
+        ax = fig.add_axes([0.14, 0.32, 0.72, 0.5], projection=image.wcs)  # square-ish panel mid-page
+        draw_map(ax, image, settings, f"{title}  {kind}", kind)
+        fig.text(
+            0.5, 0.2,
+            f"{title} {kind} map. Cutout {settings.size_arcsec[0]:g} x {settings.size_arcsec[1]:g} arcsec; "
+            f"colour scale {settings.vmin if settings.vmin is not None else f'p{100 - settings.pmax_for(kind):g}'} "
+            f"to p{settings.pmax_for(kind):g}, {settings.cmap}.",
+            ha="center", va="top", fontsize=9, wrap=True,
+        )
+        base = base_prefix.with_name(f"{base_prefix.name}.image_{kind}")
+        plotting.save_figure(fig, base, dpi=200, bbox_inches=None)  # keep the A4 page
+        written[kind] = base.name  # names, not paths: the plots dir is renamed when the visit completes
+    return written
 
 
 def write_all_epochs_images(
-    entries: list[tuple[str, Path, Path]], base_path: Path, settings: ImageSettings, source: str
-) -> None:
-    """A grid of every visit: clean maps on the top row, residual maps below, one column per epoch."""
+    entries: list[tuple[str, Path, Path]], base_prefix: Path, settings: ImageSettings, source: str
+) -> dict[str, list[str]]:
+    """A4 portrait pages per map kind with every visit: two per row, ``GRID_ROWS`` rows per page.
+
+    Six visits fit one page; more continue on ``..._p2``, ``..._p3``. Returns the
+    file stems written per kind.
+    """
+    written: dict[str, list[str]] = {}
     if not entries:
-        return
-    n = len(entries)
-    fig = plt.figure(figsize=(max(5.5, 5.0 * n), 9.0))
-    for column, (epoch, clean_path, residual_path) in enumerate(entries, start=1):
-        for row, (path, label) in enumerate(((clean_path, "clean"), (residual_path, "residual"))):
-            image = _panel(path, settings)
-            ax = fig.add_subplot(2, n, row * n + column, projection=image.wcs)
-            draw_map(
-                ax, image, settings, f"{source}.{epoch}  {label}",
-                label_x=(row == 1), label_y=(column == 1),
-            )
-    fig.subplots_adjust(left=0.07, right=0.98, bottom=0.07, top=0.95, wspace=0.55, hspace=0.3)
-    plotting.save_figure(fig, base_path, dpi=200)
+        return written
+    per_page = GRID_COLUMNS * GRID_ROWS
+    pages = [entries[i:i + per_page] for i in range(0, len(entries), per_page)]
+    for kind_index, kind in enumerate(KINDS):
+        written[kind] = []
+        for page_number, page in enumerate(pages, start=1):
+            n = len(page)
+            columns = min(GRID_COLUMNS, n)
+            rows = math.ceil(n / columns)
+            fig = plt.figure(figsize=A4_PORTRAIT)
+            title = f"{source}  {kind} maps, all visits"
+            if len(pages) > 1:
+                title += f"  (page {page_number} of {len(pages)})"
+            fig.suptitle(title, y=0.97)
+            for index, (epoch, clean_path, residual_path) in enumerate(page):
+                path = (clean_path, residual_path)[kind_index]
+                image = _panel(path, settings)
+                row, column = divmod(index, columns)
+                ax = fig.add_subplot(GRID_ROWS, columns, index + 1, projection=image.wcs)
+                draw_map(
+                    ax, image, settings, f"{source}.{epoch}", kind,
+                    label_x=(row == rows - 1), label_y=(column == 0),
+                )
+            fig.subplots_adjust(left=0.12, right=0.9, bottom=0.06, top=0.93, wspace=0.5, hspace=0.3)
+            suffix = "" if len(pages) == 1 else f"_p{page_number}"
+            base = base_prefix.with_name(f"{base_prefix.name}.images_{kind}_all_epochs{suffix}")
+            plotting.save_figure(fig, base, dpi=200, bbox_inches=None)  # keep the A4 page
+            written[kind].append(base.name)
+    return written

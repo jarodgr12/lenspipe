@@ -156,15 +156,19 @@ def configure_figure_formats(formats) -> None:
     FIGURE_FORMATS = ordered
 
 
-def save_figure(fig, base_path: Path, dpi: int = 300) -> None:
-    """Save a figure in every configured format and close it."""
+def save_figure(fig, base_path: Path, dpi: int = 300, bbox_inches: str | None = "tight") -> None:
+    """Save a figure in every configured format and close it.
+
+    ``bbox_inches=None`` keeps the figure's own page size (the A4 map pages);
+    the default trims the margins as the legacy scripts did.
+    """
     base_path = Path(base_path)
     base_path.parent.mkdir(parents=True, exist_ok=True)
     for fmt in FIGURE_FORMATS:
         if fmt == "png":
-            fig.savefig(Path(f"{base_path}.png"), dpi=dpi, bbox_inches="tight")
+            fig.savefig(Path(f"{base_path}.png"), dpi=dpi, bbox_inches=bbox_inches)
         else:
-            fig.savefig(Path(f"{base_path}.{fmt}"), bbox_inches="tight")
+            fig.savefig(Path(f"{base_path}.{fmt}"), bbox_inches=bbox_inches)
     plt.close(fig)
 
 

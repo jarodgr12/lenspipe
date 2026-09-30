@@ -98,30 +98,58 @@ def staged(project: Path, fake_difmap: Path) -> Path:
     return project
 
 
-def test_stage3_writes_visit_and_all_epochs_map_figures(staged: Path, fake_difmap: Path) -> None:
+def _png_size(path: Path) -> tuple[int, int]:
+    from PIL import Image
+
+    with Image.open(path) as image:
+        return image.size
+
+
+def test_stage3_writes_a4_pages_per_map_and_all_epochs_grids(staged: Path, fake_difmap: Path) -> None:
     quiet = Reporter(stream=io.StringIO())
-    cfg = _config(fake_difmap, center="64.24,5.57", size_arcsec=[1.2, 0.9], cmap="magma", pmax=99.0)
+    cfg = _config(fake_difmap, center="64.24,5.57", size_arcsec=[1.2, 0.9], cmap="magma", pmax=99.0, residual_pmax=97.0)
     assert run_stage3(staged, cfg, reporter=quiet, workers=1).ok
-    visit = staged / "stage3" / "MG0414.A" / "channel"
-    assert (visit / "plots" / "MG0414.A.channel.images.png").is_file()
-    meta = json.loads(next(visit.glob("*.stage3.metadata.json")).read_text())
-    assert meta["images"]["written"] is True and meta["images"]["settings"]["cmap"] == "magma"
-    assert meta["images"]["settings"]["size_arcsec"] == [1.2, 0.9]
-    combined = staged / "stage3" / "combined" / "MG0414" / "channel"
-    assert (combined / "plots" / "MG0414.channel.images_all_epochs.png").is_file()
-    cmeta = json.loads(next(combined.glob("*.combined.stage3.metadata.json")).read_text())
+    plots = staged / "stage3" / "MG0414.A" / "channel" / "plots"
+    clean, residual = plots / "MG0414.A.channel.image_clean.png", plots / "MG0414.A.channel.image_residual.png"
+    assert clean.is_file() and residual.is_file()
+    assert not (plots / "MG0414.A.channel.images.png").exists()  # the 2.0.14 side-by-side figure is gone
+    assert _png_size(clean) == (1654, 2338) and _png_size(residual) == (1654, 2338)  # A4 portrait at 200 dpi
+    meta = json.loads(next((plots.parent).glob("*.stage3.metadata.json")).read_text())
+    settings = meta["images"]["settings"]
+    assert meta["images"]["written"] is True and settings["cmap"] == "magma"
+    assert settings["size_arcsec"] == [1.2, 0.9] and settings["pmax"] == 99.0 and settings["residual_pmax"] == 97.0
+    assert set(meta["images"]["files"]) == {"clean", "residual"}
+
+    combined = staged / "stage3" / "combined" / "MG0414" / "channel" / "plots"
+    grid_clean = combined / "MG0414.channel.images_clean_all_epochs.png"
+    grid_residual = combined / "MG0414.channel.images_residual_all_epochs.png"
+    assert grid_clean.is_file() and grid_residual.is_file()
+    assert _png_size(grid_clean) == (1654, 2338)  # A4 portrait at 200 dpi, two visits per row
+    cmeta = json.loads(next(combined.parent.glob("*.combined.stage3.metadata.json")).read_text())
     assert cmeta["images"]["written"] is True and cmeta["images"]["epochs"] == ["A", "B"]
+    assert cmeta["images"]["files"]["residual"] == ["MG0414.channel.images_residual_all_epochs"]
+    assert meta["images"]["files"] == {
+        "clean": "MG0414.A.channel.image_clean", "residual": "MG0414.A.channel.image_residual",
+    }
+
+
+def test_residual_and_clean_pmax_are_independent() -> None:
+    cfg = LenspipeConfig().with_overrides(stage3={"images": {"pmax": 99.9, "residual_pmax": 95.0}})
+    settings = ImageSettings.from_config(cfg.stage3.images)
+    assert settings.pmax_for("clean") == 99.9 and settings.pmax_for("residual") == 95.0
+    with pytest.raises(ValueError):
+        LenspipeConfig().with_overrides(stage3={"images": {"residual_pmax": 0}})
 
 
 def test_stage3_map_figures_can_be_disabled_or_missing(staged: Path, fake_difmap: Path, capsys) -> None:
     quiet = Reporter(stream=io.StringIO())
     assert run_stage3(staged, _config(fake_difmap, enabled=False), reporter=quiet, workers=1).ok
-    assert not list((staged / "stage3").rglob("*.images*"))
+    assert not list((staged / "stage3").rglob("*.image*"))
 
     (staged / "stage1" / "MG0414.B" / "MG0414.B.resid.fits").unlink()
     assert run_stage3(staged, _config(fake_difmap), reporter=quiet, workers=1, overwrite=True).ok
-    assert (staged / "stage3" / "MG0414.A" / "channel" / "plots" / "MG0414.A.channel.images.png").is_file()
-    assert not (staged / "stage3" / "MG0414.B" / "channel" / "plots" / "MG0414.B.channel.images.png").exists()
+    assert (staged / "stage3" / "MG0414.A" / "channel" / "plots" / "MG0414.A.channel.image_clean.png").is_file()
+    assert not list((staged / "stage3" / "MG0414.B" / "channel" / "plots").glob("*.image_*"))
     combined = staged / "stage3" / "combined" / "MG0414" / "channel"
     cmeta = json.loads(next(combined.glob("*.combined.stage3.metadata.json")).read_text())
     assert cmeta["images"]["epochs"] == ["A"] and "B" in cmeta["images"]["reason"]
@@ -131,25 +159,28 @@ def test_stage3_map_figures_can_be_disabled_or_missing(staged: Path, fake_difmap
 def test_stage3_cli_image_flags_reach_the_metadata(staged: Path, fake_difmap: Path) -> None:
     result = runner.invoke(app, [
         "stage3", str(staged), "--product", "channel", "--workers", "1", "--formats", "png",
-        "--image-size", "1.0", "--image-cmap", "plasma", "--image-pmax", "98", "--image-center", "64.24,5.57",
+        "--image-size", "1.0", "--image-cmap", "plasma", "--image-pmax", "98", "--image-residual-pmax", "96",
+        "--image-center", "64.24,5.57",
     ])
     assert result.exit_code == 0, result.output
     meta = json.loads(next((staged / "stage3" / "MG0414.A" / "channel").glob("*.stage3.metadata.json")).read_text())
-    assert meta["images"]["settings"] == {
-        "enabled": True, "center": "64.24,5.57", "size_arcsec": [1.0, 1.0], "cmap": "plasma", "pmax": 98.0, "vmin": 0.0,
+    settings = meta["images"]["settings"]
+    assert {k: settings[k] for k in ("enabled", "center", "size_arcsec", "cmap", "pmax", "residual_pmax", "vmin")} == {
+        "enabled": True, "center": "64.24,5.57", "size_arcsec": [1.0, 1.0], "cmap": "plasma",
+        "pmax": 98.0, "residual_pmax": 96.0, "vmin": 0.0,
     }
     result = runner.invoke(app, ["stage3", str(staged), "--product", "channel", "--workers", "1", "--overwrite", "--no-images"])
     assert result.exit_code == 0, result.output
-    assert not list((staged / "stage3").rglob("*.images*"))
+    assert not list((staged / "stage3").rglob("*.image*"))
 
 
 def test_build_steps_passes_image_options(tmp_path: Path) -> None:
     request = RunRequest(
         root=tmp_path, stages=[3], stage3_images=False, stage3_image_center="64.24,5.57",
-        stage3_image_size="2,1.5", stage3_image_cmap="magma", stage3_image_pmax=99.0,
+        stage3_image_size="2,1.5", stage3_image_cmap="magma", stage3_image_pmax=99.0, stage3_image_residual_pmax=95.5,
     )
     steps, _ = build_steps(request)
     assert steps[0].argv == [
         "stage3", str(tmp_path), "--no-images", "--image-center", "64.24,5.57", "--image-size", "2,1.5",
-        "--image-cmap", "magma", "--image-pmax", "99",
+        "--image-cmap", "magma", "--image-pmax", "99", "--image-residual-pmax", "95.5",
     ]
