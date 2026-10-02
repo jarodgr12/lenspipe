@@ -817,13 +817,16 @@ def plot_epoch_normalized_weighted_flux_ratios_vs_mjd(
     output_base,
     scatter_statistics=None,
     y_limits=None,
+    y_label: str = "Flux ratio",
+    colour_offset: int = 1,
 ) -> None:
-    """Plot normalised weighted-average flux ratios in stacked panels.
+    """Plot normalised series (flux ratios, or per-image fluxes) in stacked panels.
 
-    Each ratio is divided by its inverse-variance weighted mean over all
+    Each series is divided by its inverse-variance weighted mean over all
     selected visits. Panels are independently centred on 1.0 and use the
     measured point furthest from 1.0, plus 10 per cent padding, to set their
-    symmetric vertical range.
+    symmetric vertical range. ``colour_offset`` keeps each series in the colour
+    it has on the other figures (ratios start one colour after the images).
     """
     items = list(normalized_ratio_series.items())
     if not items:
@@ -846,7 +849,7 @@ def plot_epoch_normalized_weighted_flux_ratios_vs_mjd(
 
     for panel_index, (axis, (label, series)) in enumerate(zip(axes, items, strict=False)):
         correct_tick_marks(axis)
-        colour = COLOURS[(panel_index + 1) % len(COLOURS)]
+        colour = COLOURS[(panel_index + colour_offset) % len(COLOURS)]
         values = np.asarray(series["values"], dtype=float)
         errors = np.asarray(series["errors"], dtype=float)
         mask = (
@@ -916,7 +919,7 @@ def plot_epoch_normalized_weighted_flux_ratios_vs_mjd(
     # complete stack. This preserves the standard label-to-tick spacing while
     # avoiding the canvas-centred placement of fig.supylabel().
     for axis in axes:
-        axis.set_ylabel("Flux ratio")
+        axis.set_ylabel(y_label)
     fig.canvas.draw()
     renderer = fig.canvas.get_renderer()
     label_centres_x = []
@@ -936,7 +939,7 @@ def plot_epoch_normalized_weighted_flux_ratios_vs_mjd(
     fig.text(
         shared_y_label_x,
         axes_y_center,
-        "Flux ratio",
+        y_label,
         rotation=90,
         ha="center",
         va="center",

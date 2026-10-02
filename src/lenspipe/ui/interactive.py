@@ -369,6 +369,17 @@ def combined_figures(combined_dir: Path) -> dict[str, dict[str, Any]]:
         columns = [c for c in pd.read_csv(ref_csv, nrows=0).columns if c.endswith("_sref_mjy")]
         mjd_figure(ref_csv, "Reference-frequency flux vs MJD", "Flux density [mJy]",
                    [(c, c.replace("_sref_mjy", "_sref_error_mjy"), c[: -len("_sref_mjy")]) for c in columns])
+    norm_flux_csv = tables / f"{stem}.normalised_reference_fluxes_vs_mjd.csv"
+    if norm_flux_csv.is_file():
+        head = pd.read_csv(norm_flux_csv, nrows=1)
+        groups = [c[: -len("_normalised")] for c in head.columns if c.endswith("_normalised")]
+        mjd_figure(
+            norm_flux_csv, "Normalised reference flux vs MJD", "Flux / all-visit weighted mean",
+            [
+                (f"{g}_normalised", f"{g}_normalised_error", f"{g}  σ = {float(head[f'{g}_sigma_percent'].iloc[0]):.2f}%")
+                for g in groups
+            ],
+        )
     ratio_csv = tables / f"{stem}.weighted_flux_ratios_vs_mjd.csv"
     if ratio_csv.is_file():
         columns = [c for c in pd.read_csv(ratio_csv, nrows=0).columns

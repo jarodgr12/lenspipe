@@ -3,6 +3,21 @@
 Each entry says whether existing products need re-running. The `lenspipe`
 version that made a product is recorded in its metadata JSON.
 
+## 2.0.16 — 2026-10-02
+
+**Re-run needed:** Stage 3, to get the new figure and table.
+
+- Added: the normalised-ratio scatter statistic for each image's measured
+  flux over time. The combined product gains
+  `normalised_reference_fluxes_vs_mjd` (figure and table): every visit's
+  fitted reference-frequency flux per image, divided by the all-visit
+  inverse-variance weighted mean, one panel per image with its sigma. The
+  sigma is the sample standard deviation across visits (ddof=1) in per cent,
+  every visit counting equally, exactly as on the normalised flux-ratio
+  figure. Values also land in `combined_fits` (product
+  `normalised_reference_flux`) and the Results page shows the series
+  interactively with the sigma in the legend.
+
 ## 2.0.15 — 2026-09-30
 
 **Re-run needed:** Stage 3, to replace the 2.0.14 map figures.

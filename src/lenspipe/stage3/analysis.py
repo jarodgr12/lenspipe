@@ -35,6 +35,7 @@ Combined outputs
     plots/<source>.<product>.all_epochs_flux_ratios_4col.pdf
     plots/<source>.<product>.all_epochs_flux_ratios_4col.png
     plots/<source>.<product>.reference_fluxes_vs_mjd.pdf
+    plots/<source>.<product>.normalised_reference_fluxes_vs_mjd.pdf
     plots/<source>.<product>.average_spectrum.pdf
     plots/<source>.<product>.average_flux_ratios.pdf
     plots/<source>.<product>.weighted_flux_ratios_vs_mjd.pdf
@@ -49,6 +50,7 @@ Combined outputs
     tables/<source>.<product>.average_spectrum.csv
     tables/<source>.<product>.average_flux_ratios.csv
     tables/<source>.<product>.reference_fluxes_vs_mjd.csv
+    tables/<source>.<product>.normalised_reference_fluxes_vs_mjd.csv
     tables/<source>.<product>.normalised_weighted_flux_ratios_vs_mjd.csv
     tables/<source>.<product>.rcusp_vs_mjd.csv
     <source>.<product>.combined.stage3.metadata.json
@@ -1554,6 +1556,50 @@ def write_combined_products(
                 tables_dir / f"{stem}.reference_fluxes_vs_mjd.json",
                 reference_flux_rows,
             )
+
+            # The same scatter statistic as the normalised flux ratios, applied to each
+            # image's fitted reference-frequency flux: divide by the all-visit weighted
+            # mean, then quote the sample standard deviation across visits as a percentage.
+            normalised_flux_series = _normalised_ratio_series(reference_flux_series)
+            flux_scatter = calculate_normalised_scatter(normalised_flux_series)
+            combined_fit_payload["normalised_reference_flux_scatter"] = {
+                label: result.as_dict() for label, result in flux_scatter.items()
+            }
+            for label, result in flux_scatter.items():
+                combined_fit_rows.append({
+                    "product": "normalised_reference_flux", "label": label,
+                    "parameter": "sigma_percent", "value": result.sigma_percent,
+                    "error": None, "reference_frequency_ghz": reference_frequency_ghz,
+                    "chi_square": result.chi_square_about_unity,
+                    "reduced_chi_square": result.reduced_chi_square_about_unity,
+                    "degrees_of_freedom": result.degrees_of_freedom,
+                    "n_points": result.n_points,
+                })
+            plot_epoch_normalized_weighted_flux_ratios_vs_mjd(
+                mjds, normalised_flux_series, source,
+                plots_dir / f"{stem}.normalised_reference_fluxes_vs_mjd",
+                scatter_statistics=flux_scatter,
+                y_label="Normalised flux density",
+                colour_offset=0,
+            )
+            normalised_flux_rows: list[dict[str, Any]] = []
+            for row_index, item in enumerate(analyses):
+                flux_row: dict[str, Any] = {"epoch": item.dataset.epoch, "mjd": float(item.mjd)}
+                for label, series in normalised_flux_series.items():
+                    output_label = safe_label(label)
+                    flux_row[f"{output_label}_normalised"] = float(series["values"][row_index])
+                    flux_row[f"{output_label}_normalised_error"] = float(series["errors"][row_index])
+                    flux_row[f"{output_label}_all_epoch_weighted_mean_jy"] = float(series["all_epoch_weighted_mean"])
+                    flux_row[f"{output_label}_all_epoch_weighted_mean_error_jy"] = float(
+                        series["all_epoch_weighted_mean_error"]
+                    )
+                    flux_row[f"{output_label}_sigma_percent"] = float(flux_scatter[label].sigma_percent)
+                    flux_row[f"{output_label}_reduced_chi_square_about_unity"] = float(
+                        flux_scatter[label].reduced_chi_square_about_unity
+                    )
+                normalised_flux_rows.append(flux_row)
+            write_csv(tables_dir / f"{stem}.normalised_reference_fluxes_vs_mjd.csv", normalised_flux_rows)
+            write_json(tables_dir / f"{stem}.normalised_reference_fluxes_vs_mjd.json", normalised_flux_rows)
         weighted_ratio_series = {
             label: {
                 "values": np.asarray(
@@ -1758,6 +1804,13 @@ def write_combined_products(
                     "Each visit's inverse-variance weighted mean flux ratio "
                     "divided by the inverse-variance weighted mean over all "
                     "selected visits."
+                ),
+                "normalised_reference_flux_definition": (
+                    "Each visit's fitted reference-frequency flux density per image "
+                    "divided by the inverse-variance weighted mean over all selected "
+                    "visits. sigma_percent is the sample standard deviation (ddof=1) of "
+                    "those normalised values across visits, in per cent, unweighted by "
+                    "the error bars; the same statistic as for the normalised ratios."
                 ),
                 "rcusp_definition": (
                     "abs(S_A1 - S_A2 + S_B) / (S_A1 + S_A2 + S_B), "

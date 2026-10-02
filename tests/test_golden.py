@@ -168,11 +168,18 @@ def test_stage3_products_match_legacy(project: Path, fake_difmap: Path, fake_dif
 
     legacy_csv = _csv_files(legacy_root / "stage3")
     new_csv = _csv_files(new_root / "stage3")
-    assert set(legacy_csv) == set(new_csv)
+    # Every legacy table still exists and matches; the package may add tables of its own.
+    assert set(legacy_csv) <= set(new_csv)
+    assert set(new_csv) - set(legacy_csv) == {
+        "combined/MG0414/channel/tables/MG0414.channel.normalised_reference_fluxes_vs_mjd.csv",
+    }
     assert len(new_csv) >= 12
     for name, legacy_path in legacy_csv.items():
         left = pd.read_csv(legacy_path)
         right = pd.read_csv(new_csv[name])
+        if name.endswith("combined_fits.csv"):
+            # 2.0.16 adds per-image normalised flux scatter rows the legacy script never had.
+            right = right[right["product"] != "normalised_reference_flux"].reset_index(drop=True)
         assert_frame_equal(left, right, check_exact=False, rtol=1e-10, atol=1e-14, obj=name)
 
     # Same figure set apart from the RMS diagnostics: the legacy script saved those with
@@ -182,7 +189,8 @@ def test_stage3_products_match_legacy(project: Path, fake_difmap: Path, fake_dif
     def figure_names(root: Path) -> set[str]:
         return {
             str(p.relative_to(root)) for p in (root / "stage3").rglob("*.png")
-            if "rms_" not in p.name and ".image" not in p.name and p.name not in {
+            if "rms_" not in p.name and ".image" not in p.name
+            and "normalised_reference_fluxes" not in p.name and p.name not in {
                 "MG0414.A.channel.png", "MG0414.B.channel.png", "MG0414.channel.png",
             }
         }
