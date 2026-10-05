@@ -3,6 +3,19 @@
 Each entry says whether existing products need re-running. The `lenspipe`
 version that made a product is recorded in its metadata JSON.
 
+## 2.0.17 — 2026-10-05
+
+**Re-run needed:** Stage 3, for the new figure layout.
+
+- Changed: nothing explanatory is drawn inside the data area of a Stage 3
+  figure any more. Legends sit beside the axes (top right, outside); the
+  fit parameters on the annotated spectra and on the combined average
+  spectrum and average flux-ratio figures are a caption block under the
+  axes; the per-panel sigma on the normalised figures is in the right
+  margin; the R_cusp value is in the title. Previously a "best" legend or a
+  text block pinned inside the axes could sit on top of points once the
+  spectra filled the 12 to 18 GHz frame.
+
 ## 2.0.16 — 2026-10-02
 
 **Re-run needed:** Stage 3, to get the new figure and table.

@@ -58,7 +58,9 @@ Combined outputs
 
 The visual design follows the established Stage 3 convention: STIX fonts,
 white background, inward major ticks on all four sides, no minor ticks,
-coloured measurements, black dashed fitted/mean lines, MJD-only titles, and
+coloured measurements, black dashed fitted/mean lines, MJD-only titles,
+nothing explanatory inside the data area (legends beside the axes, fit
+parameters in a caption block under the axes, summary numbers in the title), and
 fixed 12--18 GHz tick marks on a slightly padded frequency frame.
 ===============================================================================
 """
@@ -936,7 +938,7 @@ def write_combined_rms_diagnostics(
     for row, analysis in enumerate(analyses):
         ax.plot(fit_indices, matrix[row] * 1000.0, linewidth=0.7, label=analysis.dataset.epoch)
     _format_rms_axes(ax, "Channel / fit index", "Residual RMS (mJy beam$^{-1}$)")
-    ax.legend(ncol=min(5, max(1, len(analyses))), fontsize=8)
+    plotting.legend_outside(ax, fontsize=8)
     _save_rms_figure(fig, plots_dir / f"{stem}.rms_vs_channel_all_epochs")
 
     # Persistent band structure: median across visits for each channel.
@@ -957,7 +959,7 @@ def write_combined_rms_diagnostics(
         ax.plot(fit_indices, relative[row], linewidth=0.7, label=analysis.dataset.epoch)
     ax.axhline(1.0, linestyle="--", linewidth=0.8)
     _format_rms_axes(ax, "Channel / fit index", "RMS / channel median RMS")
-    ax.legend(ncol=min(5, max(1, len(analyses))), fontsize=8)
+    plotting.legend_outside(ax, fontsize=8)
     _save_rms_figure(fig, plots_dir / f"{stem}.relative_rms_vs_channel_all_epochs")
 
     # Robust visit-to-visit channel statistic.  It is diagnostic only.
@@ -966,7 +968,7 @@ def write_combined_rms_diagnostics(
         ax.plot(fit_indices, zscore[row], linewidth=0.7, label=analysis.dataset.epoch)
     ax.axhline(0.0, linestyle="--", linewidth=0.8)
     _format_rms_axes(ax, "Channel / fit index", "Visit-to-visit robust RMS score")
-    ax.legend(ncol=min(5, max(1, len(analyses))), fontsize=8)
+    plotting.legend_outside(ax, fontsize=8)
     _save_rms_figure(fig, plots_dir / f"{stem}.rms_visit_robust_score_vs_channel")
 
     channel_rows: list[dict[str, Any]] = []

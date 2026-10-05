@@ -280,6 +280,32 @@ def _weighted_mean(values: Any, uncertainties: Any) -> tuple[float, float]:
     )
 
 
+def legend_outside(ax, ncol: int = 1, fontsize=None):
+    """Place the legend beside the axes, top right, so it can never cover data.
+
+    Figures are saved with a tight bounding box, so the extra width is kept.
+    """
+    return ax.legend(
+        loc="upper left", bbox_to_anchor=(1.01, 1.0), frameon=False, ncol=ncol,
+        borderaxespad=0.0, handletextpad=0.6, fontsize=fontsize,
+    )
+
+
+def caption_below(ax, lines, fontsize: float = 9.0, offset: float = 0.11):
+    """Write fit parameters and similar notes as a block under the x-axis label.
+
+    ``offset`` is in axes fractions below the axes bottom; 0.11 clears the tick
+    labels and the axis label of the standard 8 x 8 inch panels.
+    """
+    lines = [line for line in lines if line]
+    if not lines:
+        return None
+    return ax.text(
+        0.0, -offset, "\n".join(lines), transform=ax.transAxes,
+        ha="left", va="top", fontsize=fontsize, linespacing=1.45,
+    )
+
+
 def _draw_spectrum_panel(
     ax,
     frequency_ghz,
@@ -343,7 +369,7 @@ def _draw_spectrum_panel(
         )
 
     if show_legend:
-        ax.legend(loc="best", ncol=2, frameon=False)
+        legend_outside(ax)
 
 
 def _draw_ratio_panel(
@@ -394,7 +420,7 @@ def _draw_ratio_panel(
             )
 
     if show_legend:
-        ax.legend(loc="best", frameon=False)
+        legend_outside(ax)
 
 
 def plot_spectra(
@@ -456,16 +482,7 @@ def plot_spectra(
     ax.set_ylim(*y_limits)
 
     if annotate_fits:
-        ax.text(
-            0.03,
-            0.03,
-            "\n".join(annotation_lines),
-            transform=ax.transAxes,
-            ha="left",
-            va="bottom",
-            fontsize=9.0,
-            bbox={"facecolor": "white", "edgecolor": "none", "alpha": 0.85},
-        )
+        caption_below(ax, annotation_lines)
 
     _save_figure(fig, output_base)
 
@@ -594,7 +611,7 @@ def plot_spectra_with_residuals(
         )
 
     ax.set_ylabel("Flux density [mJy]")
-    ax.legend(loc="best", ncol=2, frameon=False)
+    legend_outside(ax)
     ax.set_title(f"Epoch {epoch}" if mjd is None else f"MJD {_format_mjd(mjd)}")
     ax.set_xlim(*_resolve_x_limits(x_limits))
     ax.set_xticks(SUMMARY_FREQUENCY_TICKS_GHZ)
@@ -635,6 +652,7 @@ def plot_combined_average_spectrum(
 
     frequency = np.asarray(frequency_ghz, dtype=float)
     limit_arrays = []
+    caption_lines: list[str] = []
     for index, (label, series) in enumerate(averaged_flux_series.items()):
         colour = COLOURS[index % len(COLOURS)]
         values = np.asarray(series["values"], dtype=float) * 1000.0
@@ -647,7 +665,6 @@ def plot_combined_average_spectrum(
         )
         if not np.any(mask):
             continue
-        legend_label = label
         if fits is not None and label in fits:
             fit = fits[label]
             s_value, s_error = _format_value_uncertainty(
@@ -656,7 +673,7 @@ def plot_combined_average_spectrum(
             a_value, a_error = _format_value_uncertainty(
                 fit.alpha, fit.alpha_error
             )
-            legend_label = (
+            caption_lines.append(
                 rf"{label}: $S_{{{reference_frequency_ghz:g}}}="
                 rf"{s_value}\pm{s_error}$ mJy, "
                 rf"$\alpha={a_value}\pm{a_error}$"
@@ -664,7 +681,7 @@ def plot_combined_average_spectrum(
         ax.errorbar(
             frequency[mask], values[mask], yerr=_yerr(errors[mask]),
             fmt="o", ms=4.5, capsize=0, linestyle="none",
-            color=colour, label=legend_label, zorder=3,
+            color=colour, label=label, zorder=3,
         )
         if fits is not None and label in fits:
             fit = fits[label]
@@ -682,7 +699,8 @@ def plot_combined_average_spectrum(
     ax.set_xlabel("Frequency [GHz]")
     ax.set_ylabel("Flux density [mJy]")
     ax.set_title("All epochs")
-    ax.legend(loc="best", frameon=False)
+    legend_outside(ax)
+    caption_below(ax, caption_lines)
     ax.set_xlim(*SUMMARY_FREQUENCY_LIMITS_GHZ)
     ax.set_xticks(SUMMARY_FREQUENCY_TICKS_GHZ)
     if y_limits is None and limit_arrays:
@@ -711,6 +729,7 @@ def plot_combined_average_flux_ratios(
 
     frequency = np.asarray(frequency_ghz, dtype=float)
     limit_arrays = []
+    caption_lines: list[str] = []
     for index, (label, series) in enumerate(averaged_ratio_series.items()):
         colour = COLOURS[(index + 1) % len(COLOURS)]
         values = np.asarray(series["values"], dtype=float)
@@ -724,11 +743,10 @@ def plot_combined_average_flux_ratios(
         if not np.any(mask):
             continue
 
-        legend_label = label
         fit = fits.get(label) if fits is not None else None
         if fit is not None:
             value_text, error_text = _format_value_uncertainty(fit.value, fit.error)
-            legend_label = rf"{label}: $R={value_text}\pm{error_text}$"
+            caption_lines.append(rf"{label}: $R={value_text}\pm{error_text}$")
         ax.errorbar(
             frequency[mask],
             values[mask],
@@ -738,7 +756,7 @@ def plot_combined_average_flux_ratios(
             capsize=0,
             linestyle="none",
             color=colour,
-            label=legend_label,
+            label=label,
             zorder=3,
         )
 
@@ -758,7 +776,8 @@ def plot_combined_average_flux_ratios(
     ax.set_xlabel("Frequency [GHz]")
     ax.set_ylabel("Flux ratio")
     ax.set_title("All epochs")
-    ax.legend(loc="best", frameon=False)
+    legend_outside(ax)
+    caption_below(ax, caption_lines)
     ax.set_xlim(*SUMMARY_FREQUENCY_LIMITS_GHZ)
     ax.set_xticks(SUMMARY_FREQUENCY_TICKS_GHZ)
     if y_limits is None and limit_arrays:
@@ -802,7 +821,7 @@ def plot_epoch_weighted_flux_ratios_vs_mjd(
     ax.set_xlabel("MJD")
     ax.set_ylabel("Flux ratio")
     ax.set_title("All epochs")
-    ax.legend(loc="best", frameon=False)
+    legend_outside(ax)
     if y_limits is None and limit_arrays:
         y_limits = _auto_quantity_limits(limit_arrays)
     if y_limits is not None:
@@ -892,9 +911,10 @@ def plot_epoch_normalized_weighted_flux_ratios_vs_mjd(
                 f"{label}\n"
                 rf"$\sigma={statistic.sigma_percent:.2f}\%$"
             )
+        # In the right margin, outside the data area, vertically centred on the panel.
         axis.text(
-            0.98, 0.92, annotation, transform=axis.transAxes,
-            ha="right", va="top", fontsize=10,
+            1.02, 0.5, annotation, transform=axis.transAxes,
+            ha="left", va="center", fontsize=10,
         )
         if panel_index < n_panels - 1:
             axis.tick_params(labelbottom=False)
@@ -989,7 +1009,7 @@ def plot_epoch_reference_fluxes_vs_mjd(
     ax.set_xlabel("MJD")
     ax.set_ylabel("Flux density [mJy]")
     ax.set_title("All epochs")
-    ax.legend(loc="best", frameon=False)
+    legend_outside(ax)
     if y_limits is None and limit_arrays:
         y_limits = _auto_quantity_limits(limit_arrays)
     if y_limits is not None:
@@ -1049,17 +1069,14 @@ def plot_epoch_rcusp_vs_mjd(
                 values[mask], centre=mean_value,
                 min_half_range=0.01, padding_fraction=0.10,
             )
-        if fit is not None and np.isfinite(fit.value):
-            value_text, error_text = _format_value_uncertainty(fit.value, fit.error)
-            ax.text(
-                0.98, 0.96,
-                rf"$R_{{\rm cusp}}={value_text}\pm{error_text}$",
-                transform=ax.transAxes, ha="right", va="top", fontsize=11,
-            )
+    title = "All epochs"
+    if fit is not None and np.isfinite(fit.value):
+        value_text, error_text = _format_value_uncertainty(fit.value, fit.error)
+        title = rf"All epochs: $R_{{\rm cusp}}={value_text}\pm{error_text}$"
 
     ax.set_xlabel("MJD")
     ax.set_ylabel(r"$R_{\rm cusp}$")
-    ax.set_title("All epochs")
+    ax.set_title(title)
     if y_limits is not None:
         ax.set_ylim(*y_limits)
     _save_figure(fig, output_base)
