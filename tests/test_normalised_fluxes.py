@@ -127,6 +127,44 @@ def test_unweighted_sigma_follows_the_collaboration_formula_on_normalised_values
     assert not np.isclose(result2.sigma_weighted_percent, result.sigma_weighted_percent)
 
 
+def test_flux_vs_time_per_image_figure_with_mean_and_unweighted_sigma(combined: Path) -> None:
+    from lenspipe.stage3 import plotting
+    from lenspipe.stage3.combined import calculate_normalised_scatter
+
+    assert (combined / "plots" / "MG0414.channel.fluxes_vs_mjd_per_image.png").is_file()
+
+    # Render the figure directly and check each panel: dashed mean line at the plain mean,
+    # and an annotation in the margin carrying that mean and sigma_u.
+    series = {
+        "A1": {"values": np.array([0.300, 0.310, 0.290]), "errors": np.array([0.002, 0.002, 0.002])},
+        "B": {"values": np.array([0.100, 0.104, 0.102]), "errors": np.array([0.001, 0.001, 0.001])},
+    }
+    scatter = calculate_normalised_scatter(series)
+    captured: dict[str, object] = {}
+
+    def grab(fig, base_path, dpi=300, bbox_inches="tight"):
+        captured["fig"] = fig
+
+    original = plotting._save_figure
+    plotting._save_figure = grab
+    try:
+        plotting.plot_epoch_fluxes_vs_mjd_per_image([59650.0, 59700.0, 59750.0], series, "MG0414", Path("/unused"), scatter)
+    finally:
+        plotting._save_figure = original
+    fig = captured["fig"]
+    axes = [ax for ax in fig.axes]
+    assert len(axes) == 2
+    for ax, (label, data) in zip(axes, series.items(), strict=True):
+        mean_mjy = 1000.0 * float(np.mean(data["values"]))
+        dashed = [line for line in ax.get_lines() if line.get_linestyle() == "--" or line.get_linestyle() == (0, (5, 5))]
+        assert dashed and np.allclose(dashed[0].get_ydata(), mean_mjy)
+        texts = [t.get_text() for t in ax.texts]
+        assert any(label in t and f"{mean_mjy:.2f}" in t and "sigma" in t for t in texts), texts
+        assert all(t.get_position()[0] > 1.0 for t in ax.texts)  # outside the data area
+    expected_sigma = 100.0 * np.std(series["A1"]["values"]) / np.mean(series["A1"]["values"])
+    assert f"{expected_sigma:.2f}" in axes[0].texts[0].get_text()
+
+
 def test_interactive_combined_view_shows_normalised_fluxes_with_sigma(combined: Path) -> None:
     figures = combined_figures(combined)
     figure = figures["Normalised reference flux vs MJD"]

@@ -196,7 +196,8 @@ def test_stage3_products_match_legacy(project: Path, fake_difmap: Path, fake_dif
         return {
             str(p.relative_to(root)) for p in (root / "stage3").rglob("*.png")
             if "rms_" not in p.name and ".image" not in p.name
-            and "normalised_reference_fluxes" not in p.name and p.name not in {
+            and "normalised_reference_fluxes" not in p.name and "fluxes_vs_mjd_per_image" not in p.name
+            and p.name not in {
                 "MG0414.A.channel.png", "MG0414.B.channel.png", "MG0414.channel.png",
             }
         }

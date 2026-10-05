@@ -36,6 +36,7 @@ Combined outputs
     plots/<source>.<product>.all_epochs_flux_ratios_4col.png
     plots/<source>.<product>.reference_fluxes_vs_mjd.pdf
     plots/<source>.<product>.normalised_reference_fluxes_vs_mjd.pdf
+    plots/<source>.<product>.fluxes_vs_mjd_per_image.pdf
     plots/<source>.<product>.average_spectrum.pdf
     plots/<source>.<product>.average_flux_ratios.pdf
     plots/<source>.<product>.weighted_flux_ratios_vs_mjd.pdf
@@ -122,6 +123,7 @@ from lenspipe.stage3.plotting import (
     plot_all_epochs_spectra,
     plot_combined_average_flux_ratios,
     plot_combined_average_spectrum,
+    plot_epoch_fluxes_vs_mjd_per_image,
     plot_epoch_normalized_weighted_flux_ratios_vs_mjd,
     plot_epoch_rcusp_vs_mjd,
     plot_epoch_reference_fluxes_vs_mjd,
@@ -1587,6 +1589,11 @@ def write_combined_products(
                 scatter_statistics=flux_scatter,
                 y_label="Normalised flux density",
                 colour_offset=0,
+            )
+            plot_epoch_fluxes_vs_mjd_per_image(
+                mjds, reference_flux_series, source,
+                plots_dir / f"{stem}.fluxes_vs_mjd_per_image",
+                scatter_statistics=flux_scatter,
             )
             normalised_flux_rows: list[dict[str, Any]] = []
             for row_index, item in enumerate(analyses):
