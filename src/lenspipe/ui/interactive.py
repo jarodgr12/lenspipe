@@ -376,7 +376,11 @@ def combined_figures(combined_dir: Path) -> dict[str, dict[str, Any]]:
         mjd_figure(
             norm_flux_csv, "Normalised reference flux vs MJD", "Flux / all-visit weighted mean",
             [
-                (f"{g}_normalised", f"{g}_normalised_error", f"{g}  σ = {float(head[f'{g}_sigma_percent'].iloc[0]):.2f}%")
+                (
+                    f"{g}_normalised", f"{g}_normalised_error",
+                    f"{g}  σw = {float(head[f'{g}_sigma_weighted_percent'].iloc[0]):.2f}%  "
+                    f"σu = {float(head[f'{g}_sigma_unweighted_percent'].iloc[0]):.2f}%",
+                )
                 for g in groups
             ],
         )

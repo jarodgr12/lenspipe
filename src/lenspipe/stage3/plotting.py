@@ -909,7 +909,8 @@ def plot_epoch_normalized_weighted_flux_ratios_vs_mjd(
             statistic = scatter_statistics[label]
             annotation = (
                 f"{label}\n"
-                rf"$\sigma={statistic.sigma_percent:.2f}\%$"
+                rf"$\sigma_{{\rm w}}={statistic.sigma_weighted_percent:.2f}\%$" "\n"
+                rf"$\sigma_{{\rm u}}={statistic.sigma_unweighted_percent:.2f}\%$"
             )
         # In the right margin, outside the data area, vertically centred on the panel.
         axis.text(

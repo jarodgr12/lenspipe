@@ -3,6 +3,23 @@
 Each entry says whether existing products need re-running. The `lenspipe`
 version that made a product is recorded in its metadata JSON.
 
+## 2.0.18 — 2026-10-05
+
+**Re-run needed:** Stage 3, for the extra columns and the second sigma.
+
+- Changed: the visit-to-visit scatter on the normalised flux-ratio and
+  normalised reference-flux figures is now reported two ways. The existing
+  value is kept as `sigma_weighted`: values divided by the inverse-variance
+  weighted mean, then the sample standard deviation (N - 1). New alongside
+  it is `sigma_unweighted`, the collaboration's formula on the raw values
+  with the plain mean, sqrt(sum((R_i - mean)^2) / (N * mean)), in which the
+  error bars play no part; flux series are evaluated in Jy. Both appear as
+  percentages in the figure margins (sigma_w, sigma_u), in the Results page
+  legends, in the normalised tables (`*_sigma_weighted_percent`,
+  `*_sigma_unweighted_percent`, `*_unweighted_mean`) and as separate rows
+  in `combined_fits`. The old `*_sigma_percent` column remains as an alias
+  of the weighted value.
+
 ## 2.0.17 — 2026-10-05
 
 **Re-run needed:** Stage 3, for the new figure layout.

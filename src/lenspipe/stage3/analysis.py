@@ -1568,15 +1568,19 @@ def write_combined_products(
                 label: result.as_dict() for label, result in flux_scatter.items()
             }
             for label, result in flux_scatter.items():
-                combined_fit_rows.append({
-                    "product": "normalised_reference_flux", "label": label,
-                    "parameter": "sigma_percent", "value": result.sigma_percent,
-                    "error": None, "reference_frequency_ghz": reference_frequency_ghz,
-                    "chi_square": result.chi_square_about_unity,
-                    "reduced_chi_square": result.reduced_chi_square_about_unity,
-                    "degrees_of_freedom": result.degrees_of_freedom,
-                    "n_points": result.n_points,
-                })
+                for parameter, value in (
+                    ("sigma_weighted_percent", result.sigma_weighted_percent),
+                    ("sigma_unweighted_percent", result.sigma_unweighted_percent),
+                ):
+                    combined_fit_rows.append({
+                        "product": "normalised_reference_flux", "label": label,
+                        "parameter": parameter, "value": value,
+                        "error": None, "reference_frequency_ghz": reference_frequency_ghz,
+                        "chi_square": result.chi_square_about_unity,
+                        "reduced_chi_square": result.reduced_chi_square_about_unity,
+                        "degrees_of_freedom": result.degrees_of_freedom,
+                        "n_points": result.n_points,
+                    })
             plot_epoch_normalized_weighted_flux_ratios_vs_mjd(
                 mjds, normalised_flux_series, source,
                 plots_dir / f"{stem}.normalised_reference_fluxes_vs_mjd",
@@ -1596,6 +1600,9 @@ def write_combined_products(
                         series["all_epoch_weighted_mean_error"]
                     )
                     flux_row[f"{output_label}_sigma_percent"] = float(flux_scatter[label].sigma_percent)
+                    flux_row[f"{output_label}_sigma_weighted_percent"] = float(flux_scatter[label].sigma_weighted_percent)
+                    flux_row[f"{output_label}_sigma_unweighted_percent"] = float(flux_scatter[label].sigma_unweighted_percent)
+                    flux_row[f"{output_label}_unweighted_mean_jy"] = float(flux_scatter[label].unweighted_mean)
                     flux_row[f"{output_label}_reduced_chi_square_about_unity"] = float(
                         flux_scatter[label].reduced_chi_square_about_unity
                     )
@@ -1622,15 +1629,19 @@ def write_combined_products(
                 label: result.as_dict() for label, result in normalised_scatter.items()
             }
             for label, result in normalised_scatter.items():
-                combined_fit_rows.append({
-                    "product": "normalised_flux_ratio", "label": label,
-                    "parameter": "sigma_percent", "value": result.sigma_percent,
-                    "error": None, "reference_frequency_ghz": None,
-                    "chi_square": result.chi_square_about_unity,
-                    "reduced_chi_square": result.reduced_chi_square_about_unity,
-                    "degrees_of_freedom": result.degrees_of_freedom,
-                    "n_points": result.n_points,
-                })
+                for parameter, value in (
+                    ("sigma_weighted_percent", result.sigma_weighted_percent),
+                    ("sigma_unweighted_percent", result.sigma_unweighted_percent),
+                ):
+                    combined_fit_rows.append({
+                        "product": "normalised_flux_ratio", "label": label,
+                        "parameter": parameter, "value": value,
+                        "error": None, "reference_frequency_ghz": None,
+                        "chi_square": result.chi_square_about_unity,
+                        "reduced_chi_square": result.reduced_chi_square_about_unity,
+                        "degrees_of_freedom": result.degrees_of_freedom,
+                        "n_points": result.n_points,
+                    })
 
         if weighted_ratio_series:
             plot_epoch_weighted_flux_ratios_vs_mjd(
@@ -1677,6 +1688,9 @@ def write_combined_products(
                     scatter = normalised_scatter[label]
                     normalised_row[f"{output_label}_sigma_percent"] = float(scatter.sigma_percent)
                     normalised_row[f"{output_label}_reduced_chi_square_about_unity"] = float(scatter.reduced_chi_square_about_unity)
+                    normalised_row[f"{output_label}_sigma_weighted_percent"] = float(scatter.sigma_weighted_percent)
+                    normalised_row[f"{output_label}_sigma_unweighted_percent"] = float(scatter.sigma_unweighted_percent)
+                    normalised_row[f"{output_label}_unweighted_mean"] = float(scatter.unweighted_mean)
                 weighted_rows.append(weighted_row)
                 normalised_rows.append(normalised_row)
 
@@ -1810,10 +1824,20 @@ def write_combined_products(
                 "normalised_reference_flux_definition": (
                     "Each visit's fitted reference-frequency flux density per image "
                     "divided by the inverse-variance weighted mean over all selected "
-                    "visits. sigma_percent is the sample standard deviation (ddof=1) of "
-                    "those normalised values across visits, in per cent, unweighted by "
-                    "the error bars; the same statistic as for the normalised ratios."
+                    "visits. sigma_weighted_percent (alias sigma_percent) is the sample "
+                    "standard deviation (ddof=1) of those normalised values across visits, "
+                    "in per cent; the same statistic as for the normalised ratios."
                 ),
+                "scatter_definitions": {
+                    "sigma_weighted": (
+                        "values / inverse-variance weighted mean, then sample standard "
+                        "deviation with N - 1; every visit counts equally in the deviation"
+                    ),
+                    "sigma_unweighted": (
+                        "sqrt(sum((R_i - mean)^2) / (N * mean)) on the raw values with the "
+                        "plain mean; errors play no part. Flux series are evaluated in Jy."
+                    ),
+                },
                 "rcusp_definition": (
                     "abs(S_A1 - S_A2 + S_B) / (S_A1 + S_A2 + S_B), "
                     "using fitted reference-frequency flux densities."
