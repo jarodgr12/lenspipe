@@ -3,6 +3,17 @@
 Each entry says whether existing products need re-running. The `lenspipe`
 version that made a product is recorded in its metadata JSON.
 
+## 2.0.20 — 2026-10-05
+
+**Re-run needed:** Stage 3, for the new figure.
+
+- Added: `fluxes_vs_mjd_per_image` in the combined product, one panel per
+  image with the fitted reference-frequency flux (mJy) against MJD, the
+  plain mean over visits as a dashed line, and the mean and the unweighted
+  RMS scatter (sigma_u, per cent) annotated in the margin. The Results
+  page's "Reference-frequency flux vs MJD" legend now carries the same mean
+  and sigma_u per image.
+
 ## 2.0.19 — 2026-10-05
 
 **Re-run needed:** Stage 3, to correct the unweighted sigma.

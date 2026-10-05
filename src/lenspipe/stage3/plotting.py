@@ -1018,6 +1018,65 @@ def plot_epoch_reference_fluxes_vs_mjd(
     _save_figure(fig, output_base)
 
 
+def plot_epoch_fluxes_vs_mjd_per_image(
+    mjds,
+    reference_flux_series,
+    source,
+    output_base,
+    scatter_statistics=None,
+) -> None:
+    """One panel per image: fitted reference-frequency flux (mJy) against MJD.
+
+    The plain mean over visits is drawn as a dashed line, and the margin of
+    each panel carries that mean and the unweighted RMS scatter (the
+    collaboration's formula on the normalised fluxes) in per cent.
+    """
+    items = list(reference_flux_series.items())
+    if not items:
+        raise ValueError("No reference-flux series were supplied.")
+    n_panels = len(items)
+    fig, axes = plt.subplots(
+        n_panels, 1, figsize=(8, max(2.30 * n_panels, 4.5)), sharex=True, squeeze=False,
+        gridspec_kw={"hspace": 0.0},
+    )
+    axes = axes.ravel()
+    mjd = np.asarray(mjds, dtype=float)
+
+    for panel_index, (axis, (label, series)) in enumerate(zip(axes, items, strict=False)):
+        correct_tick_marks(axis)
+        colour = COLOURS[panel_index % len(COLOURS)]
+        values = np.asarray(series["values"], dtype=float) * 1000.0
+        errors = np.asarray(series["errors"], dtype=float) * 1000.0
+        mask = np.isfinite(mjd) & np.isfinite(values) & np.isfinite(errors) & (errors >= 0)
+        mean_mjy = float(np.mean(values[mask])) if np.any(mask) else float("nan")
+        if np.any(mask):
+            axis.errorbar(
+                mjd[mask], values[mask], yerr=_yerr(errors[mask]),
+                fmt="o", ms=4.5, capsize=0, linestyle="none", color=colour, zorder=3,
+            )
+            x0, x1 = float(np.nanmin(mjd[mask])), float(np.nanmax(mjd[mask]))
+            axis.plot([x0, x1], [mean_mjy, mean_mjy], color="black", linewidth=1.2, linestyle=(0, (5, 5)), zorder=2)
+            axis.set_ylim(*_auto_quantity_limits(
+                [values[mask] - errors[mask], values[mask] + errors[mask], np.array([mean_mjy])], padding_fraction=0.15,
+            ))
+        annotation = label
+        if scatter_statistics is not None and label in scatter_statistics:
+            statistic = scatter_statistics[label]
+            annotation = (
+                f"{label}\n"
+                f"mean $= {mean_mjy:.2f}$ mJy\n"
+                rf"$\sigma_{{\rm u}}={statistic.sigma_unweighted_percent:.2f}\%$"
+            )
+        axis.text(1.02, 0.5, annotation, transform=axis.transAxes, ha="left", va="center", fontsize=10)
+        if panel_index < n_panels - 1:
+            axis.tick_params(labelbottom=False)
+
+    axes[-1].set_xlabel("MJD")
+    fig.subplots_adjust(left=0.12, right=0.98, bottom=0.10, top=0.98, hspace=0.0)
+    fig.supylabel("Flux density [mJy]", x=0.02)
+    _save_figure(fig, output_base)
+
+
 def plot_epoch_rcusp_vs_mjd(
     mjds,
     rcusp_values,

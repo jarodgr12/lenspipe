@@ -367,8 +367,17 @@ def combined_figures(combined_dir: Path) -> dict[str, dict[str, Any]]:
     ref_csv = tables / f"{stem}.reference_fluxes_vs_mjd.csv"
     if ref_csv.is_file():
         columns = [c for c in pd.read_csv(ref_csv, nrows=0).columns if c.endswith("_sref_mjy")]
+        stats_csv = tables / f"{stem}.normalised_reference_fluxes_vs_mjd.csv"
+        stats = pd.read_csv(stats_csv, nrows=1) if stats_csv.is_file() else None
+
+        def flux_name(group: str) -> str:
+            if stats is None or f"{group}_unweighted_mean_jy" not in stats.columns:
+                return group
+            mean_mjy = 1000.0 * float(stats[f"{group}_unweighted_mean_jy"].iloc[0])
+            return f"{group}  mean = {mean_mjy:.2f} mJy  σu = {float(stats[f'{group}_sigma_unweighted_percent'].iloc[0]):.2f}%"
+
         mjd_figure(ref_csv, "Reference-frequency flux vs MJD", "Flux density [mJy]",
-                   [(c, c.replace("_sref_mjy", "_sref_error_mjy"), c[: -len("_sref_mjy")]) for c in columns])
+                   [(c, c.replace("_sref_mjy", "_sref_error_mjy"), flux_name(c[: -len("_sref_mjy")])) for c in columns])
     norm_flux_csv = tables / f"{stem}.normalised_reference_fluxes_vs_mjd.csv"
     if norm_flux_csv.is_file():
         head = pd.read_csv(norm_flux_csv, nrows=1)
