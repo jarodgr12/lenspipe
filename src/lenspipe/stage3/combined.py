@@ -29,11 +29,29 @@ class ConstantFit:
 
 @dataclass
 class NormalisedScatter:
+    """Visit-to-visit scatter of one series, two ways.
+
+    ``sigma_weighted``: the values are divided by their inverse-variance weighted
+    mean, then the sample standard deviation (ddof=1) of those normalised values
+    is taken; every visit counts equally in the deviation. ``sigma_percent`` and
+    ``sigma_fraction`` are aliases kept for older readers of the tables.
+
+    ``sigma_unweighted``: the collaboration's formula on the raw values with the
+    plain mean, sigma = sqrt(sum((R_i - mean)^2) / (N * mean)). The errors play
+    no part at all. For dimensionless series (flux ratios) this is unit free;
+    for fluxes it is evaluated in Jy.
+    """
+
     label: str
     sigma_fraction: float
     sigma_percent: float
+    sigma_weighted_fraction: float
+    sigma_weighted_percent: float
+    sigma_unweighted_fraction: float
+    sigma_unweighted_percent: float
     weighted_mean: float
     weighted_mean_error: float
+    unweighted_mean: float
     chi_square_about_unity: float
     reduced_chi_square_about_unity: float
     degrees_of_freedom: int
@@ -42,6 +60,18 @@ class NormalisedScatter:
 
     def as_dict(self) -> dict[str, Any]:
         return asdict(self)
+
+
+def unweighted_scatter(values: Any) -> tuple[float, float]:
+    """sigma = sqrt(sum((R_i - mean)^2) / (N * mean)) on the finite raw values; returns (sigma, mean)."""
+    raw = np.asarray(values, dtype=float)
+    raw = raw[np.isfinite(raw)]
+    if raw.size == 0:
+        return np.nan, np.nan
+    mean = float(np.mean(raw))
+    if not mean > 0:
+        return np.nan, mean
+    return float(np.sqrt(np.sum(np.square(raw - mean)) / (raw.size * mean))), mean
 
 
 def fit_constant(label: str, values: Any, errors: Any) -> ConstantFit:
@@ -117,10 +147,19 @@ def calculate_normalised_scatter(
         y = y[mask]
         sigma = sigma[mask]
         n = int(y.size)
+        # Raw values for the unweighted formula: undo the normalisation when the
+        # series carries its weighted mean, otherwise the values are already raw.
+        scale = float(series.get("all_epoch_weighted_mean", 1.0)) if isinstance(series, dict) else 1.0
+        raw = y * (scale if np.isfinite(scale) else 1.0)
+        sigma_unweighted, unweighted_mean = unweighted_scatter(raw)
         if n == 0:
             results[label] = NormalisedScatter(
-                label, np.nan, np.nan, np.nan, np.nan,
-                np.nan, np.nan, 0, 0, "no_valid_points",
+                label=label, sigma_fraction=np.nan, sigma_percent=np.nan,
+                sigma_weighted_fraction=np.nan, sigma_weighted_percent=np.nan,
+                sigma_unweighted_fraction=np.nan, sigma_unweighted_percent=np.nan,
+                weighted_mean=np.nan, weighted_mean_error=np.nan, unweighted_mean=np.nan,
+                chi_square_about_unity=np.nan, reduced_chi_square_about_unity=np.nan,
+                degrees_of_freedom=0, n_points=0, fit_status="no_valid_points",
             )
             continue
         weights = 1.0 / np.square(sigma)
@@ -135,8 +174,13 @@ def calculate_normalised_scatter(
             label=label,
             sigma_fraction=sigma_fraction,
             sigma_percent=100.0 * sigma_fraction,
+            sigma_weighted_fraction=sigma_fraction,
+            sigma_weighted_percent=100.0 * sigma_fraction,
+            sigma_unweighted_fraction=sigma_unweighted,
+            sigma_unweighted_percent=100.0 * sigma_unweighted,
             weighted_mean=weighted_mean,
             weighted_mean_error=weighted_mean_error,
+            unweighted_mean=unweighted_mean,
             chi_square_about_unity=chi_square,
             reduced_chi_square_about_unity=(chi_square / dof if dof > 0 else np.nan),
             degrees_of_freedom=dof,
