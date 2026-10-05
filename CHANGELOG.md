@@ -3,6 +3,19 @@
 Each entry says whether existing products need re-running. The `lenspipe`
 version that made a product is recorded in its metadata JSON.
 
+## 2.0.19 — 2026-10-05
+
+**Re-run needed:** Stage 3, to correct the unweighted sigma.
+
+- Fixed: `sigma_unweighted` was evaluated on the raw values (fluxes in Jy),
+  which left a factor of sqrt(mean) in it and made it far too small for
+  faint images. It is now what the figure shows: the values divided by their
+  plain mean, so the normalised mean is exactly 1, and the formula
+  sqrt(sum((R_i - mean)^2) / (N * mean)) applied to that series, i.e. the
+  population RMS of the normalised values. No error bars anywhere, and the
+  same number in Jy or mJy. It differs from `sigma_weighted` only by using
+  the plain mean instead of the weighted one and N instead of N - 1.
+
 ## 2.0.18 — 2026-10-05
 
 **Re-run needed:** Stage 3, for the extra columns and the second sigma.

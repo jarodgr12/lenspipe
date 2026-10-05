@@ -56,7 +56,7 @@ def test_normalised_reference_fluxes_table_plot_and_sigma(combined: Path) -> Non
         assert np.isclose(normalised[f"{group}_sigma_percent"].iloc[0], expected_sigma)
         assert np.isclose(normalised[f"{group}_sigma_weighted_percent"].iloc[0], expected_sigma)
         plain_mean = values.mean()
-        expected_unweighted = 100.0 * np.sqrt(np.sum((values - plain_mean) ** 2) / (values.size * plain_mean))
+        expected_unweighted = 100.0 * np.sqrt(np.sum((values / plain_mean - 1.0) ** 2) / values.size)
         assert np.isclose(normalised[f"{group}_sigma_unweighted_percent"].iloc[0], expected_unweighted)
         assert np.isclose(normalised[f"{group}_unweighted_mean_jy"].iloc[0], plain_mean)
         assert normalised[f"{group}_sigma_percent"].nunique() == 1
@@ -91,15 +91,21 @@ def test_weighted_sigma_is_the_sample_standard_deviation_of_the_normalised_value
     assert result.chi_square_about_unity < 1e3
 
 
-def test_unweighted_sigma_follows_the_collaboration_formula() -> None:
-    """sigma = sqrt(sum((R_i - mean)^2) / (N * mean)), plain mean, errors ignored."""
+def test_unweighted_sigma_follows_the_collaboration_formula_on_normalised_values() -> None:
+    """R_i = value / plain mean (so mean = 1), then sqrt(sum((R_i - mean)^2) / (N * mean))."""
     from lenspipe.stage3.combined import calculate_normalised_scatter, unweighted_scatter
 
     raw = np.array([0.80, 0.84, 0.78, 0.82])
     mean = raw.mean()
-    expected = np.sqrt(np.sum((raw - mean) ** 2) / (raw.size * mean))
+    normalised = raw / mean
+    expected = np.sqrt(np.sum((normalised - normalised.mean()) ** 2) / (normalised.size * normalised.mean()))
+    assert np.isclose(normalised.mean(), 1.0)
     sigma, reported_mean = unweighted_scatter(raw)
     assert np.isclose(sigma, expected) and np.isclose(reported_mean, mean)
+    # Unit free: the same series in mJy gives the same scatter.
+    assert np.isclose(unweighted_scatter(raw * 1000.0)[0], sigma)
+    # And it is the population RMS over the mean, i.e. the N (not N-1) cousin of the weighted sigma.
+    assert np.isclose(sigma, np.std(raw, ddof=0) / mean)
 
     # Through the normalised-series path the raw values are recovered from the weighted mean.
     errors = np.array([0.01, 0.05, 0.01, 0.01])

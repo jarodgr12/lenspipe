@@ -36,10 +36,11 @@ class NormalisedScatter:
     is taken; every visit counts equally in the deviation. ``sigma_percent`` and
     ``sigma_fraction`` are aliases kept for older readers of the tables.
 
-    ``sigma_unweighted``: the collaboration's formula on the raw values with the
-    plain mean, sigma = sqrt(sum((R_i - mean)^2) / (N * mean)). The errors play
-    no part at all. For dimensionless series (flux ratios) this is unit free;
-    for fluxes it is evaluated in Jy.
+    ``sigma_unweighted``: no error bars anywhere. The values are divided by their
+    plain mean, so the normalised series has mean exactly 1, and the
+    collaboration's formula sigma = sqrt(sum((R_i - mean)^2) / (N * mean)) is
+    applied to that series, where it reduces to the population RMS of the
+    normalised values. Dimensionless for fluxes and ratios alike.
     """
 
     label: str
@@ -63,7 +64,12 @@ class NormalisedScatter:
 
 
 def unweighted_scatter(values: Any) -> tuple[float, float]:
-    """sigma = sqrt(sum((R_i - mean)^2) / (N * mean)) on the finite raw values; returns (sigma, mean)."""
+    """The collaboration's scatter on values normalised by their plain mean; returns (sigma, mean).
+
+    With R_i = value_i / mean the normalised mean is exactly 1, so
+    sqrt(sum((R_i - 1)^2) / (N * 1)) is the population RMS of the normalised
+    values: a fraction of the mean, independent of units.
+    """
     raw = np.asarray(values, dtype=float)
     raw = raw[np.isfinite(raw)]
     if raw.size == 0:
@@ -71,7 +77,8 @@ def unweighted_scatter(values: Any) -> tuple[float, float]:
     mean = float(np.mean(raw))
     if not mean > 0:
         return np.nan, mean
-    return float(np.sqrt(np.sum(np.square(raw - mean)) / (raw.size * mean))), mean
+    normalised = raw / mean
+    return float(np.sqrt(np.sum(np.square(normalised - 1.0)) / normalised.size)), mean
 
 
 def fit_constant(label: str, values: Any, errors: Any) -> ConstantFit:

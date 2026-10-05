@@ -1834,8 +1834,9 @@ def write_combined_products(
                         "deviation with N - 1; every visit counts equally in the deviation"
                     ),
                     "sigma_unweighted": (
-                        "sqrt(sum((R_i - mean)^2) / (N * mean)) on the raw values with the "
-                        "plain mean; errors play no part. Flux series are evaluated in Jy."
+                        "values / plain mean, so the normalised mean is exactly 1, then "
+                        "sqrt(sum((R_i - mean)^2) / (N * mean)), i.e. the population RMS of "
+                        "the normalised values; no error bars anywhere, unit free"
                     ),
                 },
                 "rcusp_definition": (
