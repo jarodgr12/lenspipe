@@ -399,6 +399,15 @@ def combined_figures(combined_dir: Path) -> dict[str, dict[str, Any]]:
                    if c not in {"epoch", "mjd"} and not c.endswith("_error")]
         mjd_figure(ratio_csv, "Weighted flux ratios vs MJD", "Flux ratio",
                    [(c, f"{c}_error", c.replace("_over_", "/")) for c in columns])
-    mjd_figure(tables / f"{stem}.rcusp_vs_mjd.csv", "R_cusp vs MJD", "R_cusp",
-               [("rcusp_a1_a2_b", "rcusp_a1_a2_b_error", "R_cusp")])
+    rcusp_csv = tables / f"{stem}.rcusp_vs_mjd.csv"
+    mjd_figure(rcusp_csv, "R_cusp vs MJD", "R_cusp", [("rcusp_a1_a2_b", "rcusp_a1_a2_b_error", "R_cusp")])
+    if rcusp_csv.is_file():
+        head = pd.read_csv(rcusp_csv, nrows=1)
+        if "rcusp_normalised" in head.columns:
+            name = (
+                f"R_cusp / mean  σw = {float(head['rcusp_sigma_weighted_percent'].iloc[0]):.2f}%  "
+                f"σu = {float(head['rcusp_sigma_unweighted_percent'].iloc[0]):.2f}%"
+            )
+            mjd_figure(rcusp_csv, "Normalised R_cusp vs MJD", "R_cusp / weighted mean",
+                       [("rcusp_normalised", "rcusp_normalised_error", name)])
     return figures

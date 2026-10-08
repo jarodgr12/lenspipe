@@ -240,8 +240,19 @@ def stage1_images_for(project_root: Path, source: str, epoch: str) -> tuple[Path
     return directory / f"{source}.{epoch}.cln.fits", directory / f"{source}.{epoch}.resid.fits"
 
 
-def _panel(image_path: Path, settings: ImageSettings) -> MapImage:
+def _beam_of(path: Path) -> tuple[float, float, float] | None:
+    try:
+        return beam_from_header(fits.getheader(path))
+    except OSError:
+        return None
+
+
+def _panel(image_path: Path, settings: ImageSettings, beam_fallback: Path | None = None) -> MapImage:
+    """Cutout of one map. A residual map written before 2.0.14 has no beam keywords;
+    ``beam_fallback`` names the clean map of the same visit, whose beam is the same."""
     image = load_map(image_path)
+    if image.beam is None and beam_fallback is not None:
+        image.beam = _beam_of(beam_fallback)
     return cutout(image, parse_center(settings.center, image), settings.size_arcsec)
 
 
@@ -254,7 +265,7 @@ def write_visit_images(
     """
     written: dict[str, str] = {}
     for kind, path in zip(KINDS, (clean_path, residual_path), strict=True):
-        image = _panel(path, settings)
+        image = _panel(path, settings, beam_fallback=clean_path if kind == "residual" else None)
         fig = plt.figure(figsize=A4_PORTRAIT)
         ax = fig.add_axes([0.14, 0.32, 0.72, 0.5])  # square-ish panel mid-page
         draw_map(ax, image, settings, f"{title}  {kind}", kind)
@@ -309,7 +320,7 @@ def write_all_epochs_images(
             fig.suptitle(title, y=0.97)
             for index, (epoch, clean_path, residual_path) in enumerate(page):
                 path = (clean_path, residual_path)[kind_index]
-                image = _panel(path, settings)
+                image = _panel(path, settings, beam_fallback=clean_path if kind == "residual" else None)
                 row, column = divmod(index, columns)
                 ax = fig.add_subplot(GRID_ROWS, columns, index + 1)
                 draw_map(

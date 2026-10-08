@@ -18,7 +18,7 @@ from lenspipe.stage1 import run_stage1
 from lenspipe.stage2 import run_stage2
 from lenspipe.stage3 import run_stage3
 from lenspipe.stage3.analysis import rcusp_status
-from lenspipe.ui.interactive import combined_notes
+from lenspipe.ui.interactive import combined_figures, combined_notes
 
 
 def _config(fake_difmap: Path, **stage3) -> LenspipeConfig:
@@ -116,6 +116,20 @@ def test_stage3_rcusp_works_with_renamed_groups_once_configured(project: Path, f
     assert np.isclose(rcusp["visit_scatter_error_of_mean"], np.std(values, ddof=1) / np.sqrt(values.size))
     rows = pd.read_csv(combined / "tables" / "MG0414.channel.combined_fits.csv")
     assert sorted(rows[rows["product"] == "rcusp"]["parameter"]) == ["constant", "visit_scatter"]
+
+    # Normalised R_cusp: values over the weighted mean, scatter in per cent, figure and table.
+    assert (combined / "plots" / "MG0414.channel.normalised_rcusp_vs_mjd.png").is_file()
+    weighted_mean = np.sum(weights * values) / np.sum(weights)
+    assert np.allclose(per_visit["rcusp_normalised"], values / weighted_mean)
+    assert np.isclose(per_visit["rcusp_sigma_weighted_percent"].iloc[0], 100.0 * np.std(values / weighted_mean, ddof=1))
+    plain = values.mean()
+    assert np.isclose(per_visit["rcusp_sigma_unweighted_percent"].iloc[0], 100.0 * np.std(values / plain, ddof=0))
+    assert sorted(rows[rows["product"] == "normalised_rcusp"]["parameter"]) == [
+        "sigma_unweighted_percent", "sigma_weighted_percent",
+    ]
+    assert "normalised_rcusp_scatter" in fits_payload
+    figures = combined_figures(combined)
+    assert "Normalised R_cusp vs MJD" in figures and "σw = " in figures["Normalised R_cusp vs MJD"]["data"][0]["name"]
 
 
 def test_doctor_checks_rcusp_images_against_the_model(project: Path, fake_difmap: Path) -> None:
