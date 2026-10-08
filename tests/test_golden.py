@@ -181,7 +181,7 @@ def test_stage3_products_match_legacy(project: Path, fake_difmap: Path, fake_dif
             # 2.0.16 adds per-image normalised flux scatter rows the legacy script never had,
             # and 2.0.18 renames the ratio scatter parameter to sigma_weighted_percent.
             right = right[right["product"] != "normalised_reference_flux"]
-            right = right[right["parameter"] != "sigma_unweighted_percent"].reset_index(drop=True)
+            right = right[~right["parameter"].isin(["sigma_unweighted_percent", "visit_scatter"])].reset_index(drop=True)
             right["parameter"] = right["parameter"].replace({"sigma_weighted_percent": "sigma_percent"})
         # The package may add columns; every legacy column must still match exactly.
         assert set(left.columns) <= set(right.columns), name

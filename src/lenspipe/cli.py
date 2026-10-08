@@ -370,6 +370,7 @@ def stage3(
     image_cmap: Annotated[str | None, typer.Option("--image-cmap", help="Matplotlib colour map.")] = None,
     image_pmax: Annotated[float | None, typer.Option("--image-pmax", help="Clean map colour scale top percentile.")] = None,
     image_residual_pmax: Annotated[float | None, typer.Option("--image-residual-pmax", help="Residual map colour scale top percentile.")] = None,
+    image_reference_epoch: Annotated[str | None, typer.Option("--image-reference-epoch", help="Visit setting the shared colour scale on the all-epochs pages.")] = None,
     overwrite: Annotated[bool, typer.Option("--overwrite")] = False,
     workers: Annotated[int | None, typer.Option("--workers", help="Plot processes.")] = None,
     list_products: Annotated[bool, typer.Option("--list-products", help="List Stage 2 products and exit.")] = False,
@@ -397,6 +398,7 @@ def stage3(
         "cmap": image_cmap,
         "pmax": image_pmax,
         "residual_pmax": image_residual_pmax,
+        "reference_epoch": image_reference_epoch,
     }
     image_settings = {
         **cfg.stage3.images.model_dump(),

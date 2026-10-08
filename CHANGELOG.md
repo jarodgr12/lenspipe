@@ -3,6 +3,26 @@
 Each entry says whether existing products need re-running. The `lenspipe`
 version that made a product is recorded in its metadata JSON.
 
+## 2.0.21 — 2026-10-08
+
+**Re-run needed:** Stage 3, for the new map pages and the R_cusp scatter.
+
+- Changed: map figures use offset axes, delta RA and delta Dec from the
+  cutout centre in arcsec with east to the left, instead of absolute
+  coordinates.
+- Changed: on the all-epochs pages every panel of a kind shares one colour
+  scale, taken from the reference visit (`stage3.images.reference_epoch`,
+  `--image-reference-epoch`, "Colour-scale reference visit" on the Run page;
+  default the first visit), so the same colour means the same flux in every
+  panel. The page title names the reference, and the combined metadata
+  records it with the limits used. The pages are saved with transparent
+  backgrounds (`transparent_all_epochs`, on by default); per-visit pages
+  stay opaque.
+- Added: R_cusp's visit-to-visit scatter (sample standard deviation, N - 1)
+  and its error of the mean, in `combined_fits` and the figure title, next
+  to the formal weighted-mean error, which only reflects the propagated
+  reference-flux fit errors and is usually far smaller than the scatter.
+
 ## 2.0.20 — 2026-10-05
 
 **Re-run needed:** Stage 3, for the new figure.

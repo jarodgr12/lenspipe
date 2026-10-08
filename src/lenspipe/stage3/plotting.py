@@ -156,19 +156,22 @@ def configure_figure_formats(formats) -> None:
     FIGURE_FORMATS = ordered
 
 
-def save_figure(fig, base_path: Path, dpi: int = 300, bbox_inches: str | None = "tight") -> None:
+def save_figure(
+    fig, base_path: Path, dpi: int = 300, bbox_inches: str | None = "tight", transparent: bool = False
+) -> None:
     """Save a figure in every configured format and close it.
 
     ``bbox_inches=None`` keeps the figure's own page size (the A4 map pages);
-    the default trims the margins as the legacy scripts did.
+    the default trims the margins as the legacy scripts did. ``transparent``
+    drops the figure and axes backgrounds (PNG alpha, PDF/SVG unpainted).
     """
     base_path = Path(base_path)
     base_path.parent.mkdir(parents=True, exist_ok=True)
     for fmt in FIGURE_FORMATS:
         if fmt == "png":
-            fig.savefig(Path(f"{base_path}.png"), dpi=dpi, bbox_inches=bbox_inches)
+            fig.savefig(Path(f"{base_path}.png"), dpi=dpi, bbox_inches=bbox_inches, transparent=transparent)
         else:
-            fig.savefig(Path(f"{base_path}.{fmt}"), bbox_inches=bbox_inches)
+            fig.savefig(Path(f"{base_path}.{fmt}"), bbox_inches=bbox_inches, transparent=transparent)
     plt.close(fig)
 
 
@@ -1085,8 +1088,13 @@ def plot_epoch_rcusp_vs_mjd(
     output_base,
     fit=None,
     y_limits=None,
+    scatter=None,
 ) -> None:
-    """Plot the cusp relation ``R_cusp(A1, A2, B)`` versus MJD."""
+    """Plot the cusp relation ``R_cusp(A1, A2, B)`` versus MJD.
+
+    The title quotes the weighted mean with its formal error and, when given,
+    the visit-to-visit scatter, which is usually the more honest uncertainty.
+    """
     fig, ax = plt.subplots(figsize=(8, 8))
     correct_tick_marks(ax)
 
@@ -1132,7 +1140,9 @@ def plot_epoch_rcusp_vs_mjd(
     title = "All epochs"
     if fit is not None and np.isfinite(fit.value):
         value_text, error_text = _format_value_uncertainty(fit.value, fit.error)
-        title = rf"All epochs: $R_{{\rm cusp}}={value_text}\pm{error_text}$"
+        title = rf"All epochs: $R_{{\rm cusp}}={value_text}\pm{error_text}$ (formal)"
+        if scatter is not None and np.isfinite(scatter):
+            title += rf", visit scatter ${scatter:.4f}$"
 
     ax.set_xlabel("MJD")
     ax.set_ylabel(r"$R_{\rm cusp}$")

@@ -178,9 +178,76 @@ def test_build_steps_passes_image_options(tmp_path: Path) -> None:
     request = RunRequest(
         root=tmp_path, stages=[3], stage3_images=False, stage3_image_center="64.24,5.57",
         stage3_image_size="2,1.5", stage3_image_cmap="magma", stage3_image_pmax=99.0, stage3_image_residual_pmax=95.5,
+        stage3_image_reference_epoch="B",
     )
     steps, _ = build_steps(request)
     assert steps[0].argv == [
         "stage3", str(tmp_path), "--no-images", "--image-center", "64.24,5.57", "--image-size", "2,1.5",
         "--image-cmap", "magma", "--image-pmax", "99", "--image-residual-pmax", "95.5",
+        "--image-reference-epoch", "B",
     ]
+
+
+# ---------------------------------------------------------------------------
+# All-epochs pages: shared colour scale from a reference visit, transparent, offset axes
+
+
+def _alpha_at_corner(path: Path) -> int:
+    from PIL import Image
+
+    with Image.open(path) as image:
+        return image.convert("RGBA").getpixel((2, 2))[3]
+
+
+def test_all_epochs_pages_share_the_reference_visit_scale_and_are_transparent(staged: Path, fake_difmap: Path) -> None:
+    quiet = Reporter(stream=io.StringIO())
+    cfg = _config(fake_difmap, reference_epoch="B")
+    assert run_stage3(staged, cfg, reporter=quiet, workers=1).ok
+    combined = staged / "stage3" / "combined" / "MG0414" / "channel"
+    cmeta = json.loads(next(combined.glob("*.combined.stage3.metadata.json")).read_text())
+    files = cmeta["images"]["files"]
+    assert files["reference_epoch"] == "B"
+    assert set(files["shared_limits"]) == {"clean", "residual"}
+    assert files["shared_limits"]["clean"][1] > files["shared_limits"]["clean"][0]
+    assert cmeta["images"]["settings"]["reference_epoch"] == "B"
+    assert cmeta["images"]["settings"]["transparent_all_epochs"] is True
+    assert "arcsec" in cmeta["images"]["settings"]["axes"]
+
+    page = combined / "plots" / "MG0414.channel.images_clean_all_epochs.png"
+    visit_page = staged / "stage3" / "MG0414.A" / "channel" / "plots" / "MG0414.A.channel.image_clean.png"
+    assert _alpha_at_corner(page) == 0  # transparent background
+    assert _alpha_at_corner(visit_page) == 255  # per-visit pages stay opaque
+
+    # An unknown reference falls back to the first visit rather than failing.
+    assert run_stage3(staged, _config(fake_difmap, reference_epoch="nope"), reporter=quiet, workers=1, overwrite=True).ok
+    cmeta = json.loads(next(combined.glob("*.combined.stage3.metadata.json")).read_text())
+    assert cmeta["images"]["files"]["reference_epoch"] == "A"
+
+
+def test_map_panels_use_offset_axes_in_arcsec_with_shared_limits(staged: Path, fake_difmap: Path, monkeypatch) -> None:
+    from lenspipe.stage3 import images as images_module
+    from lenspipe.stage3 import plotting
+
+    captured: list = []
+    real_save = plotting.save_figure
+
+    def spy(fig, base_path, dpi=300, bbox_inches="tight", transparent=False):
+        captured.append((Path(base_path).name, fig, transparent))
+        real_save(fig, base_path, dpi=dpi, bbox_inches=bbox_inches, transparent=transparent)
+
+    monkeypatch.setattr(plotting, "save_figure", spy)
+    settings = images_module.ImageSettings.from_config(_config(fake_difmap, size_arcsec=1.0).stage3.images)
+    entries = [(e, *images_module.stage1_images_for(staged, "MG0414", e)) for e in ("A", "B")]
+    record = images_module.write_all_epochs_images(entries, staged / "x" / "MG0414.channel", settings, "MG0414")
+    assert record["reference_epoch"] == "A"
+    name, fig, transparent = next(item for item in captured if "images_clean_all_epochs" in item[0])
+    assert transparent is True
+    panels = [ax for ax in fig.axes if ax.get_images()]
+    assert len(panels) == 2
+    for ax in panels:
+        image = ax.get_images()[0]
+        assert image.get_clim() == tuple(record["shared_limits"]["clean"])  # same colour, same flux
+        left, right, bottom, top = image.get_extent()
+        assert left > right  # east (positive RA offset) on the left
+        assert abs((left - right) - 1.0) < 0.05 and abs((top - bottom) - 1.0) < 0.05  # 1 arcsec cutout
+    assert "RA [arcsec]" in panels[0].get_xlabel() and "Dec [arcsec]" in panels[0].get_ylabel()

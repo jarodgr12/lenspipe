@@ -1727,20 +1727,41 @@ def write_combined_products(
         if rcusp_series is not None:
             rcusp_values, rcusp_errors = rcusp_series
             rcusp_fit = fit_constant("R_cusp", rcusp_values, rcusp_errors)
-            combined_fit_payload["rcusp"] = rcusp_fit.as_dict()
-            combined_fit_rows.append({
-                "product": "rcusp", "label": "R_cusp",
-                "parameter": "constant", "value": rcusp_fit.value,
-                "error": rcusp_fit.error, "reference_frequency_ghz": None,
-                "chi_square": rcusp_fit.chi_square,
-                "reduced_chi_square": rcusp_fit.reduced_chi_square,
-                "degrees_of_freedom": rcusp_fit.degrees_of_freedom,
-                "n_points": rcusp_fit.n_points,
-            })
+            # The weighted-mean error only reflects the formal per-visit errors; the
+            # visit-to-visit scatter is reported beside it as the empirical uncertainty.
+            finite_rcusp = rcusp_values[np.isfinite(rcusp_values)]
+            rcusp_scatter = float(np.std(finite_rcusp, ddof=1)) if finite_rcusp.size > 1 else float("nan")
+            rcusp_scatter_error = (
+                rcusp_scatter / math.sqrt(finite_rcusp.size) if finite_rcusp.size > 1 else float("nan")
+            )
+            combined_fit_payload["rcusp"] = {
+                **rcusp_fit.as_dict(),
+                "visit_scatter": rcusp_scatter,
+                "visit_scatter_error_of_mean": rcusp_scatter_error,
+                "error_definition": (
+                    "error: 1/sqrt(sum(1/sigma_i^2)) from the per-visit propagated reference-flux errors; "
+                    "visit_scatter: sample standard deviation of R_cusp across visits (N-1); "
+                    "visit_scatter_error_of_mean: visit_scatter/sqrt(N)"
+                ),
+            }
+            for parameter, value, error in (
+                ("constant", rcusp_fit.value, rcusp_fit.error),
+                ("visit_scatter", rcusp_scatter, rcusp_scatter_error),
+            ):
+                combined_fit_rows.append({
+                    "product": "rcusp", "label": "R_cusp",
+                    "parameter": parameter, "value": value,
+                    "error": error, "reference_frequency_ghz": None,
+                    "chi_square": rcusp_fit.chi_square,
+                    "reduced_chi_square": rcusp_fit.reduced_chi_square,
+                    "degrees_of_freedom": rcusp_fit.degrees_of_freedom,
+                    "n_points": rcusp_fit.n_points,
+                })
             plot_epoch_rcusp_vs_mjd(
                 mjds, rcusp_values, rcusp_errors, source,
                 plots_dir / f"{stem}.rcusp_vs_mjd",
                 fit=rcusp_fit,
+                scatter=rcusp_scatter,
             )
             rcusp_rows = [
                 {

@@ -210,6 +210,11 @@ def run_page() -> None:
                                 "Residual pmax", value=config.stage3.images.residual_pmax, min=1, max=100,
                                 step=0.1, format="%.1f",
                             ).props(dense).classes("w-36")
+                            image_reference_epoch = ui.select(
+                                {"": "first visit", **{e: e for e in epoch_options}},
+                                label="Colour-scale reference visit",
+                                value=config.stage3.images.reference_epoch or "",
+                            ).props(dense).classes("w-52")
 
                 with ui.row().classes("gap-2 items-center"):
                     submit_button = ui.button("Submit", icon="play_arrow", on_click=lambda: submit()).props(
@@ -291,6 +296,9 @@ def run_page() -> None:
                     float(image_residual_pmax.value) if image_residual_pmax.value not in (None, "") else None,
                     s3.images.residual_pmax,
                 ),
+                stage3_image_reference_epoch=_override(
+                    (image_reference_epoch.value or "") or None, s3.images.reference_epoch or None
+                ),
             )
 
         def refresh_preview() -> None:
@@ -325,6 +333,7 @@ def run_page() -> None:
             error_source, product, plot_workers, fit_method, reference_frequency, formats,
             exclude_channels, exclude_epoch_channels, annotations, s3_error_bars,
             images_on, image_center, image_size, image_cmap, image_pmax, image_residual_pmax,
+            image_reference_epoch,
         ):
             widget.on_value_change(refresh_preview)
         refresh_preview()
