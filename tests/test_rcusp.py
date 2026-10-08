@@ -8,6 +8,9 @@ import json
 import re
 from pathlib import Path
 
+import numpy as np
+import pandas as pd
+
 from lenspipe.config import LenspipeConfig
 from lenspipe.doctor import run_checks
 from lenspipe.progress import Reporter
@@ -100,6 +103,19 @@ def test_stage3_rcusp_works_with_renamed_groups_once_configured(project: Path, f
     assert payload["rcusp_available"] is True and payload["rcusp_reason"] is None
     assert (combined / "tables" / "MG0414.channel.rcusp_vs_mjd.csv").is_file()
     assert combined_notes(combined) == []
+
+    fits_payload = json.loads((combined / "tables" / "MG0414.channel.combined_fits.json").read_text())
+    rcusp = fits_payload["rcusp"]
+    per_visit = pd.read_csv(combined / "tables" / "MG0414.channel.rcusp_vs_mjd.csv")
+    values = per_visit["rcusp_a1_a2_b"].to_numpy()
+    errors = per_visit["rcusp_a1_a2_b_error"].to_numpy()
+    weights = 1.0 / errors**2
+    assert np.isclose(rcusp["value"], np.sum(weights * values) / np.sum(weights))
+    assert np.isclose(rcusp["error"], 1.0 / np.sqrt(np.sum(weights)))  # formal: from the propagated errors only
+    assert np.isclose(rcusp["visit_scatter"], np.std(values, ddof=1))
+    assert np.isclose(rcusp["visit_scatter_error_of_mean"], np.std(values, ddof=1) / np.sqrt(values.size))
+    rows = pd.read_csv(combined / "tables" / "MG0414.channel.combined_fits.csv")
+    assert sorted(rows[rows["product"] == "rcusp"]["parameter"]) == ["constant", "visit_scatter"]
 
 
 def test_doctor_checks_rcusp_images_against_the_model(project: Path, fake_difmap: Path) -> None:

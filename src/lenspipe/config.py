@@ -237,6 +237,16 @@ class ImageConfig(_Model):
     vmin: float | None = Field(
         0.0, description="Bottom of the colour scale in image units; unset uses the (100 - pmax) percentile."
     )
+    reference_epoch: str | None = Field(
+        None,
+        description=(
+            "Visit whose cutout sets the shared colour scale on the all-epochs pages, so one colour "
+            "means the same flux in every panel; unset uses the first visit."
+        ),
+    )
+    transparent_all_epochs: bool = Field(
+        True, description="Save the all-epochs pages with transparent backgrounds."
+    )
 
     @field_validator("size_arcsec")
     @classmethod
@@ -484,6 +494,8 @@ cmap = "viridis"                    # any matplotlib colour map
 pmax = 99.5                         # clean map: top of the colour scale as a percentile of the cutout
 residual_pmax = 99.5                # residual map: its own top percentile
 vmin = 0.0                          # bottom of the colour scale (image units); remove to use the (100 - pmax) percentile
+# reference_epoch = "B"             # visit that sets the shared colour scale on the all-epochs pages; unset = first visit
+transparent_all_epochs = true       # all-epochs pages saved with transparent backgrounds
 
 [stage3.emcee]
 walkers = 32
