@@ -180,7 +180,7 @@ def test_stage3_products_match_legacy(project: Path, fake_difmap: Path, fake_dif
         if name.endswith("combined_fits.csv"):
             # 2.0.16 adds per-image normalised flux scatter rows the legacy script never had,
             # and 2.0.18 renames the ratio scatter parameter to sigma_weighted_percent.
-            right = right[right["product"] != "normalised_reference_flux"]
+            right = right[~right["product"].isin(["normalised_reference_flux", "normalised_rcusp"])]
             right = right[~right["parameter"].isin(["sigma_unweighted_percent", "visit_scatter"])].reset_index(drop=True)
             right["parameter"] = right["parameter"].replace({"sigma_weighted_percent": "sigma_percent"})
         # The package may add columns; every legacy column must still match exactly.
@@ -197,6 +197,7 @@ def test_stage3_products_match_legacy(project: Path, fake_difmap: Path, fake_dif
             str(p.relative_to(root)) for p in (root / "stage3").rglob("*.png")
             if "rms_" not in p.name and ".image" not in p.name
             and "normalised_reference_fluxes" not in p.name and "fluxes_vs_mjd_per_image" not in p.name
+            and "normalised_rcusp" not in p.name
             and p.name not in {
                 "MG0414.A.channel.png", "MG0414.B.channel.png", "MG0414.channel.png",
             }

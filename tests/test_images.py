@@ -224,6 +224,37 @@ def test_all_epochs_pages_share_the_reference_visit_scale_and_are_transparent(st
     assert cmeta["images"]["files"]["reference_epoch"] == "A"
 
 
+def test_residual_without_beam_keywords_borrows_the_clean_beam(staged: Path, fake_difmap: Path, monkeypatch) -> None:
+    """Residual maps from Stage 1 runs before 2.0.14 carry no BMAJ/BMIN/BPA; every panel still shows a beam."""
+    from matplotlib.patches import Ellipse
+
+    from lenspipe.stage3 import images as images_module
+    from lenspipe.stage3 import plotting
+
+    residual = staged / "stage1" / "MG0414.B" / "MG0414.B.resid.fits"
+    with fits.open(residual, mode="update") as hdul:
+        for key in ("BMAJ", "BMIN", "BPA"):
+            del hdul[0].header[key]
+        hdul.flush()
+    assert images_module.load_map(residual).beam is None
+
+    captured: list = []
+    real_save = plotting.save_figure
+    monkeypatch.setattr(
+        plotting, "save_figure",
+        lambda fig, base, dpi=300, bbox_inches="tight", transparent=False: (
+            captured.append((Path(base).name, fig)), real_save(fig, base, dpi=dpi, bbox_inches=bbox_inches, transparent=transparent)
+        ),
+    )
+    settings = images_module.ImageSettings.from_config(_config(fake_difmap).stage3.images)
+    entries = [(e, *images_module.stage1_images_for(staged, "MG0414", e)) for e in ("A", "B")]
+    images_module.write_all_epochs_images(entries, staged / "x" / "MG0414.channel", settings, "MG0414")
+    _, fig = next(item for item in captured if "images_residual_all_epochs" in item[0])
+    panels = [ax for ax in fig.axes if ax.get_images()]
+    assert len(panels) == 2
+    assert all(any(isinstance(p, Ellipse) for p in ax.patches) for ax in panels)
+
+
 def test_map_panels_use_offset_axes_in_arcsec_with_shared_limits(staged: Path, fake_difmap: Path, monkeypatch) -> None:
     from lenspipe.stage3 import images as images_module
     from lenspipe.stage3 import plotting

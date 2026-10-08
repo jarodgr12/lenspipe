@@ -42,6 +42,7 @@ Combined outputs
     plots/<source>.<product>.weighted_flux_ratios_vs_mjd.pdf
     plots/<source>.<product>.normalised_weighted_flux_ratios_vs_mjd.pdf
     plots/<source>.<product>.rcusp_vs_mjd.pdf
+    plots/<source>.<product>.normalised_rcusp_vs_mjd.pdf
     plots/<source>.<product>.rms_vs_channel_all_epochs.pdf
     plots/<source>.<product>.median_rms_vs_channel.pdf
     plots/<source>.<product>.relative_rms_vs_channel_all_epochs.pdf
@@ -1763,16 +1764,54 @@ def write_combined_products(
                 fit=rcusp_fit,
                 scatter=rcusp_scatter,
             )
+            # R_cusp normalised to its all-visit weighted mean, with the same two
+            # scatter statistics (per cent) as the normalised ratios and fluxes.
+            normalised_rcusp_series = _normalised_ratio_series(
+                {"R_cusp": {"values": rcusp_values, "errors": rcusp_errors}}
+            )
+            rcusp_scatter_stats = calculate_normalised_scatter(normalised_rcusp_series)
+            combined_fit_payload["normalised_rcusp_scatter"] = {
+                label: result.as_dict() for label, result in rcusp_scatter_stats.items()
+            }
+            for label, result in rcusp_scatter_stats.items():
+                for parameter, value in (
+                    ("sigma_weighted_percent", result.sigma_weighted_percent),
+                    ("sigma_unweighted_percent", result.sigma_unweighted_percent),
+                ):
+                    combined_fit_rows.append({
+                        "product": "normalised_rcusp", "label": label,
+                        "parameter": parameter, "value": value,
+                        "error": None, "reference_frequency_ghz": None,
+                        "chi_square": result.chi_square_about_unity,
+                        "reduced_chi_square": result.reduced_chi_square_about_unity,
+                        "degrees_of_freedom": result.degrees_of_freedom,
+                        "n_points": result.n_points,
+                    })
+            plot_epoch_normalized_weighted_flux_ratios_vs_mjd(
+                mjds, normalised_rcusp_series, source,
+                plots_dir / f"{stem}.normalised_rcusp_vs_mjd",
+                scatter_statistics=rcusp_scatter_stats,
+                y_label=r"$R_{\rm cusp}$ / weighted mean",
+                colour_offset=0,
+            )
+            normalised_rcusp = normalised_rcusp_series["R_cusp"]
+            rcusp_scatter_stat = rcusp_scatter_stats["R_cusp"]
             rcusp_rows = [
                 {
                     "epoch": item.dataset.epoch,
                     "mjd": float(item.mjd),
                     "rcusp_a1_a2_b": float(value),
                     "rcusp_a1_a2_b_error": float(error),
+                    "rcusp_normalised": float(normalised_rcusp["values"][index]),
+                    "rcusp_normalised_error": float(normalised_rcusp["errors"][index]),
+                    "rcusp_all_epoch_weighted_mean": float(normalised_rcusp["all_epoch_weighted_mean"]),
+                    "rcusp_unweighted_mean": float(rcusp_scatter_stat.unweighted_mean),
+                    "rcusp_sigma_weighted_percent": float(rcusp_scatter_stat.sigma_weighted_percent),
+                    "rcusp_sigma_unweighted_percent": float(rcusp_scatter_stat.sigma_unweighted_percent),
                 }
-                for item, value, error in zip(
+                for index, (item, value, error) in enumerate(zip(
                     analyses, rcusp_values, rcusp_errors, strict=False
-                )
+                ))
             ]
             write_csv(
                 tables_dir / f"{stem}.rcusp_vs_mjd.csv", rcusp_rows

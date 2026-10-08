@@ -3,6 +3,23 @@
 Each entry says whether existing products need re-running. The `lenspipe`
 version that made a product is recorded in its metadata JSON.
 
+## 2.0.22 — 2026-10-08
+
+**Re-run needed:** Stage 3, for the new figure.
+
+- Added: `normalised_rcusp_vs_mjd` in the combined product: each visit's
+  R_cusp divided by the all-visit inverse-variance weighted mean, centred on
+  1, with the weighted and unweighted scatter in per cent in the margin
+  (same definitions as the normalised ratios and fluxes). The R_cusp table
+  gains the normalised values, both means and both sigmas; `combined_fits`
+  gains `normalised_rcusp` rows; the Results page shows the series with the
+  sigmas in the legend.
+- Fixed: the restoring beam was missing from some map panels. It is drawn
+  from the FITS BMAJ/BMIN/BPA keywords, which residual maps written by Stage 1
+  before 2.0.14 do not have. Stage 3 now takes the beam from the same visit's
+  clean map when the residual lacks it, so every panel shows one without
+  re-running Stage 1.
+
 ## 2.0.21 — 2026-10-08
 
 **Re-run needed:** Stage 3, for the new map pages and the R_cusp scatter.
