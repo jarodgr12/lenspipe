@@ -313,6 +313,11 @@ def main() -> int:
         elif command == "selfcal":
             emit(f"Performing {'amp+phase' if argument.startswith('true') else 'phase'} self-cal")
             emit("Applying selfcal corrections to the data")
+        elif command == "gscale":
+            emit("Performing overall amplitude self-cal")
+            emit(" Telescope amplitude corrections in sub-array 1:")
+            emit("  EA01      1.00     EA02      0.99     EA03      1.01")
+            emit("Applying selfcal corrections to the data")
         elif command == "modelfit":
             do_modelfit(state, int(argument or "1"))
         elif command == "invert":

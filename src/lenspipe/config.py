@@ -67,14 +67,31 @@ class SelfcalStep(_Model):
     float_amplitude: bool = False
     solint_min: float = Field(3600.0, gt=0)
     modelfit_iterations: int = Field(50, ge=0)
+    gscale: bool = Field(
+        False,
+        description=(
+            "Run DifMAP's gscale (one overall amplitude correction per telescope) instead of "
+            "selfcal for this step; float_amplitude is passed as gscale's dofloat, and amplitude "
+            "and solint_min are ignored."
+        ),
+    )
 
     @model_validator(mode="before")
     @classmethod
     def _accept_list_form(cls, value: Any) -> Any:
         if isinstance(value, (list, tuple)):
+            if len(value) == 3 and str(value[0]).lower() == "gscale":
+                _, float_amplitude, iterations = value
+                return {
+                    "gscale": True,
+                    "amplitude": True,
+                    "float_amplitude": float_amplitude,
+                    "modelfit_iterations": iterations,
+                }
             if len(value) != 4:
                 raise ValueError(
-                    "selfcal step list form is [amplitude, float_amplitude, solint_min, modelfit_iterations]"
+                    "selfcal step list form is [amplitude, float_amplitude, solint_min, modelfit_iterations] "
+                    "or [\"gscale\", float_amplitude, modelfit_iterations]"
                 )
             amplitude, float_amplitude, solint, iterations = value
             return {
@@ -84,6 +101,14 @@ class SelfcalStep(_Model):
                 "modelfit_iterations": iterations,
             }
         return value
+
+    def difmap_command(self) -> str:
+        """The DifMAP calibration command this step issues (``modelfit`` follows separately)."""
+        float_text = "true" if self.float_amplitude else "false"
+        if self.gscale:
+            return f"gscale {float_text}"
+        amplitude_text = "true" if self.amplitude else "false"
+        return f"selfcal {amplitude_text},{float_text},{self.solint_min:g}"
 
 
 class FinalIfSelfcal(_Model):
@@ -438,6 +463,8 @@ unflag = true
 input_pattern = "*.uvfits"
 # Self-calibration schedule. Each entry is one selfcal followed by modelfit:
 #   [amplitude, float_amplitude, solint_min, modelfit_iterations]
+# or one gscale (overall amplitude correction per telescope) followed by modelfit:
+#   ["gscale", float_amplitude, modelfit_iterations]
 selfcal = [
   [false, false, 3600, 50],
   [false, false, 1,    50],
