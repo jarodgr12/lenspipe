@@ -3,6 +3,18 @@
 Each entry says whether existing products need re-running. The `lenspipe`
 version that made a product is recorded in its metadata JSON.
 
+## 2.0.24 — 2026-10-12
+
+**Re-run needed:** Stage 1, if a schedule uses gscale.
+
+- Changed: the gscale option on a Stage 1 schedule step no longer replaces
+  the step's self-cal. The step runs its selfcal and modelfit as before,
+  then gscale (dofloat = float_amplitude) and a second modelfit, so the
+  model is refitted on the amplitude-corrected data. In `lenspipe.toml` it
+  is a fifth element on the entry, `[amplitude, float_amplitude,
+  solint_min, modelfit_iterations, true]`; the 2.0.23 `["gscale", ...]`
+  form is withdrawn. The Parameters page switch keeps its name.
+
 ## 2.0.23 — 2026-10-12
 
 **Re-run needed:** no, unless you add gscale steps to the schedule.

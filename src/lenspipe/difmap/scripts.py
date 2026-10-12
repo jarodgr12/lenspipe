@@ -101,14 +101,15 @@ select i
 
     selfcal_lines: list[str] = []
     for step in config.selfcal:
-        if step.gscale:
-            # One overall amplitude correction per telescope; dofloat as configured.
-            selfcal_lines.append(f"gscale {_bool(step.float_amplitude)}")
-        else:
-            selfcal_lines.append(
-                f"selfcal {_bool(step.amplitude)},{_bool(step.float_amplitude)},{_num(step.solint_min)}"
-            )
+        selfcal_lines.append(
+            f"selfcal {_bool(step.amplitude)},{_bool(step.float_amplitude)},{_num(step.solint_min)}"
+        )
         selfcal_lines.append(f"modelfit {step.modelfit_iterations}")
+        if step.gscale:
+            # One overall amplitude correction per telescope at the end of the step,
+            # then refit the model on the corrected data.
+            selfcal_lines.append(f"gscale {_bool(step.float_amplitude)}")
+            selfcal_lines.append(f"modelfit {step.modelfit_iterations}")
         selfcal_lines.append("")
     selfcal_block = "\n".join(selfcal_lines).rstrip("\n")
 
