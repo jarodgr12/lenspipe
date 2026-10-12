@@ -3,6 +3,18 @@
 Each entry says whether existing products need re-running. The `lenspipe`
 version that made a product is recorded in its metadata JSON.
 
+## 2.0.23 — 2026-10-12
+
+**Re-run needed:** no, unless you add gscale steps to the schedule.
+
+- Added: a Stage 1 self-cal step can be DifMAP's `gscale`, which solves one
+  overall amplitude correction per telescope. In `lenspipe.toml` write the
+  step as `["gscale", float_amplitude, modelfit_iterations]` (or a table
+  with `gscale = true`); it emits `gscale <dofloat>` followed by `modelfit`.
+  On the Parameters page each schedule row has a `gscale` switch; when it is
+  on, the row's amplitude and solint settings are ignored. Default
+  schedules are unchanged.
+
 ## 2.0.22 — 2026-10-08
 
 **Re-run needed:** Stage 3, for the new figure.

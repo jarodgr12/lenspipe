@@ -140,6 +140,7 @@ Settings that did not exist before:
 | `run.plot_workers` | 4 | Processes writing Stage 3 per-visit figures |
 | `stage3.figure_formats` | `["pdf","png"]` | Formats written for every Stage 3 figure; `["png"]` roughly halves plot time |
 | `stage2.plot_spectrum`, `stage2.plot_error_bars` | true, true | Quick-look PNGs after each epoch, and whether they carry residual-RMS error bars |
+| `stage1.selfcal` gscale steps | none | A schedule entry may be `["gscale", float_amplitude, modelfit_iterations]` instead of a `selfcal` step: DifMAP's `gscale`, one overall amplitude correction per telescope, followed by `modelfit`. On the Parameters page tick the step's `gscale` switch |
 | `stage2.unflag` | false | Run `unflag *` on the calibrated file before the channel fits. Off keeps the flags Stage 1 wrote (Stage 1 has its own `unflag`, on by default). Also `--unflag/--no-unflag` per run |
 | `stage3.plot_error_bars` | true | Error bars on every Stage 3 figure; off plots the points alone |
 | `project.difmap.stream` | `pipe` | `pty` makes DifMAP line-buffer so progress arrives per fit |
