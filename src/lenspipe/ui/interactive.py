@@ -17,6 +17,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
+from lenspipe.project import CALIBRATION_MODES
 from lenspipe.stage3.fitting import power_law
 
 __all__ = [
@@ -51,8 +52,11 @@ class SpwLayout:
             return cls(int(stage2_meta["channels_per_if"]), None, "stage2 if mode")
         if stage1_meta:
             final = stage1_meta.get("final_if_selfcal") or {}
-            if final.get("channels_per_if"):
+            if final.get("enabled", True) and final.get("channels_per_if"):
                 return cls(int(final["channels_per_if"]), final.get("n_ifs") or None, "stage1 metadata")
+            per_if = stage1_meta.get("per_if") or {}
+            if per_if.get("channels_per_if"):
+                return cls(int(per_if["channels_per_if"]), per_if.get("if_count") or None, "stage1 metadata")
         return cls(DEFAULT_CHANNELS_PER_SPW, None, "assumed")
 
 
@@ -99,6 +103,31 @@ def _safe(name: str) -> str:
     return re.sub(r"[^A-Za-z0-9]+", "_", str(name).strip()).strip("_")
 
 
+def _stage1_directory(spectrum_csv: Path, stage2_meta: dict[str, Any], prefix: str) -> Path:
+    """Where this visit's Stage 1 products live.
+
+    Stage 2 metadata from 2.1 on records ``stage1_directory`` relative to the
+    project root; older metadata is resolved by walking up from
+    ``stage2/<mode>/<prefix>`` (or the flat ``stage2/<prefix>``) to ``stage1``.
+    """
+    stage2_dir = spectrum_csv.parent
+    mode_dir = stage2_dir.parent
+    if mode_dir.name in CALIBRATION_MODES:
+        root = mode_dir.parent.parent
+        fallback = root / "stage1" / mode_dir.name / prefix
+    else:
+        root = mode_dir.parent
+        fallback = root / "stage1" / prefix
+    recorded = stage2_meta.get("stage1_directory")
+    if recorded:
+        candidate = Path(recorded)
+        if not candidate.is_absolute():
+            candidate = root / candidate
+        if candidate.is_dir():
+            return candidate
+    return fallback
+
+
 def load_visit(stage3_dir: Path) -> VisitData:
     """Gather everything the interactive per-visit figures need from a Stage 3 output directory."""
     meta_path = next(stage3_dir.glob("*.stage3.metadata.json"))
@@ -109,7 +138,8 @@ def load_visit(stage3_dir: Path) -> VisitData:
     stage2_meta = _load_json(Path(stage2["metadata"])) if stage2.get("metadata") and Path(stage2["metadata"]).is_file() else {}
     stage1_meta = None
     if stage2_meta.get("stage1_metadata"):
-        candidate = spectrum_csv.parent.parent.parent / "stage1" / f"{meta['source']}.{meta['epoch']}" / stage2_meta["stage1_metadata"]
+        stage1_dir = _stage1_directory(spectrum_csv, stage2_meta, f"{meta['source']}.{meta['epoch']}")
+        candidate = stage1_dir / stage2_meta["stage1_metadata"]
         stage1_json = candidate.with_name(candidate.name.replace(".model.json", ".stage1.metadata.json"))
         if stage1_json.is_file():
             stage1_meta = _load_json(stage1_json)

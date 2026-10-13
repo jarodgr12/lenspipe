@@ -11,6 +11,8 @@ from pathlib import Path
 
 import pandas as pd
 
+from lenspipe.project import Layout
+
 STAGE2_MANIFEST_SUFFIX = ".stage2.manifest.json"
 
 
@@ -25,6 +27,7 @@ class Stage2Dataset:
     product_tag: str
     prefix: str
     stage2_directory: Path
+    calibration_mode: str
     manifest_json: Path
     spectrum_csv: Path
     metadata_json: Path
@@ -122,7 +125,9 @@ def _expected_product_family(metadata: dict) -> str:
     raise ValueError(f"Unsupported or missing Stage 2 mode: {metadata.get('mode')!r}")
 
 
-def _dataset_from_manifest(project_root: Path, manifest_path: Path) -> Stage2Dataset:
+def _dataset_from_manifest(
+    project_root: Path, manifest_path: Path, calibration_mode: str = "full-band"
+) -> Stage2Dataset:
     stage2_directory = manifest_path.parent.resolve()
     manifest = _load_json_object(manifest_path, "Stage 2 manifest")
 
@@ -181,8 +186,9 @@ def _dataset_from_manifest(project_root: Path, manifest_path: Path) -> Stage2Dat
             f"expected {product_family!r}."
         )
 
+    layout = Layout.at(project_root)
     possible_model_json = (
-        project_root / "stage1" / observation_prefix / f"{observation_prefix}.model.json"
+        layout.stage_dir(1, calibration_mode) / observation_prefix / f"{observation_prefix}.model.json"
     ).resolve()
 
     return Stage2Dataset(
@@ -193,37 +199,53 @@ def _dataset_from_manifest(project_root: Path, manifest_path: Path) -> Stage2Dat
         product_tag=product_tag,
         prefix=product_prefix,
         stage2_directory=stage2_directory,
+        calibration_mode=calibration_mode,
         manifest_json=manifest_path.resolve(),
         spectrum_csv=spectrum_csv,
         metadata_json=metadata_json,
         model_json=possible_model_json if possible_model_json.is_file() else None,
         output_directory=(
-            project_root / "stage3" / observation_prefix / product_tag
+            layout.stage_dir(3, calibration_mode) / observation_prefix / product_tag
         ).resolve(),
     )
+
+
+def _stage2_tree(project_root: Path, calibration_mode: str) -> Path:
+    """``stage2/<calibration_mode>``, with an error that names the trees that do exist."""
+    layout = Layout.at(project_root)
+    stage2_root = layout.stage_dir(2, calibration_mode)
+    if not stage2_root.is_dir():
+        present = layout.modes_present(2)
+        hint = (
+            f"; Stage 2 output exists for mode(s) {', '.join(present)} (set stage1.calibration_mode "
+            f"or pass --calibration-mode)" if present else ""
+        )
+        raise FileNotFoundError(
+            f"Stage 2 directory not found for calibration mode {calibration_mode}: {stage2_root}{hint}"
+        )
+    return stage2_root
 
 
 def discover_stage2_datasets(
     project_root: Path,
     requested_epochs: set[str] | None = None,
     requested_products: set[str] | None = None,
+    calibration_mode: str = "full-band",
 ) -> list[Stage2Dataset]:
-    """Discover manifest-defined Stage 2 products.
+    """Discover manifest-defined Stage 2 products under ``stage2/<calibration_mode>/``.
 
     When no product is requested, discovery is allowed only if the matching
     manifests contain one unique product tag. This prevents an accidental mix
     of channel and IF analyses.
     """
     project_root = project_root.resolve()
-    stage2_root = project_root / "stage2"
-    if not stage2_root.is_dir():
-        raise FileNotFoundError(f"Stage 2 directory not found: {stage2_root}")
+    stage2_root = _stage2_tree(project_root, calibration_mode)
 
     candidates: list[Stage2Dataset] = []
     errors: list[str] = []
     for manifest_path in sorted(stage2_root.glob(f"*/*{STAGE2_MANIFEST_SUFFIX}")):
         try:
-            dataset = _dataset_from_manifest(project_root, manifest_path)
+            dataset = _dataset_from_manifest(project_root, manifest_path, calibration_mode)
         except Exception as exc:
             errors.append(f"{manifest_path}: {exc}")
             continue
@@ -286,18 +308,17 @@ def discover_stage2_datasets(
 def available_stage2_products(
     project_root: Path,
     requested_epochs: set[str] | None = None,
+    calibration_mode: str = "full-band",
 ) -> dict[str, list[str]]:
-    """Return available product tags keyed by ``source.epoch``."""
+    """Return available product tags keyed by ``source.epoch`` for one calibration mode."""
     project_root = project_root.resolve()
-    stage2_root = project_root / "stage2"
-    if not stage2_root.is_dir():
-        raise FileNotFoundError(f"Stage 2 directory not found: {stage2_root}")
+    stage2_root = _stage2_tree(project_root, calibration_mode)
 
     products: dict[str, list[str]] = defaultdict(list)
     first_error: str | None = None
     for manifest_path in sorted(stage2_root.glob(f"*/*{STAGE2_MANIFEST_SUFFIX}")):
         try:
-            dataset = _dataset_from_manifest(project_root, manifest_path)
+            dataset = _dataset_from_manifest(project_root, manifest_path, calibration_mode)
         except Exception as exc:
             # Old pre-v1.2 manifests may coexist with the new product-tagged
             # files. Ignore them when valid v1.2 products are also present.

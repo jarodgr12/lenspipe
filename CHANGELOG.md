@@ -3,6 +3,47 @@
 Each entry says whether existing products need re-running. The `lenspipe`
 version that made a product is recorded in its metadata JSON.
 
+## 2.1.0 — 2026-10-13
+
+**Re-run needed:** Stage 1 for epochs you want on the common grid or in
+per-IF mode; otherwise no. Existing outputs are kept: the first time any
+stage or the console opens a project it moves `stage1/<prefix>`,
+`stage2/<prefix>`, `stage3/<prefix>` and `stage3/combined` into
+`.../full-band/`, rename only.
+
+- Added: Stage 1 calibration modes, following the collaborator's Stage 1
+  v1.2.2 script. `stage1.calibration_mode = "per-if"` runs the self-cal
+  schedule once per IF: each IF selects its inner channels
+  (`[stage1.per_if]`: `if_count`, `channels_per_if`, `edge_channels`),
+  loads the master model with the spectral-index column fixed at 0, runs
+  the schedule with amplitude self-cal steps issued as `gscale`, and saves
+  that IF's model as `<prefix>.ifNNN.gmod` (labelled like the final model);
+  then the full band is selected, the original master model reloaded and
+  the final model fitted once without further self-cal. `full-band` is the
+  previous behaviour. CLI `--calibration-mode`, `--if-count`,
+  `--channels-per-if`, `--edge-channels`; Run page: a "Calibration mode"
+  select with the three per-IF fields beside it.
+- Added: a second Stage 1 imaging pass. The calibration pass now writes
+  `*.native.cln.fits` / `*.native.resid.fits` on DifMAP's own cell; Stage 1
+  then re-images every calibrated epoch of the mode on one grid
+  (`stage1.cell_mas`, or the finest native cell) into `*.cln.fits` /
+  `*.resid.fits`, so the Stage 3 map figures compare like with like.
+  `--reimage-only` (and a Run page switch) repeats just that pass; adding an
+  epoch with a finer native cell re-images the older ones. Metadata records
+  `native_image_geometry`, `common_image_geometry`, both residual RMS
+  values and `fits_image_size`.
+- Changed: layout. Every stage writes under `stage<N>/<mode>/`, so full-band
+  and per-IF results coexist; Stage 2 and Stage 3 read the configured
+  mode's tree (`--calibration-mode` for one run; the Run page passes it to
+  the whole chain). Inventory, the Project and Results pages, `lenspipe
+  inventory` and provenance checks show the mode.
+- Changed: the calibration pass writes `cal.uvf` and the model before
+  imaging, as the v1.2.2 script does.
+- Removed: `stage1.selfcal_per_if` from 2.0.25 (two days old). A TOML that
+  still has it is read as `calibration_mode = "per-if"`.
+- Tests: the v1.2.2 script is in `legacy/` and a golden test checks that
+  per-IF mode reproduces its models, per-IF models and calibrated data.
+
 ## 2.0.25 — 2026-10-13
 
 **Re-run needed:** no, unless you turn the new option on.

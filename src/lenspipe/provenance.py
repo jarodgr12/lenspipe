@@ -70,6 +70,7 @@ class Check:
     status: str
     reasons: list[str] = field(default_factory=list)
     metadata_path: str | None = None
+    calibration_mode: str | None = None  # which stage<N>/<mode> tree the product lives in
 
     @property
     def key(self) -> str:
@@ -128,34 +129,36 @@ def verify_project(
     """
     layout = Layout.at(project_root)
     checks: list[Check] = []
-    epoch_status: dict[tuple[str, str], str] = {}
+    epoch_status: dict[tuple[str, str, str], str] = {}
 
-    for meta in sorted(layout.stage1.glob("*/*.stage1.metadata.json")) if layout.stage1.is_dir() else []:
-        payload = _load(meta)
-        if payload is None:
-            continue
-        source, epoch = str(payload.get("source", "")), str(payload.get("epoch", ""))
-        status, reasons = _check_provenance(payload, force_hash, hash_on_change)
-        checks.append(Check(1, source, epoch, None, status, reasons, str(meta)))
-        epoch_status[(source, epoch)] = status
+    for mode in layout.modes_present(1):
+        for meta in sorted(layout.stage_dir(1, mode).glob("*/*.stage1.metadata.json")):
+            payload = _load(meta)
+            if payload is None:
+                continue
+            source, epoch = str(payload.get("source", "")), str(payload.get("epoch", ""))
+            status, reasons = _check_provenance(payload, force_hash, hash_on_change)
+            checks.append(Check(1, source, epoch, None, status, reasons, str(meta), mode))
+            epoch_status[(mode, source, epoch)] = status
 
-    product_status: dict[tuple[str, str, str], str] = {}
-    for meta in sorted(layout.stage2.glob("*/*.stage2.metadata.json")) if layout.stage2.is_dir() else []:
-        payload = _load(meta)
-        if payload is None:
-            continue
-        source, epoch = str(payload.get("source", "")), str(payload.get("epoch", ""))
-        prefix = f"{source}.{epoch}."
-        product = meta.name[len(prefix) : -len(".stage2.metadata.json")]
-        status, reasons = _check_provenance(payload, force_hash, hash_on_change)
-        upstream = epoch_status.get((source, epoch))
-        if status == FRESH and upstream in {STALE, UPSTREAM, MISSING}:
-            status, reasons = UPSTREAM, [f"stage 1 for {source}.{epoch} is {upstream}"]
-        checks.append(Check(2, source, epoch, product, status, reasons, str(meta)))
-        product_status[(source, epoch, product)] = status
+    product_status: dict[tuple[str, str, str, str], str] = {}
+    for mode in layout.modes_present(2):
+        for meta in sorted(layout.stage_dir(2, mode).glob("*/*.stage2.metadata.json")):
+            payload = _load(meta)
+            if payload is None:
+                continue
+            source, epoch = str(payload.get("source", "")), str(payload.get("epoch", ""))
+            prefix = f"{source}.{epoch}."
+            product = meta.name[len(prefix) : -len(".stage2.metadata.json")]
+            status, reasons = _check_provenance(payload, force_hash, hash_on_change)
+            upstream = epoch_status.get((mode, source, epoch))
+            if status == FRESH and upstream in {STALE, UPSTREAM, MISSING}:
+                status, reasons = UPSTREAM, [f"stage 1 for {source}.{epoch} is {upstream}"]
+            checks.append(Check(2, source, epoch, product, status, reasons, str(meta), mode))
+            product_status[(mode, source, epoch, product)] = status
 
-    if layout.stage3.is_dir():
-        for meta in sorted(layout.stage3.rglob("*.stage3.metadata.json")):
+    for mode in layout.modes_present(3):
+        for meta in sorted(layout.stage_dir(3, mode).rglob("*.stage3.metadata.json")):
             payload = _load(meta)
             if payload is None:
                 continue
@@ -168,15 +171,15 @@ def verify_project(
                 epochs = [str(e) for e in payload.get("epochs", [])]
                 upstream = [
                     e for e in epochs
-                    if product_status.get((source, e, str(product))) in {STALE, UPSTREAM, MISSING}
+                    if product_status.get((mode, source, e, str(product))) in {STALE, UPSTREAM, MISSING}
                 ]
                 if status == FRESH and upstream:
                     status, reasons = UPSTREAM, [f"stage 2 stale for epoch(s) {', '.join(upstream)}"]
-                checks.append(Check(3, source, "combined", label, status, reasons, str(meta)))
+                checks.append(Check(3, source, "combined", label, status, reasons, str(meta), mode))
             else:
                 epoch = str(payload.get("epoch", ""))
-                upstream = product_status.get((source, epoch, str(product)))
+                upstream = product_status.get((mode, source, epoch, str(product)))
                 if status == FRESH and upstream in {STALE, UPSTREAM, MISSING}:
                     status, reasons = UPSTREAM, [f"stage 2 {product} for {source}.{epoch} is {upstream}"]
-                checks.append(Check(3, source, epoch, label, status, reasons, str(meta)))
+                checks.append(Check(3, source, epoch, label, status, reasons, str(meta), mode))
     return checks

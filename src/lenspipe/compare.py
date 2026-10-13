@@ -123,7 +123,12 @@ def compare_projects(
     rtol: float = 1e-10,
     atol: float = 1e-14,
 ) -> list[Difference]:
-    """Compare stage 1, 2 and 3 products that exist on the left with their right counterparts."""
+    """Compare stage 1, 2 and 3 products that exist on the left with their right counterparts.
+
+    Either project may use the per-mode trees (``stage<N>/<mode>/...``, 2.1 on) or the
+    flat pre-2.1 layout (the legacy scripts). A flat tree is compared with the other
+    side's ``full-band`` tree; per-mode trees are compared mode by mode.
+    """
     left, right = Layout.at(left_root), Layout.at(right_root)
     diffs: list[Difference] = []
     stages = stages or {1, 2, 3}
@@ -131,13 +136,15 @@ def compare_projects(
     def wanted(epoch: str) -> bool:
         return not epochs or epoch in epochs
 
-    if 1 in stages and left.stage1.is_dir():
-        for epoch_dir in sorted(p for p in left.stage1.iterdir() if p.is_dir()):
+    for stage1_left, stage1_right in _paired_trees(left, right, 1):
+        if 1 not in stages or not stage1_left.is_dir():
+            continue
+        for epoch_dir in sorted(p for p in stage1_left.iterdir() if p.is_dir()):
             prefix = epoch_dir.name
             epoch = prefix.rsplit(".", 1)[-1]
             if not wanted(epoch):
                 continue
-            other = right.stage1 / prefix
+            other = stage1_right / prefix
             diffs.append(_compare_files(1, f"{prefix}.gmod", epoch_dir / f"{prefix}.gmod", other / f"{prefix}.gmod", True))
             diffs.append(_compare_files(1, f"{prefix}.cal.uvf", epoch_dir / f"{prefix}.cal.uvf", other / f"{prefix}.cal.uvf", False))
             diffs.append(
@@ -156,21 +163,25 @@ def compare_projects(
                     Difference(1, f"{prefix} residual RMS", "equivalent" if same else "different", f"{a} vs {b}")
                 )
 
-    if 2 in stages and left.stage2.is_dir():
-        for csv in sorted(left.stage2.glob("*/*.spectrum.csv")):
+    for stage2_left, stage2_right in _paired_trees(left, right, 2):
+        if 2 not in stages or not stage2_left.is_dir():
+            continue
+        for csv in sorted(stage2_left.glob("*/*.spectrum.csv")):
             prefix = csv.parent.name
             epoch = prefix.rsplit(".", 1)[-1]
             product = csv.name[len(prefix) + 1 : -len(".spectrum.csv")]
             if not wanted(epoch) or (products and product not in products):
                 continue
-            other_dir = right.stage2 / prefix
+            other_dir = stage2_right / prefix
             diffs.append(_compare_csv(2, csv.name, csv, other_dir / csv.name, rtol, atol))
             meta = f"{prefix}.{product}.stage2.metadata.json"
             diffs.append(_compare_json_subset(2, meta, csv.parent / meta, other_dir / meta, STAGE2_META_KEYS))
 
-    if 3 in stages and left.stage3.is_dir():
-        for csv in sorted(left.stage3.rglob("*.csv")):
-            relative = csv.relative_to(left.stage3)
+    for stage3_left, stage3_right in _paired_trees(left, right, 3):
+        if 3 not in stages or not stage3_left.is_dir():
+            continue
+        for csv in sorted(stage3_left.rglob("*.csv")):
+            relative = csv.relative_to(stage3_left)
             parts = relative.parts
             if parts[0] != "combined":
                 epoch = parts[0].rsplit(".", 1)[-1]
@@ -180,5 +191,18 @@ def compare_projects(
                     continue
             elif products and len(parts) > 2 and parts[2] not in products:
                 continue
-            diffs.append(_compare_csv(3, str(relative), csv, right.stage3 / relative, rtol, atol))
+            diffs.append(_compare_csv(3, str(relative), csv, stage3_right / relative, rtol, atol))
     return diffs
+
+
+def _paired_trees(left: Layout, right: Layout, stage: int) -> list[tuple[Path, Path]]:
+    """(left tree, right tree) pairs for one stage, one per calibration mode on the left.
+
+    A side without any ``<mode>`` directory is the flat legacy layout and stands
+    for ``full-band``.
+    """
+    def tree(layout: Layout, mode: str) -> Path:
+        return layout.stage_dir(stage, mode) if layout.modes_present(stage) else layout.root / f"stage{stage}"
+
+    left_modes = left.modes_present(stage) or ["full-band"]
+    return [(tree(left, mode), tree(right, mode)) for mode in left_modes]

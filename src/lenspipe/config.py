@@ -97,19 +97,20 @@ class SelfcalStep(_Model):
             return step
         return value
 
-    def difmap_commands(self) -> list[str]:
+    def difmap_commands(self, per_if: bool = False) -> list[str]:
         """The DifMAP lines this step issues, in order.
 
         Always ``selfcal`` then ``modelfit``; with ``gscale`` on, ``gscale`` and a
         second ``modelfit`` follow, so the model is refitted on the amplitude-corrected
-        data before the next step.
+        data before the next step. In per-IF mode an amplitude self-cal step is
+        issued as a bare ``gscale`` (one normalised amplitude correction per
+        telescope) instead, as the legacy per-IF script does: a timed amplitude
+        solve on a single IF is poorly constrained.
         """
         float_text = "true" if self.float_amplitude else "false"
         amplitude_text = "true" if self.amplitude else "false"
-        lines = [
-            f"selfcal {amplitude_text},{float_text},{self.solint_min:g}",
-            f"modelfit {self.modelfit_iterations}",
-        ]
+        calibrate = "gscale" if (per_if and self.amplitude) else f"selfcal {amplitude_text},{float_text},{self.solint_min:g}"
+        lines = [calibrate, f"modelfit {self.modelfit_iterations}"]
         if self.gscale:
             lines += [f"gscale {float_text}", f"modelfit {self.modelfit_iterations}"]
         return lines
@@ -126,6 +127,36 @@ class FinalIfSelfcal(_Model):
         if 2 * self.edge_channels >= self.channels_per_if:
             raise ValueError("Twice edge_channels must be smaller than channels_per_if.")
         return self
+
+
+CalibrationMode = Literal["full-band", "per-if"]
+
+
+class PerIfConfig(_Model):
+    """Channel layout used by the per-IF calibration mode: which channels each IF's solve selects."""
+
+    if_count: int = Field(48, ge=1, description="Number of IFs (spectral windows) in the UV-FITS file.")
+    channels_per_if: int = Field(64, ge=1, description="Channels per IF.")
+    edge_channels: int = Field(
+        0, ge=0, description="Channels dropped from each end of every IF before its self-cal and fit."
+    )
+
+    @model_validator(mode="after")
+    def _check_edges(self) -> PerIfConfig:
+        if 2 * self.edge_channels >= self.channels_per_if:
+            raise ValueError("Twice edge_channels must be smaller than channels_per_if.")
+        return self
+
+    @property
+    def total_channels(self) -> int:
+        return self.if_count * self.channels_per_if
+
+    def channel_ranges(self) -> list[tuple[int, int]]:
+        """1-based inclusive DifMAP channel range of each IF's inner channels."""
+        return [
+            ((n - 1) * self.channels_per_if + self.edge_channels + 1, n * self.channels_per_if - self.edge_channels)
+            for n in range(1, self.if_count + 1)
+        ]
 
 
 def _legacy_selfcal_schedule() -> list[SelfcalStep]:
@@ -145,17 +176,29 @@ class Stage1Config(_Model):
     unflag: bool = Field(True, description="Run 'unflag *' after observe.")
     selfcal: list[SelfcalStep] = Field(default_factory=_legacy_selfcal_schedule)
     final_if_selfcal: FinalIfSelfcal = Field(default_factory=FinalIfSelfcal)
-    selfcal_per_if: bool = Field(
-        False,
+    calibration_mode: CalibrationMode = Field(
+        "full-band",
         description=(
-            "Run the selfcal schedule once per IF instead of once on the full band: for each IF "
-            "select its inner channels, re-read the starting model and run every step; then "
-            "select the full band and fit the final model once with the last step's iterations. "
-            "The IF layout (if_count, channels_per_if, edge_channels) is taken from "
-            "[stage1.final_if_selfcal], which need not itself be enabled."
+            "full-band: select the whole band and run the selfcal schedule once against the master "
+            "model. per-if: for each IF select its inner channels ([stage1.per_if]), load the master "
+            "model with its spectral-index column fixed at 0, run the schedule with amplitude self-cal "
+            "steps replaced by gscale, and save that IF's model; then select the full band, reload the "
+            "master model and fit the final model once without further self-cal. Each mode writes its "
+            "own tree, stage1/<mode>/, which Stage 2 and Stage 3 follow."
         ),
     )
+    per_if: PerIfConfig = Field(default_factory=PerIfConfig)
     input_pattern: str = "*.uvfits"
+
+    @model_validator(mode="before")
+    @classmethod
+    def _retire_selfcal_per_if(cls, value: Any) -> Any:
+        # 2.0.25 shipped a boolean switch; it became calibration_mode in 2.1.
+        if isinstance(value, dict) and "selfcal_per_if" in value:
+            value = dict(value)
+            flag = value.pop("selfcal_per_if")
+            value.setdefault("calibration_mode", "per-if" if flag else "full-band")
+        return value
 
     @field_validator("selfcal")
     @classmethod
@@ -487,10 +530,17 @@ selfcal = [
   [true,  true,  3600, 50],
   [false, false, 0.5,  50],
 ]
-selfcal_per_if = false              # true: run the schedule above once per IF (layout from
-                                    # [stage1.final_if_selfcal]), then fit the final model on the full band
+calibration_mode = "full-band"      # "full-band": the schedule above on the whole band
+                                    # "per-if": the schedule per IF (amplitude steps become gscale,
+                                    # spectral index fixed at 0), then one full-band fit; see [stage1.per_if]
+# cell_mas = 0.1                    # common imaging cell for the second pass; default = finest native cell
 
-[stage1.final_if_selfcal]
+[stage1.per_if]                     # channel layout used by calibration_mode = "per-if"
+if_count = 48
+channels_per_if = 64
+edge_channels = 0                   # dropped from each end of every IF before its solve
+
+[stage1.final_if_selfcal]           # optional extra pass after the schedule (full-band mode legacy block)
 enabled = false
 if_count = 48
 channels_per_if = 64

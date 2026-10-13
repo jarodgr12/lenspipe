@@ -32,7 +32,7 @@ def combined(project: Path, fake_difmap: Path) -> Path:
     run_stage1(project, cfg, reporter=quiet, workers=1)
     run_stage2(project, cfg, reporter=quiet, workers=1)
     assert run_stage3(project, cfg, reporter=quiet, workers=1).ok
-    return project / "stage3" / "combined" / "MG0414" / "channel"
+    return project / "stage3" / "full-band" / "combined" / "MG0414" / "channel"
 
 
 def test_normalised_reference_fluxes_table_plot_and_sigma(combined: Path) -> None:

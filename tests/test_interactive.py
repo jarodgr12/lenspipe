@@ -64,12 +64,12 @@ def stage3_project(project: Path, fake_difmap: Path) -> Path:
 
 
 def test_stage2_metadata_records_spectral_windows(stage3_project: Path) -> None:
-    meta = json.loads((stage3_project / "stage2" / "MG0414.A" / "MG0414.A.channel.stage2.metadata.json").read_text())
+    meta = json.loads((stage3_project / "stage2" / "full-band" / "MG0414.A" / "MG0414.A.channel.stage2.metadata.json").read_text())
     assert meta["spectral_windows"] == {"n_spw": 2, "channels_per_spw": 4}
 
 
 def test_per_visit_figures_have_hover_with_spw_and_channel(stage3_project: Path) -> None:
-    visit = load_visit(stage3_project / "stage3" / "MG0414.A" / "channel")
+    visit = load_visit(stage3_project / "stage3" / "full-band" / "MG0414.A" / "channel")
     assert visit.layout.source == "stage2 metadata" and visit.layout.channels_per_spw == 4
     assert visit.groups == ["A1", "A2", "B", "C"] and visit.reference_group == "A1"
 
@@ -93,7 +93,7 @@ def test_per_visit_figures_have_hover_with_spw_and_channel(stage3_project: Path)
 
 
 def test_combined_figures_cover_spectra_ratios_and_mjd_series(stage3_project: Path) -> None:
-    figures = combined_figures(stage3_project / "stage3" / "combined" / "MG0414" / "channel")
+    figures = combined_figures(stage3_project / "stage3" / "full-band" / "combined" / "MG0414" / "channel")
     assert set(figures) >= {
         "Average spectrum (all epochs)", "Average flux ratios (all epochs)",
         "Reference-frequency flux vs MJD", "Weighted flux ratios vs MJD", "R_cusp vs MJD",
@@ -107,8 +107,8 @@ def test_combined_figures_cover_spectra_ratios_and_mjd_series(stage3_project: Pa
 def test_results_page_helper_dispatches(stage3_project: Path) -> None:
     from lenspipe.ui.pages_results import _interactive_figures
 
-    per_visit = _interactive_figures(stage3_project / "stage3" / "MG0414.B" / "channel")
+    per_visit = _interactive_figures(stage3_project / "stage3" / "full-band" / "MG0414.B" / "channel")
     assert set(per_visit) == {"Spectra", "Flux ratios"}
-    combined = _interactive_figures(stage3_project / "stage3" / "combined" / "MG0414" / "channel")
+    combined = _interactive_figures(stage3_project / "stage3" / "full-band" / "combined" / "MG0414" / "channel")
     assert "R_cusp vs MJD" in combined
-    assert _interactive_figures(stage3_project / "stage2" / "MG0414.A") == {}
+    assert _interactive_figures(stage3_project / "stage2" / "full-band" / "MG0414.A") == {}

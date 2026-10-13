@@ -108,10 +108,10 @@ def test_stage2_resumes_after_a_crashed_shard(project: Path, fake_difmap: Path, 
     assert not work_dir.exists()
     for epoch in ("A", "B"):
         name = f"MG0414.{epoch}.channel"
-        ours = (project / "stage2" / f"MG0414.{epoch}" / f"{name}.spectrum.csv").read_text()
-        theirs = (clean_root / "stage2" / f"MG0414.{epoch}" / f"{name}.spectrum.csv").read_text()
+        ours = (project / "stage2" / "full-band" / f"MG0414.{epoch}" / f"{name}.spectrum.csv").read_text()
+        theirs = (clean_root / "stage2" / "full-band" / f"MG0414.{epoch}" / f"{name}.spectrum.csv").read_text()
         assert ours == theirs
-        meta = json.loads((project / "stage2" / f"MG0414.{epoch}" / f"{name}.stage2.metadata.json").read_text())
+        meta = json.loads((project / "stage2" / "full-band" / f"MG0414.{epoch}" / f"{name}.stage2.metadata.json").read_text())
         assert meta["execution"]["resumed"] is True
         assert meta["execution"]["shards"] == 4
         assert meta["execution"]["shard_decision"]["requested"] == 4
@@ -142,7 +142,7 @@ def test_resume_after_parse_failure_reuses_finished_difmap_work(project: Path, f
     resumed = run_stage2(project, _config(fake_difmap, mode="channel", shards=2), reporter=quiet, workers=1, epochs={"A"}, resume=True)
     assert resumed[0].ok, resumed[0].message
     csv = failed[0].paths.spectrum_csv
-    assert csv.read_text() == (clean_root / "stage2" / "MG0414.A" / "MG0414.A.channel.spectrum.csv").read_text()
+    assert csv.read_text() == (clean_root / "stage2" / "full-band" / "MG0414.A" / "MG0414.A.channel.spectrum.csv").read_text()
     meta = json.loads(failed[0].paths.metadata_file.read_text())
     assert meta["execution"]["resumed"] is True
     assert not work_dir.exists()
@@ -178,9 +178,9 @@ def test_stage2_survives_stderr_warnings_mid_line(project: Path, fake_difmap: Pa
     assert all(r.ok for r in results), [r.message for r in results]
     for epoch in ("A", "B"):
         name = f"MG0414.{epoch}.channel"
-        ours = (project / "stage2" / f"MG0414.{epoch}" / f"{name}.spectrum.csv").read_text()
-        assert ours == (clean_root / "stage2" / f"MG0414.{epoch}" / f"{name}.spectrum.csv").read_text()
-        log = (project / "stage2" / f"MG0414.{epoch}" / f"{name}.stage2.difmap.log").read_text()
+        ours = (project / "stage2" / "full-band" / f"MG0414.{epoch}" / f"{name}.spectrum.csv").read_text()
+        assert ours == (clean_root / "stage2" / "full-band" / f"MG0414.{epoch}" / f"{name}.spectrum.csv").read_text()
+        log = (project / "stage2" / "full-band" / f"MG0414.{epoch}" / f"{name}.stage2.difmap.log").read_text()
         assert "! [stderr] Your choice of large map pixels" in log
         assert "#Your choice" not in log
 
@@ -266,7 +266,7 @@ def test_verify_cli_exit_codes(project: Path, fake_difmap: Path, quiet) -> None:
 
 
 def test_legacy_products_without_provenance_are_unknown(project: Path) -> None:
-    stage1_dir = project / "stage1" / "MG0414.A"
+    stage1_dir = project / "stage1" / "full-band" / "MG0414.A"
     stage1_dir.mkdir(parents=True)
     (stage1_dir / "MG0414.A.stage1.metadata.json").write_text(
         json.dumps({"stage": 1, "source": "MG0414", "epoch": "A", "version": "1.1.0"})

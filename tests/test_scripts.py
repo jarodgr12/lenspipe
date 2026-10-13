@@ -7,7 +7,12 @@ from pathlib import Path
 import pytest
 
 from lenspipe.config import LenspipeConfig, Stage1Config, Stage2Config
-from lenspipe.difmap.scripts import fit_model_path, stage1_commands, stage2_commands
+from lenspipe.difmap.scripts import (
+    fit_model_path,
+    imaging_commands,
+    stage1_commands,
+    stage2_commands,
+)
 from lenspipe.stage1 import make_paths as make_stage1_paths
 from lenspipe.stage2 import make_fit_ranges, plan_shards, product_tag
 from lenspipe.stage2 import make_paths as make_stage2_paths
@@ -34,16 +39,24 @@ def test_stage1_commands_match_legacy(project: Path, legacy_stage1, final_if: bo
     ours, ranges = stage1_commands(
         uvfits=paths.uvfits,
         starting_model=paths.starting_model,
-        residual_image=paths.residual_image,
-        clean_image=paths.clean_image,
+        residual_image=paths.native_residual_image,  # the calibration pass writes the native maps
+        clean_image=paths.native_clean_image,
         calibrated_uvfits=paths.calibrated_uvfits,
         final_model=paths.final_model,
         config=config,
     )
 
-    # The only intended difference: the residual RMS is now printed with a tag.
-    expected = legacy_text.replace("print imstat(rms)", 'print "STAGE1_RMS", imstat(rms)')
-    assert ours == expected
+    # Intended differences from v1.1: the calibrated data and model are written before
+    # imaging (as in legacy v1.2.2), the maps of this pass are the *native* ones, and the
+    # residual RMS is printed with a tag. Everything up to the imaging is identical.
+    legacy_head = legacy_text.split("invert\n")[0]
+    ours_head, ours_tail = ours.split("wobs ", 1)
+    assert ours_head == legacy_head
+    assert ours_tail == (
+        f"{paths.calibrated_uvfits}\nwmodel {paths.final_model}\n\n"
+        f'invert\nprint "STAGE1_RMS", imstat(rms)\nwdmap {paths.native_residual_image}\n\n'
+        f"restore\nwmap {paths.native_clean_image}\n\nquit\n"
+    )
     assert ranges == legacy_ranges
 
 
@@ -60,8 +73,13 @@ def test_stage1_custom_schedule_renders_like_legacy_numbers() -> None:
         final_model=Path("/o/x.gmod"),
         config=config,
     )
-    assert "mapsize 1024,25\n" in text
+    assert "mapsize 1024\n" in text  # the calibration pass always images on DifMAP's native cell
     assert "selfcal false,false,10\nmodelfit 5\n\nselfcal true,false,0.25\nmodelfit 7\n" in text
+    imaging = imaging_commands(
+        calibrated_uvfits=Path("/o/x.cal.uvf"), model=Path("/o/x.gmod"), residual_image=Path("/o/r.fits"),
+        clean_image=Path("/o/c.fits"), cell_mas=25, config=config,
+    )
+    assert "mapsize 1024,25\n" in imaging and "rmodel /o/x.gmod\ninvert\n" in imaging
 
 
 @pytest.mark.parametrize(
@@ -95,7 +113,9 @@ def test_stage2_commands_match_legacy(
         config=config,
     )
     theirs = legacy_stage2.build_difmap_commands(legacy_dataset, fit_ranges, work, mode)
-    assert ours == theirs
+    # Identical apart from the Stage 2 model living under stage2/<mode>/ since 2.1.
+    assert ours == theirs.replace(str(legacy_dataset.stage2_model), str(paths.stage2_model))
+    assert str(paths.stage2_model).endswith(f"stage2/full-band/MG0414.A/{legacy_dataset.stage2_model.name}")
     assert fit_model_path(work, mode, 3) == legacy_stage2.fit_model_path(work, mode, 3)
 
 
@@ -103,11 +123,16 @@ def test_stage2_paths_match_legacy(project: Path, legacy_stage2) -> None:
     cal = project / "stage1" / "MG0414.A" / "MG0414.A.cal.uvf"
     ours = make_stage2_paths(project, cal, "channel")
     theirs = legacy_stage2.make_dataset(project, cal, "channel")
+    for name in ("stage1_model", "stage1_metadata"):
+        assert getattr(ours, name) == getattr(theirs, name), name
+    # 2.1 adds the calibration-mode level: stage2/<mode>/<prefix>/ instead of stage2/<prefix>/.
     for name in (
         "stage2_model", "spectrum_csv", "plot_file", "grouped_plot_file", "ratio_plot_file",
-        "log_file", "metadata_file", "manifest_file", "stage1_model", "stage1_metadata",
+        "log_file", "metadata_file", "manifest_file",
     ):
-        assert getattr(ours, name) == getattr(theirs, name), name
+        mine, legacy = getattr(ours, name), getattr(theirs, name)
+        assert mine.name == legacy.name and mine.parent.name == legacy.parent.name, name
+        assert mine.parent.parent.name == "full-band" and mine.parent.parent.parent == legacy.parent.parent, name
 
 
 def test_plan_shards_is_contiguous_and_complete() -> None:

@@ -14,8 +14,8 @@ from lenspipe.difmap.logparse import STAGE1_RMS_MARKER, STAGE2_RMS_MARKER
 
 __all__ = [
     "fit_model_path",
-    "if_channel_ranges",
     "if_selfcal_block",
+    "imaging_commands",
     "per_if_schedule_block",
     "mapsize_command",
     "stage1_commands",
@@ -35,7 +35,7 @@ def _bool(value: bool) -> str:
 def mapsize_command(pixels: int, cell_mas: float | None) -> str:
     if cell_mas is None:
         return f"mapsize {pixels}"
-    return f"mapsize {pixels},{_num(cell_mas)}"
+    return f"mapsize {pixels},{cell_mas:.12g}"
 
 
 def if_selfcal_block(
@@ -53,9 +53,13 @@ def if_selfcal_block(
     if 2 * edge_channels >= channels_per_if:
         raise ValueError("Twice edge_channels must be smaller than channels_per_if.")
 
-    ranges = if_channel_ranges(if_count, channels_per_if, edge_channels)
+    ranges: list[tuple[int, int]] = []
     blocks: list[str] = []
-    for if_number, (first_channel, last_channel) in enumerate(ranges, start=1):
+    for if_number in range(1, if_count + 1):
+        offset = (if_number - 1) * channels_per_if
+        first_channel = offset + edge_channels + 1
+        last_channel = offset + channels_per_if - edge_channels
+        ranges.append((first_channel, last_channel))
         blocks.extend(
             [
                 f"! IF {if_number}: channels {first_channel}-{last_channel}",
@@ -68,37 +72,38 @@ def if_selfcal_block(
     return "\n".join(blocks).rstrip(), ranges
 
 
-def if_channel_ranges(if_count: int, channels_per_if: int, edge_channels: int) -> list[tuple[int, int]]:
-    """1-based inclusive DifMAP channel range of each IF's inner channels."""
-    return [
-        ((n - 1) * channels_per_if + edge_channels + 1, n * channels_per_if - edge_channels)
-        for n in range(1, if_count + 1)
-    ]
+def per_if_schedule_block(
+    config: Stage1Config,
+    starting_model: Path,
+    fixed_index_model: Path,
+    per_if_models: list[Path],
+) -> str:
+    """The per-IF calibration mode (legacy Stage 1 v1.2.2 ``--calibration-mode per-if``).
 
-
-def per_if_schedule_block(step_lines: list[str], starting_model: Path, config: Stage1Config) -> str:
-    """The selfcal schedule repeated for every IF, then one full-band fit of the final model.
-
-    Each IF starts from the starting model again, so the IFs are independent of
-    one another and of their order. DifMAP applies the corrections solved on an
-    IF's inner channels to all channels of that IF. After the loop the full band
-    is selected and the model refitted once, so ``wmodel`` writes a model fitted
-    to all of the per-IF calibrated data rather than the last IF's model.
+    For each IF: select its inner channels, load the master model with the
+    spectral-index column fixed at 0, run the schedule with amplitude self-cal
+    steps replaced by ``gscale``, and save that IF's model. Every IF starts from
+    the same fixed-index model, so the per-IF models are independent starting
+    fits, not chained ones. Afterwards the full band is selected, the original
+    (free-index) master model reloaded and the final model fitted once with the
+    last step's iterations, with no further self-cal.
     """
-    layout = config.final_if_selfcal
+    layout = config.per_if
+    if len(per_if_models) != layout.if_count:
+        raise ValueError(f"expected {layout.if_count} per-IF model paths, got {len(per_if_models)}")
     lines: list[str] = []
-    for if_number, (first, last) in enumerate(
-        if_channel_ranges(layout.if_count, layout.channels_per_if, layout.edge_channels), start=1
-    ):
+    for if_number, (first, last) in enumerate(layout.channel_ranges(), start=1):
         lines.append(f"! IF {if_number}: channels {first}-{last}")
         lines.append(f"select i,{first},{last}")
-        lines.append(f"rmodel {starting_model}")
-        lines.extend(step_lines)
-    lines.append("! Full band: fit the final model to the per-IF calibrated data.")
-    lines.append("select i")
+        lines.append(f"rmodel {fixed_index_model}")
+        for step in config.selfcal:
+            lines.extend(step.difmap_commands(per_if=True))
+        lines.append(f"wmodel {per_if_models[if_number - 1]}")
+    lines.append("! Full band: fit the final model to the per-IF calibrated data (no further self-cal).")
+    lines.append(f"select i,1,{layout.total_channels}")
     lines.append(f"rmodel {starting_model}")
     lines.append(f"modelfit {config.selfcal[-1].modelfit_iterations}")
-    return "\n".join(lines).rstrip("\n")
+    return "\n".join(lines)
 
 
 def stage1_commands(
@@ -110,8 +115,16 @@ def stage1_commands(
     calibrated_uvfits: Path,
     final_model: Path,
     config: Stage1Config,
+    fixed_index_model: Path | None = None,
+    per_if_models: list[Path] | None = None,
 ) -> tuple[str, list[tuple[int, int]]]:
-    """Return the Stage 1 command script and the IF ranges used by the final loop."""
+    """Return the Stage 1 calibration script and the IF ranges used by the final-IF loop.
+
+    The maps written here are the *native* ones (``mapsize`` without a cell, so
+    DifMAP picks its own pixel size); ``imaging_commands`` makes the final maps on
+    the common grid afterwards. In per-IF mode ``fixed_index_model`` and
+    ``per_if_models`` are required.
+    """
     selected_ranges: list[tuple[int, int]] = []
     if config.final_if_selfcal.enabled:
         block, selected_ranges = if_selfcal_block(
@@ -130,28 +143,31 @@ select i
     else:
         final_if_section = ""
 
-    step_lines: list[str] = []
-    for step in config.selfcal:
-        step_lines.extend(step.difmap_commands())
-        step_lines.append("")
-    if config.selfcal_per_if:
-        selfcal_block = per_if_schedule_block(step_lines, starting_model, config)
+    if config.calibration_mode == "per-if":
+        if fixed_index_model is None or per_if_models is None:
+            raise ValueError("per-IF calibration needs fixed_index_model and per_if_models")
+        schedule_block = per_if_schedule_block(config, starting_model, fixed_index_model, per_if_models)
     else:
-        selfcal_block = "\n".join(step_lines).rstrip("\n")
+        step_lines: list[str] = []
+        for step in config.selfcal:
+            step_lines.extend(step.difmap_commands())
+            step_lines.append("")
+        schedule_block = f"rmodel {starting_model}\n\n" + "\n".join(step_lines).rstrip("\n")
 
     unflag_line = "unflag *\n" if config.unflag else ""
 
     commands = f"""observe {uvfits}
 select i
 {unflag_line}
-{mapsize_command(config.map_pixels, config.cell_mas)}
+{mapsize_command(config.map_pixels, None)}
 {config.weighting}
 
-rmodel {starting_model}
-
-{selfcal_block}
+{schedule_block}
 
 {final_if_section}
+wobs {calibrated_uvfits}
+wmodel {final_model}
+
 invert
 print "{STAGE1_RMS_MARKER}", imstat(rms)
 wdmap {residual_image}
@@ -159,12 +175,40 @@ wdmap {residual_image}
 restore
 wmap {clean_image}
 
-wobs {calibrated_uvfits}
-wmodel {final_model}
-
 quit
 """
     return commands, selected_ranges
+
+
+def imaging_commands(
+    *,
+    calibrated_uvfits: Path,
+    model: Path,
+    residual_image: Path,
+    clean_image: Path,
+    cell_mas: float,
+    config: Stage1Config,
+) -> str:
+    """Second imaging pass: the calibrated data and final model on a common pixel grid.
+
+    Every epoch is imaged with the same ``mapsize`` and cell so the maps share a
+    pixel grid; the restoring beams still differ per epoch and are recorded.
+    """
+    return f"""observe {calibrated_uvfits}
+select i
+{mapsize_command(config.map_pixels, cell_mas)}
+{config.weighting}
+
+rmodel {model}
+invert
+print "{STAGE1_RMS_MARKER}", imstat(rms)
+wdmap {residual_image}
+
+restore
+wmap {clean_image}
+
+quit
+"""
 
 
 def fit_model_path(work_directory: Path, mode: str, fit_index: int) -> Path:

@@ -10,9 +10,11 @@ a standard project directory:
 
 | Stage | Reads | Does | Writes |
 |------:|-------|------|--------|
-| 1 | `inputs/<source>.gmod`, `inputs/<source>.<epoch>.uvfits` | DifMAP self-calibration and model fitting | `stage1/<source>.<epoch>/` calibrated UV data, fitted model, clean and residual maps (both carry the restoring beam keywords) |
-| 2 | Stage 1 | Fits the frozen model per channel or per IF (flux only), sharded across DifMAP processes | `stage2/<source>.<epoch>/` spectrum CSV, quick-look PNGs |
-| 3 | Stage 2 (and the Stage 1 maps) | Power-law fits, flux ratios, R_cusp, clean/residual map cutouts, multi-visit summaries | `stage3/<source>.<epoch>/<product>/` and `stage3/combined/` |
+| 1 | `inputs/<source>.gmod`, `inputs/<source>.<epoch>.uvfits` | DifMAP self-calibration (full-band or per-IF) and model fitting, then a second imaging pass that puts every epoch on one pixel grid | `stage1/<mode>/<source>.<epoch>/` calibrated UV data, fitted model (plus one model per IF in per-IF mode), native maps `*.native.cln.fits` / `*.native.resid.fits`, and common-grid maps `*.cln.fits` / `*.resid.fits` (all carry the restoring beam keywords) |
+| 2 | Stage 1 | Fits the frozen model per channel or per IF (flux only), sharded across DifMAP processes | `stage2/<mode>/<source>.<epoch>/` spectrum CSV, quick-look PNGs |
+| 3 | Stage 2 (and the Stage 1 maps) | Power-law fits, flux ratios, R_cusp, clean/residual map cutouts, multi-visit summaries | `stage3/<mode>/<source>.<epoch>/<product>/` and `stage3/<mode>/combined/` |
+
+`<mode>` is the Stage 1 calibration mode, `full-band` or `per-if`; a project can hold both side by side and Stage 2 and Stage 3 read the tree of the configured mode (`stage1.calibration_mode`, or `--calibration-mode` for one run). Projects written before 2.1 are moved into `full-band/` the first time any stage or the console looks at them.
 
 A separate CASA module (`casa/`) calibrates raw EVLA data and exports the
 Stage 1 inputs.
@@ -141,7 +143,9 @@ Settings that did not exist before:
 | `stage3.figure_formats` | `["pdf","png"]` | Formats written for every Stage 3 figure; `["png"]` roughly halves plot time |
 | `stage2.plot_spectrum`, `stage2.plot_error_bars` | true, true | Quick-look PNGs after each epoch, and whether they carry residual-RMS error bars |
 | `stage1.selfcal` gscale | off | A fifth element `true` on a schedule entry, `[amplitude, float_amplitude, solint_min, modelfit_iterations, true]`, runs DifMAP's `gscale` (one overall amplitude correction per telescope, `dofloat` = float_amplitude) and another `modelfit` at the end of that step, after its selfcal and modelfit. On the Parameters page tick the step's `gscale` switch |
-| `stage1.selfcal_per_if` | `false` | Run the self-cal schedule once per IF instead of once on the full band: each IF selects its inner channels, re-reads the starting model and runs every step; then the full band is selected and the final model fitted once. IF layout from `[stage1.final_if_selfcal]` (which need not be enabled). CLI `--selfcal-per-if`; Run page switch "Self-cal schedule per IF" |
+| `stage1.calibration_mode` | `full-band` | `full-band` runs the self-cal schedule once on the whole band against the master model (the legacy v1.1 sequence). `per-if` (legacy v1.2.2) runs it once per IF: each IF selects its inner channels, loads the master model with the spectral-index column fixed at 0, runs the schedule with amplitude self-cal steps replaced by `gscale`, and saves `<prefix>.ifNNN.gmod`; then the full band is selected, the original master model reloaded and the final model fitted once with no further self-cal. The per-IF models are independent starting fits, not chained. CLI `--calibration-mode`; Run page select "Calibration mode" |
+| `stage1.per_if.if_count`, `channels_per_if`, `edge_channels` | 48, 64, 0 | Channel layout of the per-IF solves: IF *n* selects channels `(n-1)*channels_per_if + edge_channels + 1` to `n*channels_per_if - edge_channels` (1-based). CLI `--if-count`, `--channels-per-if`, `--edge-channels`; Run page fields next to the mode |
+| `stage1.cell_mas` | unset | Cell of the second imaging pass. Stage 1 first images each epoch on DifMAP's native cell (`*.native.*.fits`), then re-images every calibrated epoch of the mode on one grid: this cell, or the finest native cell among them. `lenspipe stage1 --reimage-only` repeats only that pass (also a Run page switch); the metadata records both geometries and both residual RMS values |
 | `stage2.unflag` | false | Run `unflag *` on the calibrated file before the channel fits. Off keeps the flags Stage 1 wrote (Stage 1 has its own `unflag`, on by default). Also `--unflag/--no-unflag` per run |
 | `stage3.plot_error_bars` | true | Error bars on every Stage 3 figure; off plots the points alone |
 | `project.difmap.stream` | `pipe` | `pty` makes DifMAP line-buffer so progress arrives per fit |

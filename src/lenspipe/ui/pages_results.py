@@ -40,18 +40,41 @@ class Target:
         return [p for p in candidates if self.prefix is None or p.name.startswith(self.prefix)]
 
 
+def split_epoch_key(epoch_key: str) -> tuple[str, str, str]:
+    """``'<mode>/<source>.<epoch>'`` -> ("epoch", mode, prefix); ``'combined:<mode>:<source>'`` -> ("combined", mode, source).
+
+    A key without a mode (pre-2.1 links such as ``MG0414.A`` or ``combined:MG0414``) is
+    read as ``full-band`` so old bookmarks still resolve.
+    """
+    if epoch_key.startswith("combined:"):
+        parts = epoch_key.split(":", 2)
+        if len(parts) == 3:
+            return "combined", parts[1], parts[2]
+        return "combined", "full-band", parts[1]
+    mode, sep, prefix = epoch_key.partition("/")
+    if not sep:
+        return "epoch", "full-band", epoch_key
+    return "epoch", mode, prefix
+
+
 def product_options(summary: dict[str, Any], epoch_key: str, stage: int) -> dict[str, str]:
     """Product choices for the selects; keys are stable identifiers, values labels."""
-    if epoch_key.startswith("combined:"):
-        source = epoch_key.split(":", 1)[1]
+    kind, mode, name = split_epoch_key(epoch_key)
+    if kind == "combined":
         return {
             (item["product"] or "?") + (f"/{item['analysis_tag']}" if item.get("analysis_tag") else ""): (
                 f"{item['product']}" + (f" / {item['analysis_tag']}" if item.get("analysis_tag") else "")
             )
             for item in summary["combined"]
-            if item["source"] == source
+            if item["source"] == name and (item.get("calibration_mode") or "full-band") == mode
         }
-    row = next((r for r in summary["epochs"] if f"{r['source']}.{r['epoch']}" == epoch_key), None)
+    row = next(
+        (
+            r for r in summary["epochs"]
+            if f"{r['source']}.{r['epoch']}" == name and (r.get("calibration_mode") or "full-band") == mode
+        ),
+        None,
+    )
     if row is None:
         return {}
     if stage == 2:
@@ -65,22 +88,24 @@ def product_options(summary: dict[str, Any], epoch_key: str, stage: int) -> dict
 
 
 def resolve_target(root: Path, epoch_key: str, stage: int, product_key: str) -> Target:
-    if epoch_key.startswith("combined:"):
-        source = epoch_key.split(":", 1)[1]
-        return Target(root / "stage3" / "combined" / source / Path(product_key))
+    kind, mode, name = split_epoch_key(epoch_key)
+    if kind == "combined":
+        return Target(root / "stage3" / mode / "combined" / name / Path(product_key))
     if stage == 2:
-        return Target(root / "stage2" / epoch_key, prefix=f"{epoch_key}.{product_key}.")
-    return Target(root / "stage3" / epoch_key / Path(product_key))
+        return Target(root / "stage2" / mode / name, prefix=f"{name}.{product_key}.")
+    return Target(root / "stage3" / mode / name / Path(product_key))
 
 
 def _epoch_options(summary: dict[str, Any]) -> dict[str, str]:
     options: dict[str, str] = {}
     for row in summary["epochs"]:
         if row["stage2"] or row["stage3"]:
-            key = f"{row['source']}.{row['epoch']}"
-            options[key] = key
+            mode = row.get("calibration_mode") or "full-band"
+            prefix = f"{row['source']}.{row['epoch']}"
+            options[f"{mode}/{prefix}"] = f"{prefix}  [{mode}]"
     for item in summary["combined"]:
-        options.setdefault(f"combined:{item['source']}", f"combined  {item['source']}")
+        mode = item.get("calibration_mode") or "full-band"
+        options.setdefault(f"combined:{mode}:{item['source']}", f"combined  {item['source']}  [{mode}]")
     return options
 
 
@@ -146,7 +171,7 @@ def results_page(epoch: str | None = None, stage: int = 2, product: str | None =
         def sync_products() -> None:
             summary = state["summary"] or {"epochs": [], "combined": []}
             key = epoch.value or ""
-            if key.startswith("combined:"):
+            if split_epoch_key(key)[0] == "combined":
                 stage.set_value(3)
                 stage.disable()
             else:
@@ -247,6 +272,10 @@ def results_page(epoch: str | None = None, stage: int = 2, product: str | None =
             options = _epoch_options(state["summary"])
             epoch.set_options(options)
             wanted_epoch = requested["epoch"]
+            if wanted_epoch and wanted_epoch not in options:
+                # Accept a key without a mode (older links): map it onto the full-band tree.
+                kind, mode, name = split_epoch_key(wanted_epoch)
+                wanted_epoch = f"combined:{mode}:{name}" if kind == "combined" else f"{mode}/{name}"
             if wanted_epoch in options:
                 epoch.set_value(wanted_epoch)
             elif epoch.value not in options:

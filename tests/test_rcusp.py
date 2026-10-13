@@ -77,7 +77,7 @@ def test_stage3_reports_why_rcusp_was_skipped(project: Path, fake_difmap: Path, 
     run_stage2(project, cfg, reporter=quiet, workers=1)
     assert run_stage3(project, cfg, reporter=quiet, workers=1).ok
 
-    combined = project / "stage3" / "combined" / "MG0414" / "channel"
+    combined = project / "stage3" / "full-band" / "combined" / "MG0414" / "channel"
     payload = json.loads(next(combined.glob("*.combined.stage3.metadata.json")).read_text())
     assert payload["rcusp_available"] is False
     assert payload["groups"] == ["A", "B", "C", "D"]
@@ -98,7 +98,7 @@ def test_stage3_rcusp_works_with_renamed_groups_once_configured(project: Path, f
     run_stage1(project, cfg, reporter=quiet, workers=1)
     run_stage2(project, cfg, reporter=quiet, workers=1)
     assert run_stage3(project, cfg, reporter=quiet, workers=1).ok
-    combined = project / "stage3" / "combined" / "MG0414" / "channel"
+    combined = project / "stage3" / "full-band" / "combined" / "MG0414" / "channel"
     payload = json.loads(next(combined.glob("*.combined.stage3.metadata.json")).read_text())
     assert payload["rcusp_available"] is True and payload["rcusp_reason"] is None
     assert (combined / "tables" / "MG0414.channel.rcusp_vs_mjd.csv").is_file()

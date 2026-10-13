@@ -146,7 +146,7 @@ def test_stage2_default_scratch_is_the_work_dir(project: Path, fake_difmap: Path
     real_run = stage2_module.run_difmap
     monkeypatch.setattr(stage2_module, "run_difmap", lambda *a, **k: (cwds.append(Path(k["cwd"])), real_run(*a, **k))[1])
     run_stage2(project, cfg, reporter=quiet, workers=1, epochs={"A"})
-    assert cwds and cwds[0] == project / "stage2" / "MG0414.A" / ".MG0414.A.channel.work"
+    assert cwds and cwds[0] == project / "stage2" / "full-band" / "MG0414.A" / ".MG0414.A.channel.work"
 
 
 def test_stage2_unflag_is_explicit_about_all_channels() -> None:

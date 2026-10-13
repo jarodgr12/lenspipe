@@ -109,7 +109,7 @@ def test_stage3_writes_a4_pages_per_map_and_all_epochs_grids(staged: Path, fake_
     quiet = Reporter(stream=io.StringIO())
     cfg = _config(fake_difmap, center="64.24,5.57", size_arcsec=[1.2, 0.9], cmap="magma", pmax=99.0, residual_pmax=97.0)
     assert run_stage3(staged, cfg, reporter=quiet, workers=1).ok
-    plots = staged / "stage3" / "MG0414.A" / "channel" / "plots"
+    plots = staged / "stage3" / "full-band" / "MG0414.A" / "channel" / "plots"
     clean, residual = plots / "MG0414.A.channel.image_clean.png", plots / "MG0414.A.channel.image_residual.png"
     assert clean.is_file() and residual.is_file()
     assert not (plots / "MG0414.A.channel.images.png").exists()  # the 2.0.14 side-by-side figure is gone
@@ -120,7 +120,7 @@ def test_stage3_writes_a4_pages_per_map_and_all_epochs_grids(staged: Path, fake_
     assert settings["size_arcsec"] == [1.2, 0.9] and settings["pmax"] == 99.0 and settings["residual_pmax"] == 97.0
     assert set(meta["images"]["files"]) == {"clean", "residual"}
 
-    combined = staged / "stage3" / "combined" / "MG0414" / "channel" / "plots"
+    combined = staged / "stage3" / "full-band" / "combined" / "MG0414" / "channel" / "plots"
     grid_clean = combined / "MG0414.channel.images_clean_all_epochs.png"
     grid_residual = combined / "MG0414.channel.images_residual_all_epochs.png"
     assert grid_clean.is_file() and grid_residual.is_file()
@@ -146,11 +146,11 @@ def test_stage3_map_figures_can_be_disabled_or_missing(staged: Path, fake_difmap
     assert run_stage3(staged, _config(fake_difmap, enabled=False), reporter=quiet, workers=1).ok
     assert not list((staged / "stage3").rglob("*.image*"))
 
-    (staged / "stage1" / "MG0414.B" / "MG0414.B.resid.fits").unlink()
+    (staged / "stage1" / "full-band" / "MG0414.B" / "MG0414.B.resid.fits").unlink()
     assert run_stage3(staged, _config(fake_difmap), reporter=quiet, workers=1, overwrite=True).ok
-    assert (staged / "stage3" / "MG0414.A" / "channel" / "plots" / "MG0414.A.channel.image_clean.png").is_file()
-    assert not list((staged / "stage3" / "MG0414.B" / "channel" / "plots").glob("*.image_*"))
-    combined = staged / "stage3" / "combined" / "MG0414" / "channel"
+    assert (staged / "stage3" / "full-band" / "MG0414.A" / "channel" / "plots" / "MG0414.A.channel.image_clean.png").is_file()
+    assert not list((staged / "stage3" / "full-band" / "MG0414.B" / "channel" / "plots").glob("*.image_*"))
+    combined = staged / "stage3" / "full-band" / "combined" / "MG0414" / "channel"
     cmeta = json.loads(next(combined.glob("*.combined.stage3.metadata.json")).read_text())
     assert cmeta["images"]["epochs"] == ["A"] and "B" in cmeta["images"]["reason"]
     assert "IMAGES SKIPPED: MG0414.B.channel" in capsys.readouterr().out
@@ -163,7 +163,7 @@ def test_stage3_cli_image_flags_reach_the_metadata(staged: Path, fake_difmap: Pa
         "--image-center", "64.24,5.57",
     ])
     assert result.exit_code == 0, result.output
-    meta = json.loads(next((staged / "stage3" / "MG0414.A" / "channel").glob("*.stage3.metadata.json")).read_text())
+    meta = json.loads(next((staged / "stage3" / "full-band" / "MG0414.A" / "channel").glob("*.stage3.metadata.json")).read_text())
     settings = meta["images"]["settings"]
     assert {k: settings[k] for k in ("enabled", "center", "size_arcsec", "cmap", "pmax", "residual_pmax", "vmin")} == {
         "enabled": True, "center": "64.24,5.57", "size_arcsec": [1.0, 1.0], "cmap": "plasma",
@@ -203,7 +203,7 @@ def test_all_epochs_pages_share_the_reference_visit_scale_and_are_transparent(st
     quiet = Reporter(stream=io.StringIO())
     cfg = _config(fake_difmap, reference_epoch="B")
     assert run_stage3(staged, cfg, reporter=quiet, workers=1).ok
-    combined = staged / "stage3" / "combined" / "MG0414" / "channel"
+    combined = staged / "stage3" / "full-band" / "combined" / "MG0414" / "channel"
     cmeta = json.loads(next(combined.glob("*.combined.stage3.metadata.json")).read_text())
     files = cmeta["images"]["files"]
     assert files["reference_epoch"] == "B"
@@ -214,7 +214,7 @@ def test_all_epochs_pages_share_the_reference_visit_scale_and_are_transparent(st
     assert "arcsec" in cmeta["images"]["settings"]["axes"]
 
     page = combined / "plots" / "MG0414.channel.images_clean_all_epochs.png"
-    visit_page = staged / "stage3" / "MG0414.A" / "channel" / "plots" / "MG0414.A.channel.image_clean.png"
+    visit_page = staged / "stage3" / "full-band" / "MG0414.A" / "channel" / "plots" / "MG0414.A.channel.image_clean.png"
     assert _alpha_at_corner(page) == 0  # transparent background
     assert _alpha_at_corner(visit_page) == 255  # per-visit pages stay opaque
 
@@ -231,7 +231,7 @@ def test_residual_without_beam_keywords_borrows_the_clean_beam(staged: Path, fak
     from lenspipe.stage3 import images as images_module
     from lenspipe.stage3 import plotting
 
-    residual = staged / "stage1" / "MG0414.B" / "MG0414.B.resid.fits"
+    residual = staged / "stage1" / "full-band" / "MG0414.B" / "MG0414.B.resid.fits"
     with fits.open(residual, mode="update") as hdul:
         for key in ("BMAJ", "BMIN", "BPA"):
             del hdul[0].header[key]

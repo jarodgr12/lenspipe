@@ -44,6 +44,7 @@ from lenspipe.project import (
     Layout,
     decide_shards,
     free_disk_bytes,
+    migrate_flat_layout,
     parse_epoch_filename,
     utc_now,
     write_json,
@@ -94,6 +95,7 @@ class Stage2Paths:
     calibrated_uvfits: Path
     source: str
     epoch: str
+    calibration_mode: str
     product_tag: str
     source_model: Path
     stage1_model: Path
@@ -152,18 +154,22 @@ def product_tag(config: Stage2Config) -> str:
     return f"if{config.channels_per_if}_edge{config.exclude_edge_channels}"
 
 
-def make_paths(project_root: Path, calibrated_uvfits: Path, tag: str) -> Stage2Paths:
+def make_paths(
+    project_root: Path, calibrated_uvfits: Path, tag: str, calibration_mode: str = "full-band"
+) -> Stage2Paths:
+    """Paths for one epoch; products go to ``stage2/<calibration_mode>/<source>.<epoch>/``."""
     source, epoch = parse_epoch_filename(calibrated_uvfits, ".cal.uvf")
     prefix = f"{source}.{epoch}"
     product_prefix = f"{prefix}.{tag}"
     layout = Layout.at(project_root)
     stage1_directory = calibrated_uvfits.parent
-    out = (layout.stage2 / prefix).resolve()
+    out = (layout.stage_dir(2, calibration_mode) / prefix).resolve()
     return Stage2Paths(
         project_root=layout.root,
         calibrated_uvfits=calibrated_uvfits.resolve(),
         source=source,
         epoch=epoch,
+        calibration_mode=calibration_mode,
         product_tag=tag,
         source_model=(layout.inputs / f"{source}.gmod").resolve(),
         stage1_model=(stage1_directory / f"{prefix}.gmod").resolve(),
@@ -179,10 +185,13 @@ def make_paths(project_root: Path, calibrated_uvfits: Path, tag: str) -> Stage2P
     )
 
 
-def discover_inputs(project_root: Path, pattern: str, epochs: set[str] | None) -> list[Path]:
+def discover_inputs(
+    project_root: Path, pattern: str, epochs: set[str] | None, calibration_mode: str = "full-band"
+) -> list[Path]:
+    """Calibrated UV-FITS files under ``stage1/<calibration_mode>/*/``."""
     layout = Layout.at(project_root)
     datasets: list[Path] = []
-    for path in sorted(layout.stage1.glob(f"*/{pattern}")):
+    for path in sorted(layout.stage_dir(1, calibration_mode).glob(f"*/{pattern}")):
         if not path.is_file():
             continue
         try:
@@ -463,6 +472,14 @@ def build_rows(
 # Metadata
 
 
+def _project_relative(path: Path, root: Path) -> str:
+    """Path relative to the project when it lives inside it, else the absolute path."""
+    try:
+        return str(path.resolve().relative_to(root.resolve()))
+    except ValueError:
+        return str(path)
+
+
 def _write_metadata(
     paths: Stage2Paths,
     config: LenspipeConfig,
@@ -509,6 +526,8 @@ def _write_metadata(
             "total_channels": total_channels,
             "spectral_windows": spw_layout,  # {"n_spw", "channels_per_spw"} from the UV-FITS header
             "n_fits": fit_count,
+            "calibration_mode": paths.calibration_mode,
+            "stage1_directory": _project_relative(paths.stage1_model.parent, paths.project_root),
             "stage1_model": paths.stage1_model.name,
             "stage1_metadata": paths.stage1_metadata.name,
             "stage1_version": stage1_metadata.get("stage1_version"),
@@ -1102,21 +1121,32 @@ def run_stage2(
 ) -> list[Stage2Result]:
     reporter = reporter or Reporter()
     layout = Layout.at(project_root)
-    if not layout.stage1.is_dir():
-        raise FileNotFoundError(f"Stage 1 directory not found: {layout.stage1}")
+    calibration_mode = config.stage1.calibration_mode
+    for note in migrate_flat_layout(layout.root):
+        reporter.log(f"[stage2] layout: {note}")
+    stage1_tree = layout.stage_dir(1, calibration_mode)
+    if not stage1_tree.is_dir():
+        present = layout.modes_present(1)
+        hint = (
+            f"; Stage 1 output exists for mode(s) {', '.join(present)} (set stage1.calibration_mode or "
+            f"pass --calibration-mode)" if present else "; run Stage 1 first"
+        )
+        raise FileNotFoundError(
+            f"Stage 1 directory not found for calibration mode {calibration_mode}: {stage1_tree}{hint}"
+        )
     if not layout.inputs.is_dir():
         raise FileNotFoundError(f"inputs directory not found: {layout.inputs}")
 
-    files = discover_inputs(layout.root, config.stage2.input_pattern, epochs)
+    files = discover_inputs(layout.root, config.stage2.input_pattern, epochs, calibration_mode)
     if not files:
         selection = f" for epoch(s) {sorted(epochs)}" if epochs else ""
-        raise FileNotFoundError(f"no calibrated datasets found{selection} under {layout.stage1}")
+        raise FileNotFoundError(f"no calibrated datasets found{selection} under {stage1_tree}")
 
     tag = product_tag(config.stage2)
     datasets: list[Stage2Paths] = []
     for path in files:
         try:
-            datasets.append(make_paths(layout.root, path, tag))
+            datasets.append(make_paths(layout.root, path, tag, calibration_mode))
         except ValueError as exc:
             reporter.warn(f"skipped {path.name}: {exc}")
 
