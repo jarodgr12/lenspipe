@@ -3,6 +3,20 @@
 Each entry says whether existing products need re-running. The `lenspipe`
 version that made a product is recorded in its metadata JSON.
 
+## 2.0.25 — 2026-10-13
+
+**Re-run needed:** no, unless you turn the new option on.
+
+- Added: `stage1.selfcal_per_if` (CLI `--selfcal-per-if`, Run page switch
+  "Self-cal schedule per IF"). Instead of running the self-cal schedule once
+  on the full band, Stage 1 runs it once per IF: each IF selects its inner
+  channels, re-reads the starting model and runs every step (selfcal,
+  modelfit, gscale where set), so the gains are solved IF by IF against a
+  model fitted to that IF. After the loop the full band is selected and the
+  final model fitted once, so the Stage 1 model is still a full-band fit to
+  the calibrated data. The IF layout comes from `[stage1.final_if_selfcal]`,
+  which can stay disabled. Progress counts one unit per step per IF.
+
 ## 2.0.24 — 2026-10-12
 
 **Re-run needed:** Stage 1, if a schedule uses gscale.

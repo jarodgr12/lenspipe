@@ -14,7 +14,9 @@ from lenspipe.difmap.logparse import STAGE1_RMS_MARKER, STAGE2_RMS_MARKER
 
 __all__ = [
     "fit_model_path",
+    "if_channel_ranges",
     "if_selfcal_block",
+    "per_if_schedule_block",
     "mapsize_command",
     "stage1_commands",
     "stage2_commands",
@@ -51,13 +53,9 @@ def if_selfcal_block(
     if 2 * edge_channels >= channels_per_if:
         raise ValueError("Twice edge_channels must be smaller than channels_per_if.")
 
-    ranges: list[tuple[int, int]] = []
+    ranges = if_channel_ranges(if_count, channels_per_if, edge_channels)
     blocks: list[str] = []
-    for if_number in range(1, if_count + 1):
-        offset = (if_number - 1) * channels_per_if
-        first_channel = offset + edge_channels + 1
-        last_channel = offset + channels_per_if - edge_channels
-        ranges.append((first_channel, last_channel))
+    for if_number, (first_channel, last_channel) in enumerate(ranges, start=1):
         blocks.extend(
             [
                 f"! IF {if_number}: channels {first_channel}-{last_channel}",
@@ -68,6 +66,39 @@ def if_selfcal_block(
             ]
         )
     return "\n".join(blocks).rstrip(), ranges
+
+
+def if_channel_ranges(if_count: int, channels_per_if: int, edge_channels: int) -> list[tuple[int, int]]:
+    """1-based inclusive DifMAP channel range of each IF's inner channels."""
+    return [
+        ((n - 1) * channels_per_if + edge_channels + 1, n * channels_per_if - edge_channels)
+        for n in range(1, if_count + 1)
+    ]
+
+
+def per_if_schedule_block(step_lines: list[str], starting_model: Path, config: Stage1Config) -> str:
+    """The selfcal schedule repeated for every IF, then one full-band fit of the final model.
+
+    Each IF starts from the starting model again, so the IFs are independent of
+    one another and of their order. DifMAP applies the corrections solved on an
+    IF's inner channels to all channels of that IF. After the loop the full band
+    is selected and the model refitted once, so ``wmodel`` writes a model fitted
+    to all of the per-IF calibrated data rather than the last IF's model.
+    """
+    layout = config.final_if_selfcal
+    lines: list[str] = []
+    for if_number, (first, last) in enumerate(
+        if_channel_ranges(layout.if_count, layout.channels_per_if, layout.edge_channels), start=1
+    ):
+        lines.append(f"! IF {if_number}: channels {first}-{last}")
+        lines.append(f"select i,{first},{last}")
+        lines.append(f"rmodel {starting_model}")
+        lines.extend(step_lines)
+    lines.append("! Full band: fit the final model to the per-IF calibrated data.")
+    lines.append("select i")
+    lines.append(f"rmodel {starting_model}")
+    lines.append(f"modelfit {config.selfcal[-1].modelfit_iterations}")
+    return "\n".join(lines).rstrip("\n")
 
 
 def stage1_commands(
@@ -99,19 +130,14 @@ select i
     else:
         final_if_section = ""
 
-    selfcal_lines: list[str] = []
+    step_lines: list[str] = []
     for step in config.selfcal:
-        selfcal_lines.append(
-            f"selfcal {_bool(step.amplitude)},{_bool(step.float_amplitude)},{_num(step.solint_min)}"
-        )
-        selfcal_lines.append(f"modelfit {step.modelfit_iterations}")
-        if step.gscale:
-            # One overall amplitude correction per telescope at the end of the step,
-            # then refit the model on the corrected data.
-            selfcal_lines.append(f"gscale {_bool(step.float_amplitude)}")
-            selfcal_lines.append(f"modelfit {step.modelfit_iterations}")
-        selfcal_lines.append("")
-    selfcal_block = "\n".join(selfcal_lines).rstrip("\n")
+        step_lines.extend(step.difmap_commands())
+        step_lines.append("")
+    if config.selfcal_per_if:
+        selfcal_block = per_if_schedule_block(step_lines, starting_model, config)
+    else:
+        selfcal_block = "\n".join(step_lines).rstrip("\n")
 
     unflag_line = "unflag *\n" if config.unflag else ""
 

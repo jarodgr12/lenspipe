@@ -299,7 +299,9 @@ def run_epoch(
             if path.exists():
                 path.unlink()
 
-    steps_total = len(config.stage1.selfcal)
+    steps_total = len(config.stage1.selfcal) * (
+        config.stage1.final_if_selfcal.if_count if config.stage1.selfcal_per_if else 1
+    )
     done = {"n": 0}
 
     def on_line(line: str) -> None:

@@ -145,6 +145,16 @@ class Stage1Config(_Model):
     unflag: bool = Field(True, description="Run 'unflag *' after observe.")
     selfcal: list[SelfcalStep] = Field(default_factory=_legacy_selfcal_schedule)
     final_if_selfcal: FinalIfSelfcal = Field(default_factory=FinalIfSelfcal)
+    selfcal_per_if: bool = Field(
+        False,
+        description=(
+            "Run the selfcal schedule once per IF instead of once on the full band: for each IF "
+            "select its inner channels, re-read the starting model and run every step; then "
+            "select the full band and fit the final model once with the last step's iterations. "
+            "The IF layout (if_count, channels_per_if, edge_channels) is taken from "
+            "[stage1.final_if_selfcal], which need not itself be enabled."
+        ),
+    )
     input_pattern: str = "*.uvfits"
 
     @field_validator("selfcal")
@@ -477,6 +487,8 @@ selfcal = [
   [true,  true,  3600, 50],
   [false, false, 0.5,  50],
 ]
+selfcal_per_if = false              # true: run the schedule above once per IF (layout from
+                                    # [stage1.final_if_selfcal]), then fit the final model on the full band
 
 [stage1.final_if_selfcal]
 enabled = false

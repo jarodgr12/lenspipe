@@ -102,6 +102,7 @@ def run_page() -> None:
                 with ui.card().classes("w-full q-pa-md gap-2").props("flat bordered") as stage1_card:
                     ui.label("Stage 1").classes("text-subtitle2")
                     with ui.row().classes("gap-4 items-center"):
+                        per_if = ui.switch("Self-cal schedule per IF", value=config.stage1.selfcal_per_if)
                         final_if = ui.switch(
                             "Final per-IF self-cal", value=config.stage1.final_if_selfcal.enabled
                         )
@@ -254,6 +255,7 @@ def run_page() -> None:
                 dry_run=bool(dry_run.value),
                 workers=_int_or_none(workers.value),
                 stage1_final_if_selfcal=_override(bool(final_if.value), config.stage1.final_if_selfcal.enabled),
+                stage1_selfcal_per_if=_override(bool(per_if.value), config.stage1.selfcal_per_if),
                 stage2_mode=mode_value,
                 stage2_shards=(shards.value or "").strip() or None,
                 stage2_channels_per_if=_int_or_none(channels_per_if.value),
@@ -328,7 +330,7 @@ def run_page() -> None:
             submit_button.set_enabled(bool(steps))
 
         for widget in (
-            *stage_boxes.values(), epochs, overwrite, dry_run, workers, final_if, mode, channels_per_if,
+            *stage_boxes.values(), epochs, overwrite, dry_run, workers, per_if, final_if, mode, channels_per_if,
             channels, shards, edge, iterations, unflag, keep_models, plots, s2_error_bars,
             error_source, product, plot_workers, fit_method, reference_frequency, formats,
             exclude_channels, exclude_epoch_channels, annotations, s3_error_bars,
