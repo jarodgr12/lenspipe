@@ -54,7 +54,7 @@ def test_validate_script_passes_on_matching_products(reference_project: Path, fa
 
 def test_validate_script_fails_when_products_differ(reference_project: Path, fake_difmap_env, tmp_path: Path) -> None:
     # Corrupt one legacy Stage 2 value so the comparison must fail.
-    csv = reference_project / "stage2" / "MG0414.B" / "MG0414.B.channel.spectrum.csv"
+    csv = reference_project / "stage2" / "full-band" / "MG0414.B" / "MG0414.B.channel.spectrum.csv"
     lines = csv.read_text().splitlines()
     cells = lines[2].split(",")
     cells[lines[0].split(",").index("B_jy")] = "0.5"

@@ -234,9 +234,11 @@ def draw_map(
     bar.set_label(image.bunit)
 
 
-def stage1_images_for(project_root: Path, source: str, epoch: str) -> tuple[Path, Path]:
-    """Paths of the Stage 1 clean and residual maps for one epoch (they may not exist)."""
-    directory = Path(project_root) / "stage1" / f"{source}.{epoch}"
+def stage1_images_for(
+    project_root: Path, source: str, epoch: str, calibration_mode: str = "full-band"
+) -> tuple[Path, Path]:
+    """Paths of the Stage 1 common-grid clean and residual maps for one epoch (they may not exist)."""
+    directory = Path(project_root) / "stage1" / calibration_mode / f"{source}.{epoch}"
     return directory / f"{source}.{epoch}.cln.fits", directory / f"{source}.{epoch}.resid.fits"
 
 

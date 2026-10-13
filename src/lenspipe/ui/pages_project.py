@@ -13,6 +13,7 @@ from lenspipe.ui.state import console
 
 COLUMNS = [
     {"name": "epoch", "label": "Epoch", "field": "epoch", "align": "left"},
+    {"name": "mode", "label": "Mode", "field": "mode", "align": "left"},
     {"name": "input", "label": "Input", "field": "input", "align": "left"},
     {"name": "master", "label": "Master model", "field": "master", "align": "left"},
     {"name": "stage1", "label": "Stage 1", "field": "stage1", "align": "left"},
@@ -83,9 +84,12 @@ def inventory_rows(summary: dict[str, Any]) -> list[dict[str, Any]]:
             )
             for p in item["stage3"]
         ] or _present(None, "none")
+        mode = item.get("calibration_mode")
         rows.append(
             {
+                "key": f"{mode or '-'}/{item['source']}.{item['epoch']}",
                 "epoch": f"{item['source']}.{item['epoch']}",
+                "mode": mode or "",
                 "input": _present(item["input"]),
                 "master": _present(item["master_model"]),
                 "stage1": stage1_cell,
@@ -178,7 +182,7 @@ def project_page() -> None:
                     ).classes(MONO + " opacity-70")
                 else:
                     table = ui.table(
-                        columns=COLUMNS, rows=inventory_rows(summary), row_key="epoch"
+                        columns=COLUMNS, rows=inventory_rows(summary), row_key="key"
                     ).props("dense flat bordered").classes("w-full")
                     for name in ("input", "master", "stage1", "stage2", "stage3"):
                         table.add_slot(f"body-cell-{name}", BADGE_SLOT)
@@ -188,7 +192,8 @@ def project_page() -> None:
                     tag = f"/{item['analysis_tag']}" if item.get("analysis_tag") else ""
                     status = item.get("status") or "fresh"
                     ui.label(
-                        f"combined  {item['source']}.{item['product']}{tag}  "
+                        f"combined  [{item.get('calibration_mode') or '-'}]  "
+                        f"{item['source']}.{item['product']}{tag}  "
                         f"visits={item['n_visits']}  {item['path']}"
                         + STATUS_SUFFIX.get(status, "")
                     ).classes(MONO + " opacity-80" + (" text-negative" if status != "fresh" else ""))

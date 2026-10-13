@@ -102,10 +102,27 @@ def run_page() -> None:
                 with ui.card().classes("w-full q-pa-md gap-2").props("flat bordered") as stage1_card:
                     ui.label("Stage 1").classes("text-subtitle2")
                     with ui.row().classes("gap-4 items-center"):
-                        per_if = ui.switch("Self-cal schedule per IF", value=config.stage1.selfcal_per_if)
+                        calibration_mode = ui.select(
+                            {"full-band": "full-band", "per-if": "per-IF"},
+                            label="Calibration mode", value=config.stage1.calibration_mode,
+                        ).props("dense outlined").classes("w-40")
+                        if_count = ui.number("IFs", value=config.stage1.per_if.if_count, min=1, step=1).props(
+                            "dense outlined"
+                        ).classes("w-24")
+                        s1_channels_per_if = ui.number(
+                            "Channels per IF", value=config.stage1.per_if.channels_per_if, min=1, step=1
+                        ).props("dense outlined").classes("w-36")
+                        s1_edge = ui.number(
+                            "Edge channels", value=config.stage1.per_if.edge_channels, min=0, step=1
+                        ).props("dense outlined").classes("w-32")
+                        ui.label(
+                            "Stage 2 and 3 read the same mode's tree; results live under stage1/<mode>/"
+                        ).classes("text-caption opacity-70")
+                    with ui.row().classes("gap-4 items-center"):
                         final_if = ui.switch(
                             "Final per-IF self-cal", value=config.stage1.final_if_selfcal.enabled
                         )
+                        reimage_only = ui.switch("Re-image only (common grid)", value=False)
                         ui.label(
                             f"{config.stage1.final_if_selfcal.if_count} IFs x "
                             f"{config.stage1.final_if_selfcal.channels_per_if} channels; "
@@ -255,7 +272,13 @@ def run_page() -> None:
                 dry_run=bool(dry_run.value),
                 workers=_int_or_none(workers.value),
                 stage1_final_if_selfcal=_override(bool(final_if.value), config.stage1.final_if_selfcal.enabled),
-                stage1_selfcal_per_if=_override(bool(per_if.value), config.stage1.selfcal_per_if),
+                calibration_mode=_override(calibration_mode.value, config.stage1.calibration_mode),
+                stage1_if_count=_override(_int_or_none(if_count.value), config.stage1.per_if.if_count),
+                stage1_channels_per_if=_override(
+                    _int_or_none(s1_channels_per_if.value), config.stage1.per_if.channels_per_if
+                ),
+                stage1_edge_channels=_override(_int_or_none(s1_edge.value), config.stage1.per_if.edge_channels),
+                stage1_reimage_only=bool(reimage_only.value),
                 stage2_mode=mode_value,
                 stage2_shards=(shards.value or "").strip() or None,
                 stage2_channels_per_if=_int_or_none(channels_per_if.value),
@@ -305,6 +328,8 @@ def run_page() -> None:
 
         def refresh_preview() -> None:
             stage1_card.set_visibility(stage_boxes[1].value)
+            for widget in (if_count, s1_channels_per_if, s1_edge):
+                widget.set_visibility(calibration_mode.value == "per-if")
             stage2_card.set_visibility(stage_boxes[2].value)
             stage3_card.set_visibility(stage_boxes[3].value)
             channels.set_visibility(mode.value == "channel")
@@ -330,7 +355,8 @@ def run_page() -> None:
             submit_button.set_enabled(bool(steps))
 
         for widget in (
-            *stage_boxes.values(), epochs, overwrite, dry_run, workers, per_if, final_if, mode, channels_per_if,
+            *stage_boxes.values(), epochs, overwrite, dry_run, workers, calibration_mode, if_count,
+            s1_channels_per_if, s1_edge, final_if, reimage_only, mode, channels_per_if,
             channels, shards, edge, iterations, unflag, keep_models, plots, s2_error_bars,
             error_source, product, plot_workers, fit_method, reference_frequency, formats,
             exclude_channels, exclude_epoch_channels, annotations, s3_error_bars,

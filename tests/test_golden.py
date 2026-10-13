@@ -69,7 +69,7 @@ def test_stage1_products_match_legacy(project: Path, fake_difmap: Path, fake_dif
     for epoch in ("A", "B"):
         prefix = f"MG0414.{epoch}"
         legacy_dir = legacy_root / "stage1" / prefix
-        new_dir = new_root / "stage1" / prefix
+        new_dir = new_root / "stage1" / "full-band" / prefix  # 2.1: one tree per calibration mode
         assert (legacy_dir / f"{prefix}.gmod").read_text() == (new_dir / f"{prefix}.gmod").read_text()
         assert (legacy_dir / f"{prefix}.cal.uvf").read_bytes() == (new_dir / f"{prefix}.cal.uvf").read_bytes()
         legacy_model = json.loads((legacy_dir / f"{prefix}.model.json").read_text())
@@ -77,10 +77,63 @@ def test_stage1_products_match_legacy(project: Path, fake_difmap: Path, fake_dif
         assert _strip(legacy_model) == _strip(new_model)
         legacy_meta = json.loads((legacy_dir / f"{prefix}.stage1.metadata.json").read_text())
         new_meta = json.loads((new_dir / f"{prefix}.stage1.metadata.json").read_text())
+        # v1.1 imaged once; 2.1 images natively, then on the common grid. Same data, same RMS.
+        assert new_meta["native_residual_rms_jy_per_beam"] == legacy_meta["final_residual_rms_jy_per_beam"]
         assert new_meta["final_residual_rms_jy_per_beam"] == legacy_meta["final_residual_rms_jy_per_beam"]
         assert new_meta["final_if_selfcal"] == legacy_meta["final_if_selfcal"]
+        assert new_meta["calibration_mode"] == "full-band" and new_meta["per_if"] is None
+        assert (new_dir / f"{prefix}.native.cln.fits").is_file() and (new_dir / f"{prefix}.cln.fits").is_file()
+        assert new_meta["common_image_geometry"]["cell_mas"] == new_meta["native_image_geometry"]["cell_mas"]
         assert new_meta["difmap"]["version"] == "2.5k"
         assert new_meta["config"]["selfcal"][3]["amplitude"] is True
+
+
+def _nine_column_master(path: Path) -> None:
+    """Legacy v1.2.2 per-IF mode insists on nine-column rows (it pins the ninth, the spectral index)."""
+    rows = []
+    for line in path.read_text().splitlines():
+        fields = line.split()
+        if line.strip() and not line.lstrip().startswith("!") and len(fields) == 7:
+            fields += ["0", "0v"]
+            line = " ".join(fields)
+        rows.append(line)
+    path.write_text("\n".join(rows) + "\n")
+
+
+def test_stage1_per_if_products_match_legacy_v1_2_2(project: Path, fake_difmap: Path, fake_difmap_env, tmp_path: Path, quiet) -> None:
+    _nine_column_master(project / "inputs" / "MG0414.gmod")
+    legacy_root = _copy_project(project, tmp_path / "legacy")
+    new_root = _copy_project(project, tmp_path / "new")
+    legacy = LEGACY_DIR / "run_difmap_stage1_v1_2_2.py"
+    # The synthetic data have 2 IFs x 4 channels; --map-size 256 because the fake writes 128-pixel maps.
+    _run([str(legacy), str(legacy_root), "--difmap", str(fake_difmap), "--calibration-mode", "per-if",
+          "--if-count", "2", "--channels-per-if", "4", "--edge-channels", "1", "--map-size", "256"], fake_difmap_env)
+    cfg = _config(fake_difmap).with_overrides(
+        stage1={"calibration_mode": "per-if", "map_pixels": 256,
+                "per_if": {"if_count": 2, "channels_per_if": 4, "edge_channels": 1}}
+    )
+    results = run_stage1(new_root, cfg, reporter=quiet, workers=1)
+    assert all(r.ok for r in results), [r.message for r in results]
+
+    for epoch in ("A", "B"):
+        prefix = f"MG0414.{epoch}"
+        legacy_dir = legacy_root / "stage1" / "per-if" / prefix
+        new_dir = new_root / "stage1" / "per-if" / prefix
+        for name in (f"{prefix}.gmod", f"{prefix}.if001.gmod", f"{prefix}.if002.gmod"):
+            assert (legacy_dir / name).read_text() == (new_dir / name).read_text(), name
+        assert (legacy_dir / f"{prefix}.cal.uvf").read_bytes() == (new_dir / f"{prefix}.cal.uvf").read_bytes()
+        legacy_meta = json.loads((legacy_dir / f"{prefix}.stage1.metadata.json").read_text())
+        new_meta = json.loads((new_dir / f"{prefix}.stage1.metadata.json").read_text())
+        assert new_meta["native_residual_rms_jy_per_beam"] == legacy_meta["native_residual_rms_jy_per_beam"]
+        # The fake keys its RMS on the channel selection; the legacy re-image selects "i,1,total" and
+        # lenspipe "i" (identical in DifMAP), so only the presence of the final RMS is checked here.
+        assert new_meta["final_residual_rms_jy_per_beam"] is not None
+        assert [[r["first_channel"], r["last_channel"]] for r in new_meta["per_if"]["selected_ranges_one_based"]] == legacy_meta["selected_ranges_one_based"]
+        assert new_meta["common_image_geometry"]["cell_mas"] == pytest.approx(legacy_meta["common_image_geometry"]["cdelt2_deg"] * 3.6e6)
+        assert new_meta["per_if"]["amplitude_calibration"] == legacy_meta["amplitude_calibration"] == "gscale"
+        # The per-IF models are independent fits from the fixed-index model, labelled like the final one.
+        assert "! GROUP A1" in (new_dir / f"{prefix}.if001.gmod").read_text()
+        assert (new_dir / f"{prefix}.fixed_index.gmod").read_text().count(" 0\n") >= 6
 
 
 @pytest.mark.parametrize(
@@ -105,6 +158,9 @@ def test_stage2_products_match_legacy_and_are_shard_invariant(
     legacy_root = _copy_project(base, tmp_path / "legacy")
     single_root = _copy_project(base, tmp_path / "single")
     sharded_root = _copy_project(base, tmp_path / "sharded")
+    # The legacy script reads stage1/<prefix>; expose the full-band tree under those names.
+    for entry in sorted((legacy_root / "stage1" / "full-band").iterdir()):
+        (legacy_root / "stage1" / entry.name).symlink_to(entry, target_is_directory=True)
 
     _run([str(LEGACY_STAGE2), str(legacy_root), "--difmap", str(fake_difmap), *legacy_args], fake_difmap_env)
     single = run_stage2(single_root, _config(fake_difmap, shards=1, **stage2_overrides), reporter=quiet)
@@ -116,24 +172,27 @@ def test_stage2_products_match_legacy_and_are_shard_invariant(
     for epoch in ("A", "B"):
         prefix = f"MG0414.{epoch}"
         name = f"{prefix}.{product}"
+        # The legacy script writes stage2/<prefix>; the package writes stage2/<calibration mode>/<prefix>.
         legacy_csv = (legacy_root / "stage2" / prefix / f"{name}.spectrum.csv").read_text()
-        single_csv = (single_root / "stage2" / prefix / f"{name}.spectrum.csv").read_text()
-        sharded_csv = (sharded_root / "stage2" / prefix / f"{name}.spectrum.csv").read_text()
+        single_csv = (single_root / "stage2" / "full-band" / prefix / f"{name}.spectrum.csv").read_text()
+        sharded_csv = (sharded_root / "stage2" / "full-band" / prefix / f"{name}.spectrum.csv").read_text()
         assert single_csv == legacy_csv
         assert sharded_csv == legacy_csv
 
         legacy_model = (legacy_root / "stage2" / prefix / f"{prefix}.stage2.mod").read_text()
-        assert (single_root / "stage2" / prefix / f"{prefix}.stage2.mod").read_text() == legacy_model
+        assert (single_root / "stage2" / "full-band" / prefix / f"{prefix}.stage2.mod").read_text() == legacy_model
 
         legacy_meta = json.loads((legacy_root / "stage2" / prefix / f"{name}.stage2.metadata.json").read_text())
-        new_meta = json.loads((sharded_root / "stage2" / prefix / f"{name}.stage2.metadata.json").read_text())
+        new_meta = json.loads((sharded_root / "stage2" / "full-band" / prefix / f"{name}.stage2.metadata.json").read_text())
+        assert new_meta["calibration_mode"] == "full-band"
+        assert new_meta["stage1_directory"] == f"stage1/full-band/{prefix}"
         for key in ("mode", "channels_per_if", "excluded_edge_channels_per_side", "fitted_channels_per_if",
                     "total_channels", "n_fits", "groups", "components", "mjd", "n_groups", "n_components"):
             assert new_meta[key] == legacy_meta[key], key
         assert new_meta["execution"]["shards"] == min(3, new_meta["n_fits"])
 
         legacy_manifest = json.loads((legacy_root / "stage2" / prefix / f"{name}.stage2.manifest.json").read_text())
-        new_manifest = json.loads((sharded_root / "stage2" / prefix / f"{name}.stage2.manifest.json").read_text())
+        new_manifest = json.loads((sharded_root / "stage2" / "full-band" / prefix / f"{name}.stage2.manifest.json").read_text())
         assert new_manifest == legacy_manifest
 
     # The concatenated shard log recovers to the same CSV without running DifMAP.
@@ -145,7 +204,7 @@ def test_stage2_products_match_legacy_and_are_shard_invariant(
     for epoch in ("A", "B"):
         prefix = f"MG0414.{epoch}"
         name = f"{prefix}.{product}"
-        assert (sharded_root / "stage2" / prefix / f"{name}.spectrum.csv").read_text() == (
+        assert (sharded_root / "stage2" / "full-band" / prefix / f"{name}.spectrum.csv").read_text() == (
             legacy_root / "stage2" / prefix / f"{name}.spectrum.csv"
         ).read_text()
 
@@ -161,13 +220,18 @@ def test_stage3_products_match_legacy(project: Path, fake_difmap: Path, fake_dif
     run_stage2(project, _config(fake_difmap, mode="channel", shards=2), reporter=quiet, workers=1)
     legacy_root = _copy_project(project, tmp_path / "legacy")
     new_root = _copy_project(project, tmp_path / "new")
+    # The legacy script predates the per-mode trees and reads stage1/<prefix> and stage2/<prefix>;
+    # expose the full-band products under those names in its copy.
+    for stage in ("stage1", "stage2"):
+        for entry in sorted((legacy_root / stage / "full-band").iterdir()):
+            (legacy_root / stage / entry.name).symlink_to(entry, target_is_directory=True)
 
     _run([str(LEGACY_STAGE3), str(legacy_root), "--product", "channel"], fake_difmap_env, cwd=LEGACY_DIR)
     summary = run_stage3(new_root, _config(fake_difmap), products={"channel"}, reporter=quiet, workers=2)
     assert summary.ok, summary
 
     legacy_csv = _csv_files(legacy_root / "stage3")
-    new_csv = _csv_files(new_root / "stage3")
+    new_csv = _csv_files(new_root / "stage3" / "full-band")
     # Every legacy table still exists and matches; the package may add tables of its own.
     assert set(legacy_csv) <= set(new_csv)
     assert set(new_csv) - set(legacy_csv) == {
@@ -193,8 +257,9 @@ def test_stage3_products_match_legacy(project: Path, fake_difmap: Path, fake_dif
     # was written as "<prefix>.png" and the four combined RMS figures overwrote one another as
     # "<stem>.png". The package writes them under their intended names.
     def figure_names(root: Path) -> set[str]:
+        tree = root / "stage3" / "full-band" if (root / "stage3" / "full-band").is_dir() else root / "stage3"
         return {
-            str(p.relative_to(root)) for p in (root / "stage3").rglob("*.png")
+            str(p.relative_to(root / "stage3")).replace("full-band/", "", 1) for p in tree.rglob("*.png")
             if "rms_" not in p.name and ".image" not in p.name
             and "normalised_reference_fluxes" not in p.name and "fluxes_vs_mjd_per_image" not in p.name
             and "normalised_rcusp" not in p.name
@@ -217,7 +282,7 @@ def test_stage3_products_match_legacy(project: Path, fake_difmap: Path, fake_dif
     ]
     assert (legacy_root / "stage3" / "combined" / "MG0414" / "channel" / "plots" / "MG0414.channel.png").exists()
 
-    combined_meta = next((new_root / "stage3" / "combined").rglob("*.combined.stage3.metadata.json"))
+    combined_meta = next((new_root / "stage3" / "full-band" / "combined").rglob("*.combined.stage3.metadata.json"))
     payload = json.loads(combined_meta.read_text())
     assert payload["rcusp_available"] is True
     assert payload["layout"] == {"columns": 4, "rows": "adaptive"}
@@ -233,7 +298,7 @@ def test_stage3_rcusp_can_be_disabled_and_frame_is_configurable(project: Path, f
     )
     summary = run_stage3(project, cfg, reporter=quiet, workers=1)
     assert summary.ok
-    combined_meta = next((project / "stage3" / "combined").rglob("*.combined.stage3.metadata.json"))
+    combined_meta = next((project / "stage3" / "full-band" / "combined").rglob("*.combined.stage3.metadata.json"))
     payload = json.loads(combined_meta.read_text())
     assert payload["rcusp_available"] is False
     assert payload["frequency_limits_ghz"] == [14.9, 15.1]

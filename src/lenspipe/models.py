@@ -19,6 +19,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 __all__ = [
+    "write_fixed_spectral_index_model",
     "ModelComponent",
     "ModelFormatError",
     "ModelHierarchy",
@@ -214,6 +215,36 @@ def parse_numeric_token(token: str) -> float:
         cleaned = cleaned[:-1]
     cleaned = cleaned.replace("D", "E").replace("d", "e")
     return float(cleaned)
+
+
+def write_fixed_spectral_index_model(master: Path, destination: Path) -> int:
+    """Copy ``master`` with every component's spectral index fixed at 0.
+
+    DifMAP model rows carry nine columns when they include the spectral terms
+    (``flux radius theta major ratio phi type freq0 index``); only the last one
+    is replaced, so other ``v`` flags stay as they are. Rows with fewer columns
+    have no spectral index and are copied unchanged. Returns the number of rows
+    that were pinned.
+    """
+    pinned = 0
+    output: list[str] = []
+    for line in master.read_text(encoding="utf-8").splitlines():
+        if not line.strip() or line.lstrip().startswith("!"):
+            output.append(line)
+            continue
+        fields = line.split()
+        if len(fields) >= 9:
+            try:
+                parse_numeric_token(fields[8])
+            except ValueError as exc:
+                raise ModelFormatError(f"{master}: invalid spectral index {fields[8]!r} in: {line}") from exc
+            fields[8] = "0"
+            pinned += 1
+            output.append(" ".join(fields))
+        else:
+            output.append(line)
+    destination.write_text("\n".join(output) + "\n", encoding="utf-8")
+    return pinned
 
 
 def model_component_fluxes(model_path: Path) -> list[float]:

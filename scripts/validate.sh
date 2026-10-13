@@ -48,7 +48,8 @@ now() { date +%s; }
 
 # --- which legacy product are we reproducing? ---------------------------------
 if [ -z "$PRODUCT" ]; then
-  PRODUCT="$(ls "$LEGACY"/stage2/*/*.stage2.manifest.json 2>/dev/null \
+  # legacy layout stage2/<epoch>/, or the per-mode layout stage2/<mode>/<epoch>/ since 2.1
+  PRODUCT="$(ls "$LEGACY"/stage2/*/*.stage2.manifest.json "$LEGACY"/stage2/*/*/*.stage2.manifest.json 2>/dev/null \
     | sed -E 's#.*/[^/]+\.[^./]+\.([^/]+)\.stage2\.manifest\.json$#\1#' | sort -u)"
   COUNT="$(printf '%s\n' "$PRODUCT" | sed '/^$/d' | wc -l | tr -d ' ')"
   if [ "$COUNT" -ne 1 ]; then

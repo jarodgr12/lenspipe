@@ -53,7 +53,7 @@ def test_stage3_error_bars_toggle_reaches_every_figure(project: Path, fake_difma
     summary = run_stage3(project, cfg, reporter=quiet, workers=2)  # workers=2 exercises the pool init
     assert summary.ok
     assert plotting.SHOW_ERROR_BARS is False
-    per_visit = next((project / "stage3" / "MG0414.A").rglob("*.stage3.metadata.json"))
+    per_visit = next((project / "stage3" / "full-band" / "MG0414.A").rglob("*.stage3.metadata.json"))
     assert json.loads(per_visit.read_text())["plot_style"]["error_bars"] is False
     assert len(list((project / "stage3").rglob("*.png"))) >= 12
     plotting.configure_error_bars(True)
@@ -78,6 +78,6 @@ def test_cli_flags_map_to_config(project: Path, fake_difmap: Path) -> None:
     assert not list((project / "stage2").rglob("*.png"))
     result = runner.invoke(app, ["stage3", str(project), "--product", "channel", "--no-error-bars", "--formats", "png", "--workers", "1"])
     assert result.exit_code == 0, result.output
-    per_visit = next((project / "stage3" / "MG0414.A").rglob("*.stage3.metadata.json"))
+    per_visit = next((project / "stage3" / "full-band" / "MG0414.A").rglob("*.stage3.metadata.json"))
     assert json.loads(per_visit.read_text())["plot_style"]["error_bars"] is False
     plotting.configure_error_bars(True)

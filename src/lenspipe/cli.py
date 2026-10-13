@@ -28,8 +28,27 @@ ProjectArg = Annotated[
     Path, typer.Argument(help="Project root containing inputs/. Default: current directory.")
 ]
 ConfigOpt = Annotated[
+
     Path | None, typer.Option("--config", help=f"Config file (default <project>/{CONFIG_FILENAME}).")
 ]
+CalibrationModeOpt = Annotated[
+    str | None,
+    typer.Option(
+        "--calibration-mode",
+        help="'full-band' or 'per-if': which Stage 1 tree to write or read (default: stage1.calibration_mode).",
+    ),
+]
+
+
+def _with_calibration_mode(cfg: LenspipeConfig, mode: str | None) -> LenspipeConfig:
+    if mode is None:
+        return cfg
+    if mode not in ("full-band", "per-if"):
+        typer.echo(f"ERROR: --calibration-mode must be 'full-band' or 'per-if', not {mode!r}", err=True)
+        raise typer.Exit(code=2)
+    return cfg.with_overrides(stage1={"calibration_mode": mode})
+
+
 EpochOpt = Annotated[
     list[str] | None, typer.Option("--epoch", "-e", help="Process only this epoch; repeatable.")
 ]
@@ -227,7 +246,7 @@ def inventory_cmd(
         typer.echo(json.dumps(summary, indent=2))
         return
     typer.echo(f"Project: {summary['root']}  (config: {'yes' if summary['config_present'] else 'defaults'})")
-    typer.echo(f"{'epoch':<22}{'input':<8}{'stage1':<10}{'stage2':<28}stage3")
+    typer.echo(f"{'epoch':<22}{'mode':<11}{'input':<8}{'stage1':<10}{'stage2':<28}stage3")
     for row in summary["epochs"]:
         s2 = ",".join(p["product"] for p in row["stage2"]) or "-"
         s3 = ",".join(
@@ -236,12 +255,16 @@ def inventory_cmd(
         ) or "-"
         typer.echo(
             f"{row['source'] + '.' + row['epoch']:<22}"
+            f"{row.get('calibration_mode') or '-':<11}"
             f"{'yes' if row['input'] else '-':<8}"
             f"{'yes' if row['stage1'] else '-':<10}"
             f"{s2:<28}{s3}"
         )
     for item in summary["combined"]:
-        typer.echo(f"combined  {item['source']}.{item['product']}  visits={item['n_visits']}  {item['path']}")
+        typer.echo(
+            f"combined  {item.get('calibration_mode') or '-'}  {item['source']}.{item['product']}  "
+            f"visits={item['n_visits']}  {item['path']}"
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -259,12 +282,13 @@ def stage1(
     final_if_selfcal: Annotated[
         bool | None, typer.Option("--final-if-selfcal/--no-final-if-selfcal")
     ] = None,
-    selfcal_per_if: Annotated[
-        bool | None,
-        typer.Option("--selfcal-per-if/--no-selfcal-per-if", help="Run the self-cal schedule once per IF."),
-    ] = None,
+    calibration_mode: CalibrationModeOpt = None,
+    if_count: Annotated[int | None, typer.Option("--if-count", help="per-if mode: number of IFs.")] = None,
+    channels_per_if: Annotated[int | None, typer.Option("--channels-per-if", help="per-if mode: channels per IF.")] = None,
+    edge_channels: Annotated[int | None, typer.Option("--edge-channels", help="per-if mode: channels dropped from each end of every IF.")] = None,
+    reimage_only: Annotated[bool, typer.Option("--reimage-only", help="Skip calibration; redo the common-grid maps.")] = False,
 ) -> None:
-    """Self-calibrate, model-fit and image each epoch (inputs/ -> stage1/)."""
+    """Self-calibrate, model-fit and image each epoch (inputs/ -> stage1/<mode>/)."""
     from lenspipe.stage1 import run_stage1
 
     root, cfg = _load(project, config)
@@ -274,12 +298,16 @@ def stage1(
         cfg = cfg.with_overrides(
             stage1={"final_if_selfcal": {**cfg.stage1.final_if_selfcal.model_dump(), "enabled": final_if_selfcal}}
         )
-    if selfcal_per_if is not None:
-        cfg = cfg.with_overrides(stage1={"selfcal_per_if": selfcal_per_if})
+    cfg = _with_calibration_mode(cfg, calibration_mode)
+    per_if = {"if_count": if_count, "channels_per_if": channels_per_if, "edge_channels": edge_channels}
+    if any(v is not None for v in per_if.values()):
+        cfg = cfg.with_overrides(
+            stage1={"per_if": {**cfg.stage1.per_if.model_dump(), **{k: v for k, v in per_if.items() if v is not None}}}
+        )
     try:
         results = run_stage1(
             root, cfg, epochs=set(epoch) if epoch else None, overwrite=overwrite,
-            dry_run=dry_run, workers=workers, reporter=default_reporter(),
+            dry_run=dry_run, workers=workers, reporter=default_reporter(), reimage_only=reimage_only,
         )
     except (FileNotFoundError, ValueError) as exc:
         typer.echo(f"ERROR: {exc}", err=True)
@@ -300,6 +328,7 @@ def stage2(
     shards: Annotated[str | None, typer.Option("--shards", help="DifMAP processes per epoch or 'auto'.")] = None,
     modelfit_iterations: Annotated[int | None, typer.Option("--modelfit-iterations")] = None,
     unflag: Annotated[bool | None, typer.Option("--unflag/--no-unflag", help="Run 'unflag *' before the fits.")] = None,
+    calibration_mode: CalibrationModeOpt = None,
     keep_models: Annotated[bool | None, typer.Option("--keep-models/--no-keep-models")] = None,
     plots: Annotated[bool | None, typer.Option("--plots/--no-plots", help="Write the quick-look PNGs.")] = None,
     error_bars: Annotated[bool | None, typer.Option("--error-bars/--no-error-bars", help="Error bars on the quick-look plots.")] = None,
@@ -310,10 +339,11 @@ def stage2(
     workers: Annotated[int | None, typer.Option("--workers", help="Epochs in parallel.")] = None,
     difmap: Annotated[str | None, typer.Option("--difmap")] = None,
 ) -> None:
-    """Fit the frozen model per channel or per IF (stage1/ -> stage2/)."""
+    """Fit the frozen model per channel or per IF (stage1/<mode>/ -> stage2/<mode>/)."""
     from lenspipe.stage2 import run_stage2
 
     root, cfg = _load(project, config)
+    cfg = _with_calibration_mode(cfg, calibration_mode)
     overrides = {
         "mode": mode,
         "channels_per_if": channels_per_if,
@@ -380,15 +410,17 @@ def stage3(
     overwrite: Annotated[bool, typer.Option("--overwrite")] = False,
     workers: Annotated[int | None, typer.Option("--workers", help="Plot processes.")] = None,
     list_products: Annotated[bool, typer.Option("--list-products", help="List Stage 2 products and exit.")] = False,
+    calibration_mode: CalibrationModeOpt = None,
 ) -> None:
-    """Fit spectra and flux ratios, write per-visit and combined plots (stage2/ -> stage3/)."""
+    """Fit spectra and flux ratios, write per-visit and combined plots (stage2/<mode>/ -> stage3/<mode>/)."""
     from lenspipe.stage3 import run_stage3
     from lenspipe.stage3.io import available_stage2_products
 
     root, cfg = _load(project, config)
+    cfg = _with_calibration_mode(cfg, calibration_mode)
     if list_products:
         try:
-            products = available_stage2_products(root, set(epoch) if epoch else None)
+            products = available_stage2_products(root, set(epoch) if epoch else None, cfg.stage1.calibration_mode)
         except Exception as exc:  # noqa: BLE001
             typer.echo(f"ERROR: {exc}", err=True)
             raise typer.Exit(code=1) from exc

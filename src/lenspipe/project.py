@@ -14,7 +14,9 @@ from typing import Any
 from lenspipe.config import CONFIG_FILENAME
 
 __all__ = [
+    "CALIBRATION_MODES",
     "Layout",
+    "migrate_flat_layout",
     "ShardDecision",
     "auto_shards",
     "decide_shards",
@@ -30,8 +32,25 @@ __all__ = [
 ]
 
 
+CALIBRATION_MODES: tuple[str, ...] = ("full-band", "per-if")
+"""Stage 1 calibration modes; each has its own tree under stage1/, stage2/ and stage3/."""
+
+
 @dataclass(frozen=True)
 class Layout:
+    """Directory layout of a project.
+
+    Since 2.1 every stage directory holds one sub-tree per calibration mode::
+
+        stage1/<mode>/<source>.<epoch>/...
+        stage2/<mode>/<source>.<epoch>/...
+        stage3/<mode>/<source>.<epoch>/<product>/...  and  stage3/<mode>/combined/<source>/...
+
+    ``stage1``, ``stage2`` and ``stage3`` are the parents of those trees; use
+    ``stage_dir(stage, mode)`` for the tree of one mode. Projects written before
+    2.1 (no mode level) are moved into ``full-band/`` by ``migrate_flat_layout``.
+    """
+
     root: Path
 
     @property
@@ -50,6 +69,19 @@ class Layout:
     def stage3(self) -> Path:
         return self.root / "stage3"
 
+    def stage_dir(self, stage: int, mode: str) -> Path:
+        """The tree of one calibration mode: ``<root>/stage<N>/<mode>``."""
+        if mode not in CALIBRATION_MODES:
+            raise ValueError(f"unknown calibration mode {mode!r}; expected one of {CALIBRATION_MODES}")
+        if stage not in (1, 2, 3):
+            raise ValueError(f"stage must be 1, 2 or 3, not {stage!r}")
+        return self.root / f"stage{stage}" / mode
+
+    def modes_present(self, stage: int) -> list[str]:
+        """Calibration modes that have a tree under ``stage<N>/``."""
+        parent = self.root / f"stage{stage}"
+        return [mode for mode in CALIBRATION_MODES if (parent / mode).is_dir()]
+
     @property
     def jobs(self) -> Path:
         return self.root / ".jobs"
@@ -61,6 +93,43 @@ class Layout:
     @classmethod
     def at(cls, root: Path | str) -> Layout:
         return cls(Path(root).expanduser().resolve())
+
+
+def _flat_entries(parent: Path, marker_glob: str) -> list[Path]:
+    """Pre-2.1 per-epoch directories directly under a stage directory."""
+    if not parent.is_dir():
+        return []
+    found: list[Path] = []
+    for child in sorted(parent.iterdir()):
+        if not child.is_dir() or child.name in CALIBRATION_MODES or child.name.startswith("."):
+            continue
+        if child.name == "combined" or next(child.glob(marker_glob), None) is not None:
+            found.append(child)
+    return found
+
+
+def migrate_flat_layout(root: Path | str) -> list[str]:
+    """Move pre-2.1 outputs (``stage1/<prefix>`` ...) into the ``full-band`` trees.
+
+    Idempotent and rename-only, so it is instant on the same filesystem. A
+    directory whose destination already exists is left alone and reported. The
+    returned lines describe what moved; empty means the project was already laid
+    out per mode.
+    """
+    layout = Layout.at(root)
+    notes: list[str] = []
+    markers = {1: "*.stage1.metadata.json", 2: "*.stage2.metadata.json", 3: "**/*.stage3.metadata.json"}
+    for stage, marker in markers.items():
+        parent = layout.root / f"stage{stage}"
+        for entry in _flat_entries(parent, marker):
+            destination = parent / "full-band" / entry.name
+            if destination.exists():
+                notes.append(f"left {entry} in place: {destination} already exists")
+                continue
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            entry.rename(destination)
+            notes.append(f"moved {entry.relative_to(layout.root)} -> {destination.relative_to(layout.root)}")
+    return notes
 
 
 def parse_epoch_filename(path: Path, suffix: str) -> tuple[str, str]:
@@ -253,20 +322,37 @@ def auto_shards(requested: int | str, fit_count: int) -> int:
     return decide_shards(requested, fit_count).shards
 
 
-def inventory(root: Path) -> dict[str, Any]:
-    """Summarise what exists for each epoch across the stages, for the console and CLI."""
-    layout = Layout.at(root)
-    epochs: dict[str, dict[str, Any]] = {}
+def _read_json(path: Path) -> dict[str, Any] | None:
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    return payload if isinstance(payload, dict) else None
 
-    def entry(source: str, epoch: str) -> dict[str, Any]:
+
+def inventory(root: Path) -> dict[str, Any]:
+    """Summarise what exists for each epoch across the stages, for the console and CLI.
+
+    One row per (epoch, calibration mode) that has any stage output, plus a row
+    with ``calibration_mode = None`` for an epoch that only has an input. Flat
+    pre-2.1 layouts are moved into ``full-band/`` first (rename-only).
+    """
+    layout = Layout.at(root)
+    migrate_flat_layout(layout.root)
+    inputs: dict[str, dict[str, Any]] = {}
+    epochs: dict[tuple[str, str | None], dict[str, Any]] = {}
+
+    def entry(source: str, epoch: str, mode: str | None) -> dict[str, Any]:
         key = f"{source}.{epoch}"
+        known = inputs.get(key, {})
         return epochs.setdefault(
-            key,
+            (key, mode),
             {
                 "source": source,
                 "epoch": epoch,
-                "input": None,
-                "master_model": None,
+                "calibration_mode": mode,
+                "input": known.get("input"),
+                "master_model": known.get("master_model"),
                 "stage1": None,
                 "stage2": [],
                 "stage3": [],
@@ -279,31 +365,37 @@ def inventory(root: Path) -> dict[str, Any]:
                 source, epoch = parse_epoch_filename(path, ".uvfits")
             except ValueError:
                 continue
-            record = entry(source, epoch)
-            record["input"] = path.name
             master = layout.inputs / f"{source}.gmod"
-            record["master_model"] = master.name if master.is_file() else None
+            inputs[f"{source}.{epoch}"] = {
+                "source": source,
+                "epoch": epoch,
+                "input": path.name,
+                "master_model": master.name if master.is_file() else None,
+            }
 
-    if layout.stage1.is_dir():
-        for meta in sorted(layout.stage1.glob("*/*.stage1.metadata.json")):
-            try:
-                payload = json.loads(meta.read_text(encoding="utf-8"))
-            except (OSError, json.JSONDecodeError):
+    for mode in layout.modes_present(1):
+        for meta in sorted(layout.stage_dir(1, mode).glob("*/*.stage1.metadata.json")):
+            payload = _read_json(meta)
+            if payload is None:
                 continue
-            record = entry(str(payload.get("source", "")), str(payload.get("epoch", "")))
+            record = entry(str(payload.get("source", "")), str(payload.get("epoch", "")), mode)
             record["stage1"] = {
                 "version": payload.get("version") or payload.get("lenspipe_version"),
-                "rms_jy_per_beam": payload.get("final_residual_rms_jy_per_beam"),
+                "rms_jy_per_beam": (
+                    payload.get("final_residual_rms_jy_per_beam")
+                    if payload.get("final_residual_rms_jy_per_beam") is not None
+                    else payload.get("native_residual_rms_jy_per_beam")
+                ),
+                "common_grid": payload.get("common_image_geometry") is not None,
                 "created_utc": payload.get("created_utc"),
             }
 
-    if layout.stage2.is_dir():
-        for meta in sorted(layout.stage2.glob("*/*.stage2.metadata.json")):
-            try:
-                payload = json.loads(meta.read_text(encoding="utf-8"))
-            except (OSError, json.JSONDecodeError):
+    for mode in layout.modes_present(2):
+        for meta in sorted(layout.stage_dir(2, mode).glob("*/*.stage2.metadata.json")):
+            payload = _read_json(meta)
+            if payload is None:
                 continue
-            record = entry(str(payload.get("source", "")), str(payload.get("epoch", "")))
+            record = entry(str(payload.get("source", "")), str(payload.get("epoch", "")), mode)
             prefix = f"{record['source']}.{record['epoch']}."
             tag = meta.name[len(prefix) : -len(".stage2.metadata.json")]
             record["stage2"].append(
@@ -316,15 +408,16 @@ def inventory(root: Path) -> dict[str, Any]:
                 }
             )
 
-    if layout.stage3.is_dir():
-        for meta in sorted(layout.stage3.glob("*/*/**/*.stage3.metadata.json")):
-            if meta.parts[-4] == "combined" or "combined" in meta.relative_to(layout.stage3).parts[:1]:
+    combined: list[dict[str, Any]] = []
+    for mode in layout.modes_present(3):
+        tree = layout.stage_dir(3, mode)
+        for meta in sorted(tree.glob("*/*/**/*.stage3.metadata.json")):
+            if meta.relative_to(tree).parts[0] == "combined":
                 continue
-            try:
-                payload = json.loads(meta.read_text(encoding="utf-8"))
-            except (OSError, json.JSONDecodeError):
+            payload = _read_json(meta)
+            if payload is None:
                 continue
-            record = entry(str(payload.get("source", "")), str(payload.get("epoch", "")))
+            record = entry(str(payload.get("source", "")), str(payload.get("epoch", "")), mode)
             record["stage3"].append(
                 {
                     "product": payload.get("product_tag"),
@@ -333,30 +426,34 @@ def inventory(root: Path) -> dict[str, Any]:
                     "created_utc": payload.get("created_utc"),
                 }
             )
+        combined_root = tree / "combined"
+        if combined_root.is_dir():
+            for meta in sorted(combined_root.glob("**/*.combined.stage3.metadata.json")):
+                payload = _read_json(meta)
+                if payload is None:
+                    continue
+                combined.append(
+                    {
+                        "source": payload.get("source"),
+                        "calibration_mode": mode,
+                        "product": payload.get("product_tag"),
+                        "analysis_tag": payload.get("analysis_tag"),
+                        "n_visits": payload.get("n_visits"),
+                        "version": payload.get("stage3_version"),
+                        "path": str(meta.parent),
+                    }
+                )
 
-    combined: list[dict[str, Any]] = []
-    combined_root = layout.stage3 / "combined"
-    if combined_root.is_dir():
-        for meta in sorted(combined_root.glob("**/*.combined.stage3.metadata.json")):
-            try:
-                payload = json.loads(meta.read_text(encoding="utf-8"))
-            except (OSError, json.JSONDecodeError):
-                continue
-            combined.append(
-                {
-                    "source": payload.get("source"),
-                    "product": payload.get("product_tag"),
-                    "analysis_tag": payload.get("analysis_tag"),
-                    "n_visits": payload.get("n_visits"),
-                    "version": payload.get("stage3_version"),
-                    "path": str(meta.parent),
-                }
-            )
+    for key, known in inputs.items():
+        if not any(k == key for k, _ in epochs):
+            entry(known["source"], known["epoch"], None)
 
+    order = {mode: index for index, mode in enumerate(CALIBRATION_MODES)}
+    rows = [epochs[key] for key in sorted(epochs, key=lambda k: (k[0], order.get(k[1] or "", -1)))]
     summary = {
         "root": str(layout.root),
         "config_present": layout.config_path.is_file(),
-        "epochs": [epochs[key] for key in sorted(epochs)],
+        "epochs": rows,
         "combined": combined,
         "freshness": {},
     }
@@ -370,10 +467,12 @@ def _attach_freshness(summary: dict[str, Any], root: Path) -> None:
 
     checks = verify_project(root, hash_on_change=False)  # never read GB files for a listing
     counts: dict[str, int] = {}
-    by_epoch = {f"{row['source']}.{row['epoch']}": row for row in summary["epochs"]}
+    by_epoch = {
+        (f"{row['source']}.{row['epoch']}", row.get("calibration_mode")): row for row in summary["epochs"]
+    }
     for check in checks:
         counts[check.status] = counts.get(check.status, 0) + 1
-        row = by_epoch.get(f"{check.source}.{check.epoch}")
+        row = by_epoch.get((f"{check.source}.{check.epoch}", check.calibration_mode))
         if check.stage == 1 and row and row.get("stage1"):
             row["stage1"]["status"] = check.status
             row["stage1"]["reasons"] = check.reasons
@@ -385,7 +484,11 @@ def _attach_freshness(summary: dict[str, Any], root: Path) -> None:
         elif check.stage == 3 and check.epoch == "combined":
             for item in summary["combined"]:
                 label = str(item["product"]) + (f"/{item['analysis_tag']}" if item.get("analysis_tag") else "")
-                if item["source"] == check.source and label == check.product:
+                if (
+                    item["source"] == check.source
+                    and item.get("calibration_mode") == check.calibration_mode
+                    and label == check.product
+                ):
                     item["status"] = check.status
                     item["reasons"] = check.reasons
         elif check.stage == 3 and row:

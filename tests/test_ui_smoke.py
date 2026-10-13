@@ -13,7 +13,7 @@ from lenspipe.config import LenspipeConfig  # noqa: E402
 from lenspipe.ui.commands import RunRequest, build_steps, calibrate_step, command_line  # noqa: E402
 from lenspipe.ui.forms import classify  # noqa: E402
 from lenspipe.ui.pages_parameters import render_toml, unified_diff  # noqa: E402
-from lenspipe.ui.pages_results import product_options, resolve_target  # noqa: E402
+from lenspipe.ui.pages_results import _epoch_options, product_options, resolve_target  # noqa: E402
 from lenspipe.ui.state import ChainStep, Console  # noqa: E402
 
 
@@ -86,16 +86,33 @@ def test_classify_field_kinds() -> None:
 
 def test_results_targets(tmp_path: Path) -> None:
     summary = {
-        "epochs": [{"source": "S", "epoch": "A", "stage2": [{"product": "channel"}],
-                    "stage3": [{"product": "channel", "analysis_tag": "x1"}]}],
-        "combined": [{"source": "S", "product": "channel", "analysis_tag": None}],
+        "epochs": [
+            {"source": "S", "epoch": "A", "calibration_mode": "full-band", "stage2": [{"product": "channel"}],
+             "stage3": [{"product": "channel", "analysis_tag": "x1"}]},
+            {"source": "S", "epoch": "A", "calibration_mode": "per-if", "stage2": [{"product": "if64_edge0"}],
+             "stage3": []},
+        ],
+        "combined": [
+            {"source": "S", "calibration_mode": "full-band", "product": "channel", "analysis_tag": None},
+            {"source": "S", "calibration_mode": "per-if", "product": "if64_edge0", "analysis_tag": None},
+        ],
     }
+    # Both calibration modes of one epoch are separate entries, keyed by mode.
+    assert list(_epoch_options(summary)) == [
+        "full-band/S.A", "per-if/S.A", "combined:full-band:S", "combined:per-if:S",
+    ]
+    assert product_options(summary, "full-band/S.A", 2) == {"channel": "channel"}
+    assert product_options(summary, "per-if/S.A", 2) == {"if64_edge0": "if64_edge0"}
+    assert list(product_options(summary, "full-band/S.A", 3)) == ["channel/x1"]
+    assert list(product_options(summary, "combined:per-if:S", 3)) == ["if64_edge0"]
+    assert resolve_target(tmp_path, "full-band/S.A", 2, "channel").prefix == "S.A.channel."
+    assert resolve_target(tmp_path, "full-band/S.A", 2, "channel").directory == tmp_path / "stage2/full-band/S.A"
+    assert resolve_target(tmp_path, "per-if/S.A", 3, "channel/x1").directory == tmp_path / "stage3/per-if/S.A/channel/x1"
+    assert resolve_target(tmp_path, "combined:per-if:S", 3, "channel").directory == tmp_path / "stage3/per-if/combined/S/channel"
+    # Pre-2.1 links without a mode still resolve, onto the full-band tree.
     assert product_options(summary, "S.A", 2) == {"channel": "channel"}
-    assert list(product_options(summary, "S.A", 3)) == ["channel/x1"]
-    assert list(product_options(summary, "combined:S", 3)) == ["channel"]
-    assert resolve_target(tmp_path, "S.A", 2, "channel").prefix == "S.A.channel."
-    assert resolve_target(tmp_path, "S.A", 3, "channel/x1").directory == tmp_path / "stage3/S.A/channel/x1"
-    assert resolve_target(tmp_path, "combined:S", 3, "channel").directory == tmp_path / "stage3/combined/S/channel"
+    assert resolve_target(tmp_path, "S.A", 3, "channel/x1").directory == tmp_path / "stage3/full-band/S.A/channel/x1"
+    assert resolve_target(tmp_path, "combined:S", 3, "channel").directory == tmp_path / "stage3/full-band/combined/S/channel"
 
 
 def test_chain_releases_next_stage_only_after_completion(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

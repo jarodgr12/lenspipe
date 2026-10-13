@@ -22,7 +22,11 @@ class RunRequest:
     dry_run: bool = False
     workers: int | None = None
     stage1_final_if_selfcal: bool | None = None
-    stage1_selfcal_per_if: bool | None = None
+    calibration_mode: str | None = None  # applies to every stage in the chain
+    stage1_if_count: int | None = None
+    stage1_channels_per_if: int | None = None
+    stage1_edge_channels: int | None = None
+    stage1_reimage_only: bool = False
     stage2_mode: str | None = None
     stage2_shards: str | None = None
     stage2_channels_per_if: int | None = None
@@ -86,11 +90,17 @@ def build_steps(request: RunRequest) -> tuple[list[ChainStep], list[str]]:
     notes: list[str] = []
     epochs = _epoch_flags(request.epochs)
     suffix = " " + ",".join(request.epochs) if request.epochs else ""
+    mode_flag = ["--calibration-mode", request.calibration_mode] if request.calibration_mode else []
 
     if 1 in request.stages:
         argv = ["stage1", root, *epochs]
         argv += _toggle(request.stage1_final_if_selfcal, "--final-if-selfcal", "--no-final-if-selfcal")
-        argv += _toggle(request.stage1_selfcal_per_if, "--selfcal-per-if", "--no-selfcal-per-if")
+        argv += mode_flag
+        argv += _number(request.stage1_if_count, "--if-count")
+        argv += _number(request.stage1_channels_per_if, "--channels-per-if")
+        argv += _number(request.stage1_edge_channels, "--edge-channels")
+        if request.stage1_reimage_only:
+            argv.append("--reimage-only")
         if request.workers:
             argv += ["--workers", str(request.workers)]
         if request.overwrite:
@@ -100,7 +110,7 @@ def build_steps(request: RunRequest) -> tuple[list[ChainStep], list[str]]:
         steps.append(ChainStep(argv, f"Stage 1{suffix}", "stage1"))
 
     if 2 in request.stages:
-        argv = ["stage2", root, *epochs]
+        argv = ["stage2", root, *epochs, *mode_flag]
         if request.stage2_mode:
             argv += ["--mode", request.stage2_mode]
         if request.stage2_mode != "channel":
@@ -127,7 +137,7 @@ def build_steps(request: RunRequest) -> tuple[list[ChainStep], list[str]]:
         if request.dry_run:
             notes.append("stage3 has no --dry-run; it is left out of a dry run.")
         else:
-            argv = ["stage3", root, *epochs]
+            argv = ["stage3", root, *epochs, *mode_flag]
             if request.stage3_product:
                 argv += ["--product", request.stage3_product]
             if request.stage3_error_source:

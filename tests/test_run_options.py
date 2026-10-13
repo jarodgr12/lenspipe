@@ -88,6 +88,15 @@ def test_build_steps_passes_advanced_options_through(tmp_path: Path) -> None:
     steps, _ = build_steps(request)
     s1, s2, s3 = (step.argv for step in steps)
     assert s1 == ["stage1", str(tmp_path), "--final-if-selfcal"]
+    steps_mode, _ = build_steps(RunRequest(
+        root=tmp_path, stages=[1, 2, 3], calibration_mode="per-if", stage1_if_count=48,
+        stage1_channels_per_if=64, stage1_edge_channels=2, stage1_reimage_only=True,
+    ))
+    m1, m2, m3 = (step.argv for step in steps_mode)
+    assert m1 == ["stage1", str(tmp_path), "--calibration-mode", "per-if", "--if-count", "48",
+                  "--channels-per-if", "64", "--edge-channels", "2", "--reimage-only"]
+    assert m2[:4] == ["stage2", str(tmp_path), "--calibration-mode", "per-if"]
+    assert m3[:4] == ["stage3", str(tmp_path), "--calibration-mode", "per-if"]
     assert s2 == [
         "stage2", str(tmp_path), "--mode", "if", "--channels-per-if", "64",
         "--exclude-edge-channels", "2", "--modelfit-iterations", "5", "--unflag",

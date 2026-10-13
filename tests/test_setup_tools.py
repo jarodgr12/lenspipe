@@ -126,7 +126,7 @@ def test_pipeline_runs_on_symlinked_inputs(project: Path, fake_difmap: Path, tmp
     cfg = _config(fake_difmap, mode="channel", shards=2)
     stage1 = run_stage1(linked, cfg, reporter=quiet, workers=1)
     assert all(r.ok for r in stage1), [r.message for r in stage1]
-    meta = json.loads((linked / "stage1" / "MG0414.A" / "MG0414.A.stage1.metadata.json").read_text())
+    meta = json.loads((linked / "stage1" / "full-band" / "MG0414.A" / "MG0414.A.stage1.metadata.json").read_text())
     assert meta["input_uvfits"] == "inputs/MG0414.A.uvfits"
     assert meta["input_uvfits_resolved"] == str((project / "inputs" / "MG0414.A.uvfits").resolve())
     stage2 = run_stage2(linked, cfg, reporter=quiet, workers=1)
@@ -134,7 +134,7 @@ def test_pipeline_runs_on_symlinked_inputs(project: Path, fake_difmap: Path, tmp
     from lenspipe.stage3 import run_stage3
 
     assert run_stage3(linked, cfg.with_overrides(stage3={"figure_formats": ["png"]}), reporter=quiet, workers=1).ok
-    assert (linked / "stage2" / "MG0414.A" / "MG0414.A.channel.spectrum.csv").is_file()
+    assert (linked / "stage2" / "full-band" / "MG0414.A" / "MG0414.A.channel.spectrum.csv").is_file()
 
 
 def test_render_toml_fills_values_and_stays_valid() -> None:
@@ -167,7 +167,7 @@ def test_compare_identical_and_perturbed_projects(project: Path, fake_difmap: Pa
     assert {d.stage for d in diffs} == {1, 2, 3}
 
     # Perturb one flux value in the twin's Stage 2 CSV by 1 percent.
-    csv = twin / "stage2" / "MG0414.A" / "MG0414.A.channel.spectrum.csv"
+    csv = twin / "stage2" / "full-band" / "MG0414.A" / "MG0414.A.channel.spectrum.csv"
     lines = csv.read_text().splitlines()
     header = lines[0].split(",")
     column = header.index("A1_jy")

@@ -87,7 +87,7 @@ import numpy as np
 from lenspipe import __version__
 from lenspipe.config import RCUSP_HELP, LenspipeConfig
 from lenspipe.progress import Reporter
-from lenspipe.project import Layout
+from lenspipe.project import Layout, migrate_flat_layout
 from lenspipe.provenance import fingerprint
 from lenspipe.stage3 import plotting
 from lenspipe.stage3.combined import (
@@ -1030,7 +1030,9 @@ def _write_visit_image_figure(dataset: Stage2Dataset, plots_dir: Path, settings:
     record = _image_record(settings)
     if not settings or not settings.enabled:
         return record
-    clean, residual = stage1_images_for(dataset.project_root, dataset.source, dataset.epoch)
+    clean, residual = stage1_images_for(
+        dataset.project_root, dataset.source, dataset.epoch, dataset.calibration_mode
+    )
     record.update({"clean": str(clean), "residual": str(residual)})
     missing = [path.name for path in (clean, residual) if not path.is_file()]
     if missing:
@@ -1059,7 +1061,9 @@ def _write_all_epochs_image_figure(
     skipped: list[str] = []
     for analysis in analyses:
         dataset = analysis.dataset
-        clean, residual = stage1_images_for(dataset.project_root, dataset.source, dataset.epoch)
+        clean, residual = stage1_images_for(
+            dataset.project_root, dataset.source, dataset.epoch, dataset.calibration_mode
+        )
         if clean.is_file() and residual.is_file():
             entries.append((dataset.epoch, clean, residual))
         else:
@@ -1213,6 +1217,7 @@ def write_epoch_products(
             "source": dataset.source,
             "epoch": dataset.epoch,
             "product_tag": dataset.product_tag,
+            "calibration_mode": dataset.calibration_mode,
             "analysis_tag": analysis_tag,
             "mjd": analysis.mjd,
             "reference_frequency_ghz": reference_frequency_ghz,
@@ -1297,6 +1302,7 @@ def write_epoch_products(
                 "source": dataset.source,
                 "epoch": dataset.epoch,
                 "product_tag": dataset.product_tag,
+                "calibration_mode": dataset.calibration_mode,
                 "analysis_tag": analysis_tag,
                 "created_utc": created,
                 "stage2_manifest": str(dataset.manifest_json),
@@ -1347,7 +1353,9 @@ def write_combined_products(
             raise ValueError("Flux-ratio labels differ between visits.")
 
     project_root = first.dataset.project_root
-    final_output = project_root / "stage3" / "combined" / source / product_tag
+    final_output = (
+        Layout.at(project_root).stage_dir(3, first.dataset.calibration_mode) / "combined" / source / product_tag
+    )
     if analysis_tag:
         final_output = final_output / analysis_tag
     if final_output.exists() and not overwrite:
@@ -1836,6 +1844,7 @@ def write_combined_products(
                 "created_utc": created,
                 "source": source,
                 "product_tag": product_tag,
+                "calibration_mode": first.dataset.calibration_mode,
                 "analysis_tag": analysis_tag,
                 "n_visits": len(analyses),
                 "epochs": [analysis.dataset.epoch for analysis in analyses],
@@ -2007,6 +2016,9 @@ def run_stage3(
     reporter = reporter or Reporter()
     settings = config.stage3
     root = Layout.at(project_root).root
+    calibration_mode = config.stage1.calibration_mode
+    for note in migrate_flat_layout(root):
+        reporter.log(f"[stage3] layout: {note}")
 
     global_excluded = (
         _parse_index_spec(settings.exclude_channels, "stage3.exclude_channels")
@@ -2033,7 +2045,8 @@ def run_stage3(
     plotting.configure_error_bars(settings.plot_error_bars)
 
     datasets = discover_stage2_datasets(
-        root, requested_epochs=epochs or None, requested_products=products or None
+        root, requested_epochs=epochs or None, requested_products=products or None,
+        calibration_mode=calibration_mode,
     )
     selected_epochs = {dataset.epoch for dataset in datasets}
     unknown = sorted(set(epoch_excluded) - selected_epochs)
@@ -2181,7 +2194,7 @@ def run_stage3(
                 image_settings=image_settings,
             )
             combined_written += 1
-            combined_dir = root / "stage3" / "combined" / source / product_tag
+            combined_dir = Layout.at(root).stage_dir(3, calibration_mode) / "combined" / source / product_tag
             products_out.append(str(combined_dir / analysis_tag if analysis_tag else combined_dir))
         except Exception as exc:  # noqa: BLE001
             failures += 1
