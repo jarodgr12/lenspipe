@@ -22,6 +22,7 @@ class RunRequest:
     dry_run: bool = False
     workers: int | None = None
     stage1_final_if_selfcal: bool | None = None
+    stage1_selfcal_per_if: bool | None = None
     stage2_mode: str | None = None
     stage2_shards: str | None = None
     stage2_channels_per_if: int | None = None
@@ -89,6 +90,7 @@ def build_steps(request: RunRequest) -> tuple[list[ChainStep], list[str]]:
     if 1 in request.stages:
         argv = ["stage1", root, *epochs]
         argv += _toggle(request.stage1_final_if_selfcal, "--final-if-selfcal", "--no-final-if-selfcal")
+        argv += _toggle(request.stage1_selfcal_per_if, "--selfcal-per-if", "--no-selfcal-per-if")
         if request.workers:
             argv += ["--workers", str(request.workers)]
         if request.overwrite:

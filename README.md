@@ -141,6 +141,7 @@ Settings that did not exist before:
 | `stage3.figure_formats` | `["pdf","png"]` | Formats written for every Stage 3 figure; `["png"]` roughly halves plot time |
 | `stage2.plot_spectrum`, `stage2.plot_error_bars` | true, true | Quick-look PNGs after each epoch, and whether they carry residual-RMS error bars |
 | `stage1.selfcal` gscale | off | A fifth element `true` on a schedule entry, `[amplitude, float_amplitude, solint_min, modelfit_iterations, true]`, runs DifMAP's `gscale` (one overall amplitude correction per telescope, `dofloat` = float_amplitude) and another `modelfit` at the end of that step, after its selfcal and modelfit. On the Parameters page tick the step's `gscale` switch |
+| `stage1.selfcal_per_if` | `false` | Run the self-cal schedule once per IF instead of once on the full band: each IF selects its inner channels, re-reads the starting model and runs every step; then the full band is selected and the final model fitted once. IF layout from `[stage1.final_if_selfcal]` (which need not be enabled). CLI `--selfcal-per-if`; Run page switch "Self-cal schedule per IF" |
 | `stage2.unflag` | false | Run `unflag *` on the calibrated file before the channel fits. Off keeps the flags Stage 1 wrote (Stage 1 has its own `unflag`, on by default). Also `--unflag/--no-unflag` per run |
 | `stage3.plot_error_bars` | true | Error bars on every Stage 3 figure; off plots the points alone |
 | `project.difmap.stream` | `pipe` | `pty` makes DifMAP line-buffer so progress arrives per fit |

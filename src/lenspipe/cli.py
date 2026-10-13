@@ -259,6 +259,10 @@ def stage1(
     final_if_selfcal: Annotated[
         bool | None, typer.Option("--final-if-selfcal/--no-final-if-selfcal")
     ] = None,
+    selfcal_per_if: Annotated[
+        bool | None,
+        typer.Option("--selfcal-per-if/--no-selfcal-per-if", help="Run the self-cal schedule once per IF."),
+    ] = None,
 ) -> None:
     """Self-calibrate, model-fit and image each epoch (inputs/ -> stage1/)."""
     from lenspipe.stage1 import run_stage1
@@ -270,6 +274,8 @@ def stage1(
         cfg = cfg.with_overrides(
             stage1={"final_if_selfcal": {**cfg.stage1.final_if_selfcal.model_dump(), "enabled": final_if_selfcal}}
         )
+    if selfcal_per_if is not None:
+        cfg = cfg.with_overrides(stage1={"selfcal_per_if": selfcal_per_if})
     try:
         results = run_stage1(
             root, cfg, epochs=set(epoch) if epoch else None, overwrite=overwrite,
