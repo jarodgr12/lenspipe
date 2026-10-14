@@ -122,6 +122,11 @@ def run_page() -> None:
                         final_if = ui.switch(
                             "Final per-IF self-cal", value=config.stage1.final_if_selfcal.enabled
                         )
+                        final_if_channels = ui.input(
+                            "Final-IF channels per IF",
+                            value=config.stage1.final_if_selfcal.channels or "",
+                            placeholder=f"empty = edge {config.stage1.final_if_selfcal.edge_channels}; e.g. 1:3-62; 2:5-60,62; 7-12:1-64",
+                        ).props("dense outlined").classes("w-[28rem]")
                         reimage_only = ui.switch("Re-image only (common grid)", value=False)
                         ui.label(
                             f"{config.stage1.final_if_selfcal.if_count} IFs x "
@@ -272,6 +277,9 @@ def run_page() -> None:
                 dry_run=bool(dry_run.value),
                 workers=_int_or_none(workers.value),
                 stage1_final_if_selfcal=_override(bool(final_if.value), config.stage1.final_if_selfcal.enabled),
+                stage1_final_if_channels=_override(
+                    (final_if_channels.value or "").strip(), config.stage1.final_if_selfcal.channels or ""
+                ),
                 calibration_mode=_override(calibration_mode.value, config.stage1.calibration_mode),
                 stage1_if_count=_override(_int_or_none(if_count.value), config.stage1.per_if.if_count),
                 stage1_channels_per_if=_override(
@@ -330,6 +338,7 @@ def run_page() -> None:
             stage1_card.set_visibility(stage_boxes[1].value)
             for widget in (if_count, s1_channels_per_if, s1_edge):
                 widget.set_visibility(calibration_mode.value == "per-if")
+            final_if_channels.set_visibility(bool(final_if.value))
             stage2_card.set_visibility(stage_boxes[2].value)
             stage3_card.set_visibility(stage_boxes[3].value)
             channels.set_visibility(mode.value == "channel")
@@ -356,7 +365,7 @@ def run_page() -> None:
 
         for widget in (
             *stage_boxes.values(), epochs, overwrite, dry_run, workers, calibration_mode, if_count,
-            s1_channels_per_if, s1_edge, final_if, reimage_only, mode, channels_per_if,
+            s1_channels_per_if, s1_edge, final_if, final_if_channels, reimage_only, mode, channels_per_if,
             channels, shards, edge, iterations, unflag, keep_models, plots, s2_error_bars,
             error_source, product, plot_workers, fit_method, reference_frequency, formats,
             exclude_channels, exclude_epoch_channels, annotations, s3_error_bars,

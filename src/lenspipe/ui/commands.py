@@ -22,6 +22,7 @@ class RunRequest:
     dry_run: bool = False
     workers: int | None = None
     stage1_final_if_selfcal: bool | None = None
+    stage1_final_if_channels: str | None = None  # "" clears the configured spec
     calibration_mode: str | None = None  # applies to every stage in the chain
     stage1_if_count: int | None = None
     stage1_channels_per_if: int | None = None
@@ -95,6 +96,8 @@ def build_steps(request: RunRequest) -> tuple[list[ChainStep], list[str]]:
     if 1 in request.stages:
         argv = ["stage1", root, *epochs]
         argv += _toggle(request.stage1_final_if_selfcal, "--final-if-selfcal", "--no-final-if-selfcal")
+        if request.stage1_final_if_channels is not None:
+            argv += ["--final-if-channels", request.stage1_final_if_channels]
         argv += mode_flag
         argv += _number(request.stage1_if_count, "--if-count")
         argv += _number(request.stage1_channels_per_if, "--channels-per-if")

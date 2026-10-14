@@ -80,7 +80,8 @@ def test_stage1_products_match_legacy(project: Path, fake_difmap: Path, fake_dif
         # v1.1 imaged once; 2.1 images natively, then on the common grid. Same data, same RMS.
         assert new_meta["native_residual_rms_jy_per_beam"] == legacy_meta["final_residual_rms_jy_per_beam"]
         assert new_meta["final_residual_rms_jy_per_beam"] == legacy_meta["final_residual_rms_jy_per_beam"]
-        assert new_meta["final_if_selfcal"] == legacy_meta["final_if_selfcal"]
+        # The package adds channels_spec (per-IF selection, 2.1.1); every legacy key must still agree.
+        assert {k: v for k, v in new_meta["final_if_selfcal"].items() if k != "channels_spec"} == legacy_meta["final_if_selfcal"]
         assert new_meta["calibration_mode"] == "full-band" and new_meta["per_if"] is None
         assert (new_dir / f"{prefix}.native.cln.fits").is_file() and (new_dir / f"{prefix}.cln.fits").is_file()
         assert new_meta["common_image_geometry"]["cell_mas"] == new_meta["native_image_geometry"]["cell_mas"]

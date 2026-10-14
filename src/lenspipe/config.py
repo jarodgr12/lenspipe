@@ -9,9 +9,12 @@ from __future__ import annotations
 
 import tomllib
 from pathlib import Path
-from typing import Any, Literal
+from typing import TYPE_CHECKING, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+
+if TYPE_CHECKING:
+    from lenspipe.channels import IfSelection
 
 __all__ = [
     "CONFIG_FILENAME",
@@ -121,12 +124,29 @@ class FinalIfSelfcal(_Model):
     if_count: int = Field(48, ge=1)
     channels_per_if: int = Field(64, ge=1)
     edge_channels: int = Field(0, ge=0)
+    channels: str | None = Field(
+        None,
+        description=(
+            "Per-IF channel selection, e.g. '1:3-62; 2:5-60,62; 7-12:1-64': entries separated by ';', "
+            "each an IF number or IF range (1-based), a colon, and the channels to use within that IF "
+            "(1-based within the IF, Stage 2 syntax: ranges and single channels separated by ','). "
+            "IFs not listed use edge_channels. Empty: every IF uses edge_channels."
+        ),
+    )
 
     @model_validator(mode="after")
     def _check_edges(self) -> FinalIfSelfcal:
         if 2 * self.edge_channels >= self.channels_per_if:
             raise ValueError("Twice edge_channels must be smaller than channels_per_if.")
+        if self.channels is not None and not self.channels.strip():
+            object.__setattr__(self, "channels", None)
+        self.selections()  # validates the spec against the layout
         return self
+
+    def selections(self) -> list[IfSelection]:
+        from lenspipe.channels import parse_if_channel_spec
+
+        return parse_if_channel_spec(self.channels, self.if_count, self.channels_per_if, self.edge_channels)
 
 
 CalibrationMode = Literal["full-band", "per-if"]
@@ -544,7 +564,8 @@ edge_channels = 0                   # dropped from each end of every IF before i
 enabled = false
 if_count = 48
 channels_per_if = 64
-edge_channels = 0
+edge_channels = 0                   # default per IF: drop this many channels from each end
+# channels = "1:3-62; 2:5-60,62; 7-12:1-64"   # per-IF override, channels 1-based within each IF
 
 [stage2]
 mode = "if"                         # "channel" or "if"

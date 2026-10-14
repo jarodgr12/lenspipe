@@ -282,6 +282,10 @@ def stage1(
     final_if_selfcal: Annotated[
         bool | None, typer.Option("--final-if-selfcal/--no-final-if-selfcal")
     ] = None,
+    final_if_channels: Annotated[
+        str | None,
+        typer.Option("--final-if-channels", help="Final-IF pass: per-IF channels, e.g. '1:3-62; 2:5-60,62'. '' clears."),
+    ] = None,
     calibration_mode: CalibrationModeOpt = None,
     if_count: Annotated[int | None, typer.Option("--if-count", help="per-if mode: number of IFs.")] = None,
     channels_per_if: Annotated[int | None, typer.Option("--channels-per-if", help="per-if mode: channels per IF.")] = None,
@@ -294,10 +298,13 @@ def stage1(
     root, cfg = _load(project, config)
     if difmap:
         cfg = cfg.with_overrides(project={"difmap": {**cfg.project.difmap.model_dump(), "executable": difmap}})
-    if final_if_selfcal is not None:
-        cfg = cfg.with_overrides(
-            stage1={"final_if_selfcal": {**cfg.stage1.final_if_selfcal.model_dump(), "enabled": final_if_selfcal}}
-        )
+    if final_if_selfcal is not None or final_if_channels is not None:
+        final = cfg.stage1.final_if_selfcal.model_dump()
+        if final_if_selfcal is not None:
+            final["enabled"] = final_if_selfcal
+        if final_if_channels is not None:
+            final["channels"] = final_if_channels.strip() or None
+        cfg = cfg.with_overrides(stage1={"final_if_selfcal": final})
     cfg = _with_calibration_mode(cfg, calibration_mode)
     per_if = {"if_count": if_count, "channels_per_if": channels_per_if, "edge_channels": edge_channels}
     if any(v is not None for v in per_if.values()):

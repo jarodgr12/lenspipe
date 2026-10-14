@@ -57,7 +57,7 @@ def test_stage1_commands_match_legacy(project: Path, legacy_stage1, final_if: bo
         f'invert\nprint "STAGE1_RMS", imstat(rms)\nwdmap {paths.native_residual_image}\n\n'
         f"restore\nwmap {paths.native_clean_image}\n\nquit\n"
     )
-    assert ranges == legacy_ranges
+    assert [(s.first, s.last) for s in ranges] == legacy_ranges  # one run per IF without a spec
 
 
 def test_stage1_custom_schedule_renders_like_legacy_numbers() -> None:

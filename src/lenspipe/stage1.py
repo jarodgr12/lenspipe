@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Any
 
 from lenspipe import __version__
+from lenspipe.channels import IfSelection
 from lenspipe.config import LenspipeConfig
 from lenspipe.difmap import (
     STAGE1_RMS_MARKER,
@@ -185,7 +186,7 @@ def _write_metadata(
     paths: Stage1Paths,
     hierarchy: ModelHierarchy,
     rms: float | None,
-    selected_ranges: list[tuple[int, int]],
+    selected_ranges: list[IfSelection],
     config: LenspipeConfig,
     commands: str,
     difmap_info: dict[str, str | None],
@@ -276,9 +277,16 @@ def _write_metadata(
                 "amplitude_phase_interval_minutes": 3600.0,
                 "phase_only_interval_minutes": 0.5,
                 "modelfit_within_if_loop": False,
+                "channels_spec": stage1.final_if_selfcal.channels,
                 "selected_ranges_one_based": [
-                    {"if_number": index, "first_channel": first, "last_channel": last}
-                    for index, (first, last) in enumerate(selected_ranges, start=1)
+                    {
+                        "if_number": s.if_number,
+                        "first_channel": s.first,
+                        "last_channel": s.last,
+                        "channels": [list(run) for run in s.segments],  # absolute, inclusive runs
+                        "n_channels": len(s.channels),
+                    }
+                    for s in selected_ranges
                 ],
             },
             "config": stage1.model_dump(mode="json"),

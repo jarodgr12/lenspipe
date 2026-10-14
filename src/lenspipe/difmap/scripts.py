@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from lenspipe.channels import IfSelection, parse_if_channel_spec
 from lenspipe.config import Stage1Config, Stage2Config
 from lenspipe.difmap.logparse import STAGE1_RMS_MARKER, STAGE2_RMS_MARKER
 
@@ -42,34 +43,27 @@ def if_selfcal_block(
     if_count: int,
     channels_per_if: int,
     edge_channels: int,
-) -> tuple[str, list[tuple[int, int]]]:
-    """Sequential IF-by-IF self-calibration against the finished spectral model."""
-    if if_count < 1:
-        raise ValueError("if_count must be at least 1.")
-    if channels_per_if < 1:
-        raise ValueError("channels_per_if must be at least 1.")
-    if edge_channels < 0:
-        raise ValueError("edge_channels cannot be negative.")
-    if 2 * edge_channels >= channels_per_if:
-        raise ValueError("Twice edge_channels must be smaller than channels_per_if.")
+    channels: str | None = None,
+) -> tuple[str, list[IfSelection]]:
+    """Sequential IF-by-IF self-calibration against the finished spectral model.
 
-    ranges: list[tuple[int, int]] = []
+    ``channels`` is the per-IF selection spec (see ``lenspipe.channels``); an IF
+    with several runs of channels gets them all on one ``select`` line, which
+    DifMAP accepts as any number of ranges.
+    """
+    selections = parse_if_channel_spec(channels, if_count, channels_per_if, edge_channels)
     blocks: list[str] = []
-    for if_number in range(1, if_count + 1):
-        offset = (if_number - 1) * channels_per_if
-        first_channel = offset + edge_channels + 1
-        last_channel = offset + channels_per_if - edge_channels
-        ranges.append((first_channel, last_channel))
+    for selection in selections:
         blocks.extend(
             [
-                f"! IF {if_number}: channels {first_channel}-{last_channel}",
-                f"select i,{first_channel},{last_channel}",
+                f"! IF {selection.if_number}: channels {selection.label}",
+                f"select i,{selection.select_arguments}",
                 "selfcal true,true,3600",
                 "selfcal false,false,0.5",
                 "",
             ]
         )
-    return "\n".join(blocks).rstrip(), ranges
+    return "\n".join(blocks).rstrip(), selections
 
 
 def per_if_schedule_block(
@@ -117,20 +111,21 @@ def stage1_commands(
     config: Stage1Config,
     fixed_index_model: Path | None = None,
     per_if_models: list[Path] | None = None,
-) -> tuple[str, list[tuple[int, int]]]:
-    """Return the Stage 1 calibration script and the IF ranges used by the final-IF loop.
+) -> tuple[str, list[IfSelection]]:
+    """Return the Stage 1 calibration script and the per-IF selections of the final-IF loop.
 
     The maps written here are the *native* ones (``mapsize`` without a cell, so
     DifMAP picks its own pixel size); ``imaging_commands`` makes the final maps on
     the common grid afterwards. In per-IF mode ``fixed_index_model`` and
     ``per_if_models`` are required.
     """
-    selected_ranges: list[tuple[int, int]] = []
+    selected_ranges: list[IfSelection] = []
     if config.final_if_selfcal.enabled:
         block, selected_ranges = if_selfcal_block(
             if_count=config.final_if_selfcal.if_count,
             channels_per_if=config.final_if_selfcal.channels_per_if,
             edge_channels=config.final_if_selfcal.edge_channels,
+            channels=config.final_if_selfcal.channels,
         )
         final_if_section = f"""
 ! Optional final IF-by-IF calibration against the completed spectral model.
