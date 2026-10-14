@@ -3,6 +3,19 @@
 Each entry says whether existing products need re-running. The `lenspipe`
 version that made a product is recorded in its metadata JSON.
 
+## 2.1.1 — 2026-10-14
+
+**Re-run needed:** no, unless you set the new option.
+
+- Added: `stage1.final_if_selfcal.channels`, a per-IF channel selection
+  for the final IF-by-IF self-cal pass that can differ between IFs:
+  `"1:3-62; 2:5-60,62; 7-12:1-64"` (IF or IF range, colon, channels
+  within that IF, 1-based, Stage 2 syntax; unlisted IFs keep
+  `edge_channels`). Each IF's picks go on one DifMAP `select` line, so a
+  gap inside an IF is fine. CLI `--final-if-channels`, a field next to the
+  "Final per-IF self-cal" switch on the Run page, and the Parameters page.
+  The Stage 1 metadata lists the selected runs and channel count per IF.
+
 ## 2.1.0 — 2026-10-13
 
 **Re-run needed:** Stage 1 for epochs you want on the common grid or in
