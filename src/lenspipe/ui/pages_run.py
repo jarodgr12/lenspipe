@@ -16,12 +16,34 @@ from lenspipe.ui.state import console
 FIGURE_FORMATS = ["pdf", "png", "svg"]
 
 
-def _stage2_products() -> list[str]:
+def _stage2_products(calibration_mode: str) -> list[str]:
+    """Product tags present on disk under ``stage2/<calibration_mode>/``."""
     try:
-        products = available_stage2_products(console.root)
+        products = available_stage2_products(console.root, None, calibration_mode)
     except Exception:  # noqa: BLE001 - "no products yet" is a normal state here
         return []
     return sorted({tag for tags in products.values() for tag in tags})
+
+
+def _standard_tags(config: LenspipeConfig) -> list[str]:
+    """The channel and IF product tags the configured Stage 2 settings would write.
+
+    Both are always offered, so Stage 3 can be pointed at an IF product even when
+    the Stage 2 card is set to channel mode (or Stage 2 is not part of the run).
+    """
+    data = config.stage2.model_dump()
+    tags = []
+    for mode in ("channel", "if"):
+        data["mode"] = mode
+        if mode == "if":
+            data["channels"] = None
+        tags.append(product_tag(type(config.stage2).model_validate(data)))
+    return tags
+
+
+def product_options(on_disk: list[str], expected: str | None, standard: list[str]) -> list[str]:
+    """Options for the Stage 2 product select: disk products, the pending tag, and both standard tags."""
+    return sorted(set(on_disk) | ({expected} if expected else set()) | set(standard))
 
 
 def _expected_tag(
@@ -176,8 +198,10 @@ def run_page() -> None:
                             ["rms", "difmap"], label="Error source", value=config.stage3.error_source
                         ).props(dense).classes("w-36")
                         product = ui.select(
-                            _stage2_products(), label="Stage 2 product", with_input=True,
-                            new_value_mode="add-unique",
+                            product_options(
+                                _stage2_products(config.stage1.calibration_mode), None, _standard_tags(config)
+                            ),
+                            label="Stage 2 product", with_input=True, new_value_mode="add-unique",
                         ).props(dense).classes("w-56")
                         plot_workers = ui.number(
                             "Plot processes", value=config.run.plot_workers, min=1, step=1
@@ -334,6 +358,10 @@ def run_page() -> None:
                 ),
             )
 
+        disk_products: dict[str, list[str]] = {
+            config.stage1.calibration_mode: _stage2_products(config.stage1.calibration_mode)
+        }
+
         def refresh_preview() -> None:
             stage1_card.set_visibility(stage_boxes[1].value)
             for widget in (if_count, s1_channels_per_if, s1_edge):
@@ -344,18 +372,23 @@ def run_page() -> None:
             channels.set_visibility(mode.value == "channel")
             channels_per_if.set_visibility(mode.value != "channel")
             edge.set_visibility(mode.value != "channel")
+            expected = None
             if stage_boxes[2].value:
                 expected = _expected_tag(
                     config, mode.value, channels_per_if.value,
                     (channels.value or "").strip() or None, _int_or_none(edge.value),
                 )
-                options = sorted(set(product.options) | {expected})
-                if options != product.options:
-                    product.set_options(options)
-                if not product.value or product.value not in options:
-                    product.set_value(expected)
-            elif not product.value and product.options:
-                product.set_value(product.options[0])
+            current_mode = str(calibration_mode.value or config.stage1.calibration_mode)
+            if current_mode not in disk_products:  # one scan per calibration mode per page view
+                disk_products[current_mode] = _stage2_products(current_mode)
+            options = product_options(disk_products[current_mode], expected, _standard_tags(config))
+            typed = product.value if product.value and product.value not in options else None
+            if typed:
+                options = sorted({*options, typed})  # keep a tag the user typed by hand
+            if options != product.options:
+                product.set_options(options)
+            if not product.value or product.value not in options:
+                product.set_value(expected or (options[0] if options else None))
             steps, notes = build_steps(request())
             preview.set_text(
                 "\n\n".join(command_line(step.argv) for step in steps) or "(nothing selected)"

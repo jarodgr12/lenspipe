@@ -3,6 +3,18 @@
 Each entry says whether existing products need re-running. The `lenspipe`
 version that made a product is recorded in its metadata JSON.
 
+## 2.1.2 — 2026-10-20
+
+**Re-run needed:** no.
+
+- Fixed: the Run page's Stage 3 "Stage 2 product" select listed only the
+  product implied by the current Stage 2 settings (typically `channel`),
+  so an IF product from an earlier run could not be picked. It now always
+  offers both the channel and the IF tag for the configured Stage 2
+  settings, plus every product on disk under the selected calibration
+  mode's `stage2/<mode>/` tree, and refreshes when the mode changes. A
+  hand-typed tag is kept.
+
 ## 2.1.1 — 2026-10-14
 
 **Re-run needed:** no, unless you set the new option.
