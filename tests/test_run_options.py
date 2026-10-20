@@ -170,3 +170,21 @@ def test_resume_step_keeps_the_settings_and_drops_overwrite() -> None:
     assert step.title == "stage2 A (resume)"
     # Resuming a resumed job does not stack flags.
     assert resume_step(_record("stage2", step.argv, "failed")).argv == step.argv
+
+
+# ---------------------------------------------------------------------------
+# Run page: the Stage 3 product select always offers channel and IF products
+
+
+def test_product_options_offer_channel_and_if_and_disk_products() -> None:
+    from lenspipe.ui.pages_run import _standard_tags, product_options
+
+    cfg = LenspipeConfig().with_overrides(stage2={"mode": "channel", "channels_per_if": 64, "exclude_edge_channels": 2})
+    assert _standard_tags(cfg) == ["channel", "if64_edge2"]  # both, whatever mode Stage 2 is set to
+    assert product_options([], None, _standard_tags(cfg)) == ["channel", "if64_edge2"]
+    # Products on disk from earlier runs (an IF product with other settings) and the pending tag join in.
+    assert product_options(["if32_edge0"], "channel_1_10", _standard_tags(cfg)) == [
+        "channel", "channel_1_10", "if32_edge0", "if64_edge2",
+    ]
+    cfg_if = LenspipeConfig().with_overrides(stage2={"mode": "if", "channels": None})
+    assert _standard_tags(cfg_if) == ["channel", "if64_edge0"]
