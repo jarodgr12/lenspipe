@@ -185,6 +185,28 @@ def test_stage2_survives_stderr_warnings_mid_line(project: Path, fake_difmap: Pa
         assert "#Your choice" not in log
 
 
+def test_stage2_parses_logs_with_difmap_prompts_in_pty_mode(project: Path, fake_difmap: Path, quiet, tmp_path: Path) -> None:
+    """With ``stream = "pty"`` DifMAP sees a terminal and glues its ``0>`` prompt to the next
+    output line (``0>STAGE2_RMS 1 ...``). A macOS user hit "requested 48, found 0" (2.1.3).
+    The fake prints prompts on a terminal exactly like DifMAP; products must match pipe mode."""
+    run_stage1(project, _config(fake_difmap), reporter=quiet, workers=1)
+    clean_root = tmp_path / "clean"
+    shutil.copytree(project, clean_root)
+    run_stage2(clean_root, _config(fake_difmap, mode="channel", shards=1), reporter=quiet, workers=1)
+
+    pty_cfg = _config(fake_difmap, mode="channel", shards=2).with_overrides(
+        project={"difmap": {"executable": str(fake_difmap), "stream": "pty"}}
+    )
+    results = run_stage2(project, pty_cfg, reporter=quiet, workers=1)
+    assert all(r.ok for r in results), [r.message for r in results]
+    for epoch in ("A", "B"):
+        name = f"MG0414.{epoch}.channel"
+        ours = (project / "stage2" / "full-band" / f"MG0414.{epoch}" / f"{name}.spectrum.csv").read_text()
+        assert ours == (clean_root / "stage2" / "full-band" / f"MG0414.{epoch}" / f"{name}.spectrum.csv").read_text()
+        log = (project / "stage2" / "full-band" / f"MG0414.{epoch}" / f"{name}.stage2.difmap.log").read_text()
+        assert "0>STAGE2_RMS 1 " in log  # the prompt really was in the log, as on the user's Mac
+
+
 # ---------------------------------------------------------------------------
 # Figure formats
 

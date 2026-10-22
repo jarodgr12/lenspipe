@@ -1,0 +1,961 @@
+! lenspipe stage2 shard 1/8: fits 1-6
+Caltech difference mapping program - version 2.5q (3 Dec 2022)
+Copyright (c) 1993-2022 California Institute of Technology. All Rights Reserved.
+Type 'help difmap' to list difference mapping commands and help topics.
+Started logfile: difmap.log_1 on Thu Oct 22 16:05:15 2026
+0>Reading UV FITS file: /Users/d/Work/lenspipe/data/stage1/full-band/0712.D/0712.D.cal.uvf
+AN table 1: 143 integrations on 325 of 325 possible baselines.
+Apparent sampling: 1 visibilities/baseline/integration-bin.
+Found source: B0712+472
+
+There are 48 IFs, and a total of 3072 channels:
+
+ IF  Channel    Frequency  Freq offset  Number of   Overall IF
+      origin    at origin  per channel   channels    bandwidth
+ ------------------------------------------------------------- (Hz)
+ 01        1   1.1976e+10        2e+06         64     1.28e+08
+ 02       65   1.2104e+10        2e+06         64     1.28e+08
+ 03      129   1.2232e+10        2e+06         64     1.28e+08
+ 04      193    1.236e+10        2e+06         64     1.28e+08
+ 05      257   1.2488e+10        2e+06         64     1.28e+08
+ 06      321   1.2616e+10        2e+06         64     1.28e+08
+ 07      385   1.2744e+10        2e+06         64     1.28e+08
+ 08      449   1.2872e+10        2e+06         64     1.28e+08
+ 09      513      1.3e+10        2e+06         64     1.28e+08
+ 10      577   1.3128e+10        2e+06         64     1.28e+08
+ 11      641   1.3256e+10        2e+06         64     1.28e+08
+ 12      705   1.3384e+10        2e+06         64     1.28e+08
+ 13      769   1.3512e+10        2e+06         64     1.28e+08
+ 14      833    1.364e+10        2e+06         64     1.28e+08
+ 15      897   1.3768e+10        2e+06         64     1.28e+08
+ 16      961   1.3896e+10        2e+06         64     1.28e+08
+ 17     1025   1.3976e+10        2e+06         64     1.28e+08
+ 18     1089   1.4104e+10        2e+06         64     1.28e+08
+ 19     1153   1.4232e+10        2e+06         64     1.28e+08
+ 20     1217    1.436e+10        2e+06         64     1.28e+08
+ 21     1281   1.4488e+10        2e+06         64     1.28e+08
+ 22     1345   1.4616e+10        2e+06         64     1.28e+08
+ 23     1409   1.4744e+10        2e+06         64     1.28e+08
+ 24     1473   1.4872e+10        2e+06         64     1.28e+08
+ 25     1537      1.5e+10        2e+06         64     1.28e+08
+ 26     1601   1.5128e+10        2e+06         64     1.28e+08
+ 27     1665   1.5256e+10        2e+06         64     1.28e+08
+ 28     1729   1.5384e+10        2e+06         64     1.28e+08
+ 29     1793   1.5512e+10        2e+06         64     1.28e+08
+ 30     1857    1.564e+10        2e+06         64     1.28e+08
+ 31     1921   1.5768e+10        2e+06         64     1.28e+08
+ 32     1985   1.5896e+10        2e+06         64     1.28e+08
+ 33     2049   1.5976e+10        2e+06         64     1.28e+08
+ 34     2113   1.6104e+10        2e+06         64     1.28e+08
+ 35     2177   1.6232e+10        2e+06         64     1.28e+08
+ 36     2241    1.636e+10        2e+06         64     1.28e+08
+ 37     2305   1.6488e+10        2e+06         64     1.28e+08
+ 38     2369   1.6616e+10        2e+06         64     1.28e+08
+ 39     2433   1.6744e+10        2e+06         64     1.28e+08
+ 40     2497   1.6872e+10        2e+06         64     1.28e+08
+ 41     2561      1.7e+10        2e+06         64     1.28e+08
+ 42     2625   1.7128e+10        2e+06         64     1.28e+08
+ 43     2689   1.7256e+10        2e+06         64     1.28e+08
+ 44     2753   1.7384e+10        2e+06         64     1.28e+08
+ 45     2817   1.7512e+10        2e+06         64     1.28e+08
+ 46     2881    1.764e+10        2e+06         64     1.28e+08
+ 47     2945   1.7768e+10        2e+06         64     1.28e+08
+ 48     3009   1.7896e+10        2e+06         64     1.28e+08
+
+Polarization(s): RR LL
+
+Read 5 lines of history.
+
+Reading 285542400 visibilities.
+0>Selecting polarization: I,  channels: 1..3072
+Reading IF 1 channels: 1..64
+Reading IF 2 channels: 65..128
+Reading IF 3 channels: 129..192
+Reading IF 4 channels: 193..256
+Reading IF 5 channels: 257..320
+Reading IF 6 channels: 321..384
+Reading IF 7 channels: 385..448
+Reading IF 8 channels: 449..512
+Reading IF 9 channels: 513..576
+Reading IF 10 channels: 577..640
+Reading IF 11 channels: 641..704
+Reading IF 12 channels: 705..768
+Reading IF 13 channels: 769..832
+Reading IF 14 channels: 833..896
+Reading IF 15 channels: 897..960
+Reading IF 16 channels: 961..1024
+Reading IF 17 channels: 1025..1088
+Reading IF 18 channels: 1089..1152
+Reading IF 19 channels: 1153..1216
+Reading IF 20 channels: 1217..1280
+Reading IF 21 channels: 1281..1344
+Reading IF 22 channels: 1345..1408
+Reading IF 23 channels: 1409..1472
+Reading IF 24 channels: 1473..1536
+Reading IF 25 channels: 1537..1600
+Reading IF 26 channels: 1601..1664
+Reading IF 27 channels: 1665..1728
+Reading IF 28 channels: 1729..1792
+Reading IF 29 channels: 1793..1856
+Reading IF 30 channels: 1857..1920
+Reading IF 31 channels: 1921..1984
+Reading IF 32 channels: 1985..2048
+Reading IF 33 channels: 2049..2112
+Reading IF 34 channels: 2113..2176
+Reading IF 35 channels: 2177..2240
+Reading IF 36 channels: 2241..2304
+Reading IF 37 channels: 2305..2368
+Reading IF 38 channels: 2369..2432
+Reading IF 39 channels: 2433..2496
+Reading IF 40 channels: 2497..2560
+Reading IF 41 channels: 2561..2624
+Reading IF 42 channels: 2625..2688
+Reading IF 43 channels: 2689..2752
+Reading IF 44 channels: 2753..2816
+Reading IF 45 channels: 2817..2880
+Reading IF 46 channels: 2881..2944
+Reading IF 47 channels: 2945..3008
+Reading IF 48 channels: 3009..3072
+0>Map grid = 512x512 pixels with 23.2x23.2 milli-arcsec cellsize.
+0>Uniform weighting is not currently selected.
+Gridding weights will be scaled by errors raised to the power -1.
+Radial weighting is not currently selected.
+0>0>Selecting polarization: I,  channels: 1..64
+Reading IF 1 channels: 1..64
+Reading IF 2 channels: (none)
+Reading IF 3 channels: (none)
+Reading IF 4 channels: (none)
+Reading IF 5 channels: (none)
+Reading IF 6 channels: (none)
+Reading IF 7 channels: (none)
+Reading IF 8 channels: (none)
+Reading IF 9 channels: (none)
+Reading IF 10 channels: (none)
+Reading IF 11 channels: (none)
+Reading IF 12 channels: (none)
+Reading IF 13 channels: (none)
+Reading IF 14 channels: (none)
+Reading IF 15 channels: (none)
+Reading IF 16 channels: (none)
+Reading IF 17 channels: (none)
+Reading IF 18 channels: (none)
+Reading IF 19 channels: (none)
+Reading IF 20 channels: (none)
+Reading IF 21 channels: (none)
+Reading IF 22 channels: (none)
+Reading IF 23 channels: (none)
+Reading IF 24 channels: (none)
+Reading IF 25 channels: (none)
+Reading IF 26 channels: (none)
+Reading IF 27 channels: (none)
+Reading IF 28 channels: (none)
+Reading IF 29 channels: (none)
+Reading IF 30 channels: (none)
+Reading IF 31 channels: (none)
+Reading IF 32 channels: (none)
+Reading IF 33 channels: (none)
+Reading IF 34 channels: (none)
+Reading IF 35 channels: (none)
+Reading IF 36 channels: (none)
+Reading IF 37 channels: (none)
+Reading IF 38 channels: (none)
+Reading IF 39 channels: (none)
+Reading IF 40 channels: (none)
+Reading IF 41 channels: (none)
+Reading IF 42 channels: (none)
+Reading IF 43 channels: (none)
+Reading IF 44 channels: (none)
+Reading IF 45 channels: (none)
+Reading IF 46 channels: (none)
+Reading IF 47 channels: (none)
+Reading IF 48 channels: (none)
+0>A total of 5 model components were read from file /Users/d/Work/lenspipe/data/stage2/full-band/0712.D/0712.D.stage2.mod
+0>Partitioning the model into established and variable parts.
+The fixed established model contains 0 components (0 Jy).
+The variable part of the model contains 5 components (0.0331699 Jy).
+There are 5 variables and 46190 usable visibilities.
+This gives 2 x 46190 - 5 = 92375 degrees of freedom.
+Reduced Chi-squared = Chi-squared / 92375.
+
+Iteration 00: Reduced Chi-squared=0.018340700  Degrees of Freedom=92375
+! Flux (Jy) Radius (mas)  Theta (deg)  Major FWHM (mas)  Axial ratio   Phi (deg) T \
+! Freq (Hz)     SpecIndex
+ 0.0146018v     588.917     -80.0643      12.5725     0.339833    -26.5282  1 \
+ 1.49990e+10           0 
+ 0.0110948v     526.637     -96.2569      14.4068  8.99173e-09    -28.5930  1 \
+ 1.49990e+10           0 
+0.00576616v     610.438      157.704      13.0748      0.00000    -1.72295  1 \
+ 1.49990e+10           0 
+0.000431269v     674.671      152.896      187.444      0.00000    -64.1783  1 \
+ 1.49990e+10           0 
+0.00127583v     810.160      46.2845      28.5955     0.412126    -78.4019  1 \
+ 1.49990e+10           0 
+
+Iteration 01: Reduced Chi-squared=0.018288280  Degrees of Freedom=92375
+! Flux (Jy) Radius (mas)  Theta (deg)  Major FWHM (mas)  Axial ratio   Phi (deg) T \
+! Freq (Hz)     SpecIndex
+ 0.0154729v     588.917     -80.0643      12.5725     0.339833    -26.5282  1 \
+ 1.49990e+10           0 
+ 0.0118824v     526.637     -96.2569      14.4068  8.99173e-09    -28.5930  1 \
+ 1.49990e+10           0 
+0.00606072v     610.438      157.704      13.0748      0.00000    -1.72295  1 \
+ 1.49990e+10           0 
+0.000459440v     674.671      152.896      187.444      0.00000    -64.1783  1 \
+ 1.49990e+10           0 
+0.00128341v     810.160      46.2845      28.5955     0.412126    -78.4019  1 \
+ 1.49990e+10           0 
+
+Iteration 02: Reduced Chi-squared=0.018288280  Degrees of Freedom=92375
+! Flux (Jy) Radius (mas)  Theta (deg)  Major FWHM (mas)  Axial ratio   Phi (deg) T \
+! Freq (Hz)     SpecIndex
+ 0.0154733v     588.917     -80.0643      12.5725     0.339833    -26.5282  1 \
+ 1.49990e+10           0 
+ 0.0118827v     526.637     -96.2569      14.4068  8.99173e-09    -28.5930  1 \
+ 1.49990e+10           0 
+0.00606098v     610.438      157.704      13.0748      0.00000    -1.72295  1 \
+ 1.49990e+10           0 
+0.000459256v     674.671      152.896      187.444      0.00000    -64.1783  1 \
+ 1.49990e+10           0 
+0.00128343v     810.160      46.2845      28.5955     0.412126    -78.4019  1 \
+ 1.49990e+10           0 
+
+Iteration 03: Reduced Chi-squared=0.018288280 (Increased)
+Iteration 04: Reduced Chi-squared=0.018288280 (Increased)
+Iteration 05: Reduced Chi-squared=0.018288280 (Increased)
+Iteration 06: Reduced Chi-squared=0.018288280 (Increased)
+Iteration 07: Reduced Chi-squared=0.018288280 (Increased)
+Iteration 08: Reduced Chi-squared=0.018288280 (Increased)
+Iteration 09: Reduced Chi-squared=0.018288280 (Increased)
+Iteration 10: Reduced Chi-squared=0.018288280 (Increased)
+Iteration 11: Reduced Chi-squared=0.018288280 (Increased)
+Iteration 12: Reduced Chi-squared=0.018288280 (Increased)
+Iteration 13: Reduced Chi-squared=0.018288280 (Increased)
+Iteration 14: Reduced Chi-squared=0.018288280 (Increased)
+Iteration 15: Reduced Chi-squared=0.018288280 (Increased)
+Iteration 16: Reduced Chi-squared=0.018288280 (Increased)
+Iteration 17: Reduced Chi-squared=0.018288280 (Increased)
+Iteration 18: Reduced Chi-squared=0.018288280 (Increased)
+Iteration 19: Reduced Chi-squared=0.018288280 (Increased)
+Iteration 20: Reduced Chi-squared=0.018288280 (Increased)
+#    Flux (Jy)          East (arcsec)        North (arcsec)    Shape   R.A. (deg)       Dec (deg)  Major FWHM (arcsec) Minor FWHM (arcsec)  Theta (deg)     Freq (Hz)      Spectral Index  
+#  Value     Stdev      Value     Stdev      Value     Stdev                                          Value    Stdev     Value    Stdev     Value  Stdev                   Value     Stdev 
+#------------------  -------------------  ------------------- ------  -------------- -------------- -----------------  -----------------  ---------------  -----------  -------------------
+ 1.5473e-02 5.8e-04  -5.8008e-01 0.0e+00   1.0161e-01 0.0e+00  gauss  109.0149005780  47.1472640590 1.257e-02 0.0e+00  4.273e-03 0.0e+00   -26.53 0.0e+00  1.49990e+10   0.000e+00  0.0e+00
+ 1.1883e-02 5.8e-04  -5.2350e-01 0.0e+00  -5.7396e-02 0.0e+00  gauss  109.0149236887  47.1472198897 1.441e-02 0.0e+00  1.295e-10 0.0e+00   -28.59 0.0e+00  1.49990e+10   0.000e+00  0.0e+00
+ 6.0610e-03 8.0e-04   2.3160e-01 0.0e+00  -5.6480e-01 0.0e+00  gauss  109.0152320893  47.1470789446 1.307e-02 0.0e+00  0.000e+00 0.0e+00    -1.72 0.0e+00  1.49990e+10   0.000e+00  0.0e+00
+ 4.5926e-04 1.1e-03   3.0738e-01 0.0e+00  -6.0058e-01 0.0e+00  gauss  109.0152630438  47.1470690057 1.874e-01 0.0e+00  0.000e+00 0.0e+00   -64.18 0.0e+00  1.49990e+10   0.000e+00  0.0e+00
+ 1.2834e-03 5.9e-04   5.8557e-01 0.0e+00   5.5988e-01 0.0e+00  gauss  109.0153766621  47.1473913563 2.860e-02 0.0e+00  1.178e-02 0.0e+00   -78.40 0.0e+00  1.49990e+10   0.000e+00  0.0e+00
+0>Adding 5 model components to the UV plane model.
+The established model now contains 5 components and 0.0351596 Jy
+Inverting map and beam 
+Estimated beam: bmin=161.9 mas, bmaj=180.5 mas, bpa=-2.306 degrees
+Estimated noise=0.583875 mJy/beam.
+0>STAGE2_RMS 1 7.58734e-05 
+0>Writing 5 model components to file: /Users/d/Work/lenspipe/data/stage2/full-band/0712.D/.0712.D.if64_edge0.work/if_00001.mod
+0>0>Selecting polarization: I,  channels: 65..128
+Reading IF 1 channels: (none)
+Reading IF 2 channels: 65..128
+Reading IF 3 channels: (none)
+Reading IF 4 channels: (none)
+Reading IF 5 channels: (none)
+Reading IF 6 channels: (none)
+Reading IF 7 channels: (none)
+Reading IF 8 channels: (none)
+Reading IF 9 channels: (none)
+Reading IF 10 channels: (none)
+Reading IF 11 channels: (none)
+Reading IF 12 channels: (none)
+Reading IF 13 channels: (none)
+Reading IF 14 channels: (none)
+Reading IF 15 channels: (none)
+Reading IF 16 channels: (none)
+Reading IF 17 channels: (none)
+Reading IF 18 channels: (none)
+Reading IF 19 channels: (none)
+Reading IF 20 channels: (none)
+Reading IF 21 channels: (none)
+Reading IF 22 channels: (none)
+Reading IF 23 channels: (none)
+Reading IF 24 channels: (none)
+Reading IF 25 channels: (none)
+Reading IF 26 channels: (none)
+Reading IF 27 channels: (none)
+Reading IF 28 channels: (none)
+Reading IF 29 channels: (none)
+Reading IF 30 channels: (none)
+Reading IF 31 channels: (none)
+Reading IF 32 channels: (none)
+Reading IF 33 channels: (none)
+Reading IF 34 channels: (none)
+Reading IF 35 channels: (none)
+Reading IF 36 channels: (none)
+Reading IF 37 channels: (none)
+Reading IF 38 channels: (none)
+Reading IF 39 channels: (none)
+Reading IF 40 channels: (none)
+Reading IF 41 channels: (none)
+Reading IF 42 channels: (none)
+Reading IF 43 channels: (none)
+Reading IF 44 channels: (none)
+Reading IF 45 channels: (none)
+Reading IF 46 channels: (none)
+Reading IF 47 channels: (none)
+Reading IF 48 channels: (none)
+0>clrmod: Cleared the established and tentative models.
+A total of 5 model components were read from file /Users/d/Work/lenspipe/data/stage2/full-band/0712.D/0712.D.stage2.mod
+0>Partitioning the model into established and variable parts.
+The fixed established model contains 0 components (0 Jy).
+The variable part of the model contains 5 components (0.0331699 Jy).
+There are 5 variables and 46334 usable visibilities.
+This gives 2 x 46334 - 5 = 92663 degrees of freedom.
+Reduced Chi-squared = Chi-squared / 92663.
+
+Iteration 00: Reduced Chi-squared=0.017581872  Degrees of Freedom=92663
+! Flux (Jy) Radius (mas)  Theta (deg)  Major FWHM (mas)  Axial ratio   Phi (deg) T \
+! Freq (Hz)     SpecIndex
+ 0.0146018v     588.917     -80.0643      12.5725     0.339833    -26.5282  1 \
+ 1.49990e+10           0 
+ 0.0110948v     526.637     -96.2569      14.4068  8.99173e-09    -28.5930  1 \
+ 1.49990e+10           0 
+0.00576616v     610.438      157.704      13.0748      0.00000    -1.72295  1 \
+ 1.49990e+10           0 
+0.000431269v     674.671      152.896      187.444      0.00000    -64.1783  1 \
+ 1.49990e+10           0 
+0.00127583v     810.160      46.2845      28.5955     0.412126    -78.4019  1 \
+ 1.49990e+10           0 
+
+Iteration 01: Reduced Chi-squared=0.017521621  Degrees of Freedom=92663
+! Flux (Jy) Radius (mas)  Theta (deg)  Major FWHM (mas)  Axial ratio   Phi (deg) T \
+! Freq (Hz)     SpecIndex
+ 0.0154649v     588.917     -80.0643      12.5725     0.339833    -26.5282  1 \
+ 1.49990e+10           0 
+ 0.0118186v     526.637     -96.2569      14.4068  8.99173e-09    -28.5930  1 \
+ 1.49990e+10           0 
+0.00593990v     610.438      157.704      13.0748      0.00000    -1.72295  1 \
+ 1.49990e+10           0 
+0.000590415v     674.671      152.896      187.444      0.00000    -64.1783  1 \
+ 1.49990e+10           0 
+0.00131957v     810.160      46.2845      28.5955     0.412126    -78.4019  1 \
+ 1.49990e+10           0 
+
+Iteration 02: Reduced Chi-squared=0.017521621  Degrees of Freedom=92663
+! Flux (Jy) Radius (mas)  Theta (deg)  Major FWHM (mas)  Axial ratio   Phi (deg) T \
+! Freq (Hz)     SpecIndex
+ 0.0154653v     588.917     -80.0643      12.5725     0.339833    -26.5282  1 \
+ 1.49990e+10           0 
+ 0.0118189v     526.637     -96.2569      14.4068  8.99173e-09    -28.5930  1 \
+ 1.49990e+10           0 
+0.00593999v     610.438      157.704      13.0748      0.00000    -1.72295  1 \
+ 1.49990e+10           0 
+0.000590462v     674.671      152.896      187.444      0.00000    -64.1783  1 \
+ 1.49990e+10           0 
+0.00131961v     810.160      46.2845      28.5955     0.412126    -78.4019  1 \
+ 1.49990e+10           0 
+
+Iteration 03: Reduced Chi-squared=0.017521621  Degrees of Freedom=92663
+! Flux (Jy) Radius (mas)  Theta (deg)  Major FWHM (mas)  Axial ratio   Phi (deg) T \
+! Freq (Hz)     SpecIndex
+ 0.0154653v     588.917     -80.0643      12.5725     0.339833    -26.5282  1 \
+ 1.49990e+10           0 
+ 0.0118189v     526.637     -96.2569      14.4068  8.99173e-09    -28.5930  1 \
+ 1.49990e+10           0 
+0.00593999v     610.438      157.704      13.0748      0.00000    -1.72295  1 \
+ 1.49990e+10           0 
+0.000590462v     674.671      152.896      187.444      0.00000    -64.1783  1 \
+ 1.49990e+10           0 
+0.00131961v     810.160      46.2845      28.5955     0.412126    -78.4019  1 \
+ 1.49990e+10           0 
+
+Iteration 04: Reduced Chi-squared=0.017521621 (Increased)
+Iteration 05: Reduced Chi-squared=0.017521621 (Increased)
+Iteration 06: Reduced Chi-squared=0.017521621 (Increased)
+Iteration 07: Reduced Chi-squared=0.017521621 (Increased)
+Iteration 08: Reduced Chi-squared=0.017521621 (Increased)
+Iteration 09: Reduced Chi-squared=0.017521621 (Increased)
+Iteration 10: Reduced Chi-squared=0.017521621 (Increased)
+Iteration 11: Reduced Chi-squared=0.017521621 (Increased)
+Iteration 12: Reduced Chi-squared=0.017521621 (Increased)
+Iteration 13: Reduced Chi-squared=0.017521621 (Increased)
+Iteration 14: Reduced Chi-squared=0.017521621 (Increased)
+Iteration 15: Reduced Chi-squared=0.017521621 (Increased)
+Iteration 16: Reduced Chi-squared=0.017521621 (Increased)
+Iteration 17: Reduced Chi-squared=0.017521621 (Increased)
+Iteration 18: Reduced Chi-squared=0.017521621 (Increased)
+Iteration 19: Reduced Chi-squared=0.017521621 (Increased)
+Iteration 20: Reduced Chi-squared=0.017521621 (Increased)
+#    Flux (Jy)          East (arcsec)        North (arcsec)    Shape   R.A. (deg)       Dec (deg)  Major FWHM (arcsec) Minor FWHM (arcsec)  Theta (deg)     Freq (Hz)      Spectral Index  
+#  Value     Stdev      Value     Stdev      Value     Stdev                                          Value    Stdev     Value    Stdev     Value  Stdev                   Value     Stdev 
+#------------------  -------------------  ------------------- ------  -------------- -------------- -----------------  -----------------  ---------------  -----------  -------------------
+ 1.5465e-02 5.2e-04  -5.8008e-01 0.0e+00   1.0161e-01 0.0e+00  gauss  109.0149005780  47.1472640590 1.257e-02 0.0e+00  4.273e-03 0.0e+00   -26.53 0.0e+00  1.49990e+10   0.000e+00  0.0e+00
+ 1.1819e-02 5.2e-04  -5.2350e-01 0.0e+00  -5.7396e-02 0.0e+00  gauss  109.0149236887  47.1472198897 1.441e-02 0.0e+00  1.295e-10 0.0e+00   -28.59 0.0e+00  1.49990e+10   0.000e+00  0.0e+00
+ 5.9400e-03 7.0e-04   2.3160e-01 0.0e+00  -5.6480e-01 0.0e+00  gauss  109.0152320893  47.1470789446 1.307e-02 0.0e+00  0.000e+00 0.0e+00    -1.72 0.0e+00  1.49990e+10   0.000e+00  0.0e+00
+ 5.9046e-04 9.5e-04   3.0738e-01 0.0e+00  -6.0058e-01 0.0e+00  gauss  109.0152630438  47.1470690057 1.874e-01 0.0e+00  0.000e+00 0.0e+00   -64.18 0.0e+00  1.49990e+10   0.000e+00  0.0e+00
+ 1.3196e-03 5.2e-04   5.8557e-01 0.0e+00   5.5988e-01 0.0e+00  gauss  109.0153766621  47.1473913563 2.860e-02 0.0e+00  1.178e-02 0.0e+00   -78.40 0.0e+00  1.49990e+10   0.000e+00  0.0e+00
+0>Adding 5 model components to the UV plane model.
+The established model now contains 5 components and 0.0351342 Jy
+Inverting map and beam 
+Estimated beam: bmin=160.3 mas, bmaj=178.2 mas, bpa=-3.101 degrees
+Estimated noise=0.515265 mJy/beam.
+0>STAGE2_RMS 2 6.44958e-05 
+0>Writing 5 model components to file: /Users/d/Work/lenspipe/data/stage2/full-band/0712.D/.0712.D.if64_edge0.work/if_00002.mod
+0>0>Selecting polarization: I,  channels: 129..192
+Reading IF 1 channels: (none)
+Reading IF 2 channels: (none)
+Reading IF 3 channels: 129..192
+Reading IF 4 channels: (none)
+Reading IF 5 channels: (none)
+Reading IF 6 channels: (none)
+Reading IF 7 channels: (none)
+Reading IF 8 channels: (none)
+Reading IF 9 channels: (none)
+Reading IF 10 channels: (none)
+Reading IF 11 channels: (none)
+Reading IF 12 channels: (none)
+Reading IF 13 channels: (none)
+Reading IF 14 channels: (none)
+Reading IF 15 channels: (none)
+Reading IF 16 channels: (none)
+Reading IF 17 channels: (none)
+Reading IF 18 channels: (none)
+Reading IF 19 channels: (none)
+Reading IF 20 channels: (none)
+Reading IF 21 channels: (none)
+Reading IF 22 channels: (none)
+Reading IF 23 channels: (none)
+Reading IF 24 channels: (none)
+Reading IF 25 channels: (none)
+Reading IF 26 channels: (none)
+Reading IF 27 channels: (none)
+Reading IF 28 channels: (none)
+Reading IF 29 channels: (none)
+Reading IF 30 channels: (none)
+Reading IF 31 channels: (none)
+Reading IF 32 channels: (none)
+Reading IF 33 channels: (none)
+Reading IF 34 channels: (none)
+Reading IF 35 channels: (none)
+Reading IF 36 channels: (none)
+Reading IF 37 channels: (none)
+Reading IF 38 channels: (none)
+Reading IF 39 channels: (none)
+Reading IF 40 channels: (none)
+Reading IF 41 channels: (none)
+Reading IF 42 channels: (none)
+Reading IF 43 channels: (none)
+Reading IF 44 channels: (none)
+Reading IF 45 channels: (none)
+Reading IF 46 channels: (none)
+Reading IF 47 channels: (none)
+Reading IF 48 channels: (none)
+0>clrmod: Cleared the established and tentative models.
+A total of 5 model components were read from file /Users/d/Work/lenspipe/data/stage2/full-band/0712.D/0712.D.stage2.mod
+0>Partitioning the model into established and variable parts.
+The fixed established model contains 0 components (0 Jy).
+The variable part of the model contains 5 components (0.0331699 Jy).
+There are 5 variables and 46475 usable visibilities.
+This gives 2 x 46475 - 5 = 92945 degrees of freedom.
+Reduced Chi-squared = Chi-squared / 92945.
+
+Iteration 00: Reduced Chi-squared=0.016870138  Degrees of Freedom=92945
+! Flux (Jy) Radius (mas)  Theta (deg)  Major FWHM (mas)  Axial ratio   Phi (deg) T \
+! Freq (Hz)     SpecIndex
+ 0.0146018v     588.917     -80.0643      12.5725     0.339833    -26.5282  1 \
+ 1.49990e+10           0 
+ 0.0110948v     526.637     -96.2569      14.4068  8.99173e-09    -28.5930  1 \
+ 1.49990e+10           0 
+0.00576616v     610.438      157.704      13.0748      0.00000    -1.72295  1 \
+ 1.49990e+10           0 
+0.000431269v     674.671      152.896      187.444      0.00000    -64.1783  1 \
+ 1.49990e+10           0 
+0.00127583v     810.160      46.2845      28.5955     0.412126    -78.4019  1 \
+ 1.49990e+10           0 
+
+Iteration 01: Reduced Chi-squared=0.016810896  Degrees of Freedom=92945
+! Flux (Jy) Radius (mas)  Theta (deg)  Major FWHM (mas)  Axial ratio   Phi (deg) T \
+! Freq (Hz)     SpecIndex
+ 0.0153764v     588.917     -80.0643      12.5725     0.339833    -26.5282  1 \
+ 1.49990e+10           0 
+ 0.0118040v     526.637     -96.2569      14.4068  8.99173e-09    -28.5930  1 \
+ 1.49990e+10           0 
+0.00608220v     610.438      157.704      13.0748      0.00000    -1.72295  1 \
+ 1.49990e+10           0 
+0.000414244v     674.671      152.896      187.444      0.00000    -64.1783  1 \
+ 1.49990e+10           0 
+0.00133702v     810.160      46.2845      28.5955     0.412126    -78.4019  1 \
+ 1.49990e+10           0 
+
+Iteration 02: Reduced Chi-squared=0.016810896  Degrees of Freedom=92945
+! Flux (Jy) Radius (mas)  Theta (deg)  Major FWHM (mas)  Axial ratio   Phi (deg) T \
+! Freq (Hz)     SpecIndex
+ 0.0153768v     588.917     -80.0643      12.5725     0.339833    -26.5282  1 \
+ 1.49990e+10           0 
+ 0.0118043v     526.637     -96.2569      14.4068  8.99173e-09    -28.5930  1 \
+ 1.49990e+10           0 
+0.00608251v     610.438      157.704      13.0748      0.00000    -1.72295  1 \
+ 1.49990e+10           0 
+0.000413996v     674.671      152.896      187.444      0.00000    -64.1783  1 \
+ 1.49990e+10           0 
+0.00133706v     810.160      46.2845      28.5955     0.412126    -78.4019  1 \
+ 1.49990e+10           0 
+
+Iteration 03: Reduced Chi-squared=0.016810896 (Increased)
+Iteration 04: Reduced Chi-squared=0.016810896 (Increased)
+
+Iteration 05: Reduced Chi-squared=0.016810896  Degrees of Freedom=92945
+! Flux (Jy) Radius (mas)  Theta (deg)  Major FWHM (mas)  Axial ratio   Phi (deg) T \
+! Freq (Hz)     SpecIndex
+ 0.0153768v     588.917     -80.0643      12.5725     0.339833    -26.5282  1 \
+ 1.49990e+10           0 
+ 0.0118043v     526.637     -96.2569      14.4068  8.99173e-09    -28.5930  1 \
+ 1.49990e+10           0 
+0.00608251v     610.438      157.704      13.0748      0.00000    -1.72295  1 \
+ 1.49990e+10           0 
+0.000413995v     674.671      152.896      187.444      0.00000    -64.1783  1 \
+ 1.49990e+10           0 
+0.00133706v     810.160      46.2845      28.5955     0.412126    -78.4019  1 \
+ 1.49990e+10           0 
+
+Iteration 06: Reduced Chi-squared=0.016810896 (Increased)
+Iteration 07: Reduced Chi-squared=0.016810896 (Increased)
+Iteration 08: Reduced Chi-squared=0.016810896 (Increased)
+Iteration 09: Reduced Chi-squared=0.016810896 (Increased)
+Iteration 10: Reduced Chi-squared=0.016810896 (Increased)
+Iteration 11: Reduced Chi-squared=0.016810896 (Increased)
+Iteration 12: Reduced Chi-squared=0.016810896 (Increased)
+Iteration 13: Reduced Chi-squared=0.016810896 (Increased)
+Iteration 14: Reduced Chi-squared=0.016810896 (Increased)
+Iteration 15: Reduced Chi-squared=0.016810896 (Increased)
+Iteration 16: Reduced Chi-squared=0.016810896 (Increased)
+Iteration 17: Reduced Chi-squared=0.016810896 (Increased)
+Iteration 18: Reduced Chi-squared=0.016810896 (Increased)
+Iteration 19: Reduced Chi-squared=0.016810896 (Increased)
+Iteration 20: Reduced Chi-squared=0.016810896 (Increased)
+#    Flux (Jy)          East (arcsec)        North (arcsec)    Shape   R.A. (deg)       Dec (deg)  Major FWHM (arcsec) Minor FWHM (arcsec)  Theta (deg)     Freq (Hz)      Spectral Index  
+#  Value     Stdev      Value     Stdev      Value     Stdev                                          Value    Stdev     Value    Stdev     Value  Stdev                   Value     Stdev 
+#------------------  -------------------  ------------------- ------  -------------- -------------- -----------------  -----------------  ---------------  -----------  -------------------
+ 1.5377e-02 4.9e-04  -5.8008e-01 0.0e+00   1.0161e-01 0.0e+00  gauss  109.0149005780  47.1472640590 1.257e-02 0.0e+00  4.273e-03 0.0e+00   -26.53 0.0e+00  1.49990e+10   0.000e+00  0.0e+00
+ 1.1804e-02 4.9e-04  -5.2350e-01 0.0e+00  -5.7396e-02 0.0e+00  gauss  109.0149236887  47.1472198897 1.441e-02 0.0e+00  1.295e-10 0.0e+00   -28.59 0.0e+00  1.49990e+10   0.000e+00  0.0e+00
+ 6.0825e-03 6.7e-04   2.3160e-01 0.0e+00  -5.6480e-01 0.0e+00  gauss  109.0152320893  47.1470789446 1.307e-02 0.0e+00  0.000e+00 0.0e+00    -1.72 0.0e+00  1.49990e+10   0.000e+00  0.0e+00
+ 4.1400e-04 9.0e-04   3.0738e-01 0.0e+00  -6.0058e-01 0.0e+00  gauss  109.0152630438  47.1470690057 1.874e-01 0.0e+00  0.000e+00 0.0e+00   -64.18 0.0e+00  1.49990e+10   0.000e+00  0.0e+00
+ 1.3371e-03 4.9e-04   5.8557e-01 0.0e+00   5.5988e-01 0.0e+00  gauss  109.0153766621  47.1473913563 2.860e-02 0.0e+00  1.178e-02 0.0e+00   -78.40 0.0e+00  1.49990e+10   0.000e+00  0.0e+00
+0>Adding 5 model components to the UV plane model.
+The established model now contains 5 components and 0.0350147 Jy
+Inverting map and beam 
+Estimated beam: bmin=159.3 mas, bmaj=177.8 mas, bpa=-3.12 degrees
+Estimated noise=0.488453 mJy/beam.
+0>STAGE2_RMS 3 6.38647e-05 
+0>Writing 5 model components to file: /Users/d/Work/lenspipe/data/stage2/full-band/0712.D/.0712.D.if64_edge0.work/if_00003.mod
+0>0>Selecting polarization: I,  channels: 193..256
+Reading IF 1 channels: (none)
+Reading IF 2 channels: (none)
+Reading IF 3 channels: (none)
+Reading IF 4 channels: 193..256
+Reading IF 5 channels: (none)
+Reading IF 6 channels: (none)
+Reading IF 7 channels: (none)
+Reading IF 8 channels: (none)
+Reading IF 9 channels: (none)
+Reading IF 10 channels: (none)
+Reading IF 11 channels: (none)
+Reading IF 12 channels: (none)
+Reading IF 13 channels: (none)
+Reading IF 14 channels: (none)
+Reading IF 15 channels: (none)
+Reading IF 16 channels: (none)
+Reading IF 17 channels: (none)
+Reading IF 18 channels: (none)
+Reading IF 19 channels: (none)
+Reading IF 20 channels: (none)
+Reading IF 21 channels: (none)
+Reading IF 22 channels: (none)
+Reading IF 23 channels: (none)
+Reading IF 24 channels: (none)
+Reading IF 25 channels: (none)
+Reading IF 26 channels: (none)
+Reading IF 27 channels: (none)
+Reading IF 28 channels: (none)
+Reading IF 29 channels: (none)
+Reading IF 30 channels: (none)
+Reading IF 31 channels: (none)
+Reading IF 32 channels: (none)
+Reading IF 33 channels: (none)
+Reading IF 34 channels: (none)
+Reading IF 35 channels: (none)
+Reading IF 36 channels: (none)
+Reading IF 37 channels: (none)
+Reading IF 38 channels: (none)
+Reading IF 39 channels: (none)
+Reading IF 40 channels: (none)
+Reading IF 41 channels: (none)
+Reading IF 42 channels: (none)
+Reading IF 43 channels: (none)
+Reading IF 44 channels: (none)
+Reading IF 45 channels: (none)
+Reading IF 46 channels: (none)
+Reading IF 47 channels: (none)
+Reading IF 48 channels: (none)
+0>clrmod: Cleared the established and tentative models.
+A total of 5 model components were read from file /Users/d/Work/lenspipe/data/stage2/full-band/0712.D/0712.D.stage2.mod
+0>Partitioning the model into established and variable parts.
+The fixed established model contains 0 components (0 Jy).
+The variable part of the model contains 5 components (0.0331699 Jy).
+There are 5 variables and 46475 usable visibilities.
+This gives 2 x 46475 - 5 = 92945 degrees of freedom.
+Reduced Chi-squared = Chi-squared / 92945.
+
+Iteration 00: Reduced Chi-squared=0.018090844  Degrees of Freedom=92945
+! Flux (Jy) Radius (mas)  Theta (deg)  Major FWHM (mas)  Axial ratio   Phi (deg) T \
+! Freq (Hz)     SpecIndex
+ 0.0146018v     588.917     -80.0643      12.5725     0.339833    -26.5282  1 \
+ 1.49990e+10           0 
+ 0.0110948v     526.637     -96.2569      14.4068  8.99173e-09    -28.5930  1 \
+ 1.49990e+10           0 
+0.00576616v     610.438      157.704      13.0748      0.00000    -1.72295  1 \
+ 1.49990e+10           0 
+0.000431269v     674.671      152.896      187.444      0.00000    -64.1783  1 \
+ 1.49990e+10           0 
+0.00127583v     810.160      46.2845      28.5955     0.412126    -78.4019  1 \
+ 1.49990e+10           0 
+
+Iteration 01: Reduced Chi-squared=0.018036362  Degrees of Freedom=92945
+! Flux (Jy) Radius (mas)  Theta (deg)  Major FWHM (mas)  Axial ratio   Phi (deg) T \
+! Freq (Hz)     SpecIndex
+ 0.0154361v     588.917     -80.0643      12.5725     0.339833    -26.5282  1 \
+ 1.49990e+10           0 
+ 0.0116386v     526.637     -96.2569      14.4068  8.99173e-09    -28.5930  1 \
+ 1.49990e+10           0 
+0.00600840v     610.438      157.704      13.0748      0.00000    -1.72295  1 \
+ 1.49990e+10           0 
+0.000534734v     674.671      152.896      187.444      0.00000    -64.1783  1 \
+ 1.49990e+10           0 
+0.00141152v     810.160      46.2845      28.5955     0.412126    -78.4019  1 \
+ 1.49990e+10           0 
+
+Iteration 02: Reduced Chi-squared=0.018036362  Degrees of Freedom=92945
+! Flux (Jy) Radius (mas)  Theta (deg)  Major FWHM (mas)  Axial ratio   Phi (deg) T \
+! Freq (Hz)     SpecIndex
+ 0.0154365v     588.917     -80.0643      12.5725     0.339833    -26.5282  1 \
+ 1.49990e+10           0 
+ 0.0116388v     526.637     -96.2569      14.4068  8.99173e-09    -28.5930  1 \
+ 1.49990e+10           0 
+0.00600857v     610.438      157.704      13.0748      0.00000    -1.72295  1 \
+ 1.49990e+10           0 
+0.000534665v     674.671      152.896      187.444      0.00000    -64.1783  1 \
+ 1.49990e+10           0 
+0.00141160v     810.160      46.2845      28.5955     0.412126    -78.4019  1 \
+ 1.49990e+10           0 
+
+Iteration 03: Reduced Chi-squared=0.018036362  Degrees of Freedom=92945
+! Flux (Jy) Radius (mas)  Theta (deg)  Major FWHM (mas)  Axial ratio   Phi (deg) T \
+! Freq (Hz)     SpecIndex
+ 0.0154365v     588.917     -80.0643      12.5725     0.339833    -26.5282  1 \
+ 1.49990e+10           0 
+ 0.0116388v     526.637     -96.2569      14.4068  8.99173e-09    -28.5930  1 \
+ 1.49990e+10           0 
+0.00600857v     610.438      157.704      13.0748      0.00000    -1.72295  1 \
+ 1.49990e+10           0 
+0.000534665v     674.671      152.896      187.444      0.00000    -64.1783  1 \
+ 1.49990e+10           0 
+0.00141160v     810.160      46.2845      28.5955     0.412126    -78.4019  1 \
+ 1.49990e+10           0 
+
+Iteration 04: Reduced Chi-squared=0.018036362 (Increased)
+Iteration 05: Reduced Chi-squared=0.018036362 (Increased)
+Iteration 06: Reduced Chi-squared=0.018036362 (Increased)
+Iteration 07: Reduced Chi-squared=0.018036362 (Increased)
+Iteration 08: Reduced Chi-squared=0.018036362 (Increased)
+Iteration 09: Reduced Chi-squared=0.018036362 (Increased)
+Iteration 10: Reduced Chi-squared=0.018036362 (Increased)
+Iteration 11: Reduced Chi-squared=0.018036362 (Increased)
+Iteration 12: Reduced Chi-squared=0.018036362 (Increased)
+Iteration 13: Reduced Chi-squared=0.018036362 (Increased)
+Iteration 14: Reduced Chi-squared=0.018036362 (Increased)
+Iteration 15: Reduced Chi-squared=0.018036362 (Increased)
+Iteration 16: Reduced Chi-squared=0.018036362 (Increased)
+Iteration 17: Reduced Chi-squared=0.018036362 (Increased)
+Iteration 18: Reduced Chi-squared=0.018036362 (Increased)
+Iteration 19: Reduced Chi-squared=0.018036362 (Increased)
+Iteration 20: Reduced Chi-squared=0.018036362 (Increased)
+#    Flux (Jy)          East (arcsec)        North (arcsec)    Shape   R.A. (deg)       Dec (deg)  Major FWHM (arcsec) Minor FWHM (arcsec)  Theta (deg)     Freq (Hz)      Spectral Index  
+#  Value     Stdev      Value     Stdev      Value     Stdev                                          Value    Stdev     Value    Stdev     Value  Stdev                   Value     Stdev 
+#------------------  -------------------  ------------------- ------  -------------- -------------- -----------------  -----------------  ---------------  -----------  -------------------
+ 1.5437e-02 4.8e-04  -5.8008e-01 0.0e+00   1.0161e-01 0.0e+00  gauss  109.0149005780  47.1472640590 1.257e-02 0.0e+00  4.273e-03 0.0e+00   -26.53 0.0e+00  1.49990e+10   0.000e+00  0.0e+00
+ 1.1639e-02 4.8e-04  -5.2350e-01 0.0e+00  -5.7396e-02 0.0e+00  gauss  109.0149236887  47.1472198897 1.441e-02 0.0e+00  1.295e-10 0.0e+00   -28.59 0.0e+00  1.49990e+10   0.000e+00  0.0e+00
+ 6.0086e-03 6.5e-04   2.3160e-01 0.0e+00  -5.6480e-01 0.0e+00  gauss  109.0152320893  47.1470789446 1.307e-02 0.0e+00  0.000e+00 0.0e+00    -1.72 0.0e+00  1.49990e+10   0.000e+00  0.0e+00
+ 5.3467e-04 8.9e-04   3.0738e-01 0.0e+00  -6.0058e-01 0.0e+00  gauss  109.0152630438  47.1470690057 1.874e-01 0.0e+00  0.000e+00 0.0e+00   -64.18 0.0e+00  1.49990e+10   0.000e+00  0.0e+00
+ 1.4116e-03 4.9e-04   5.8557e-01 0.0e+00   5.5988e-01 0.0e+00  gauss  109.0153766621  47.1473913563 2.860e-02 0.0e+00  1.178e-02 0.0e+00   -78.40 0.0e+00  1.49990e+10   0.000e+00  0.0e+00
+0>Adding 5 model components to the UV plane model.
+The established model now contains 5 components and 0.0350302 Jy
+Inverting map and beam 
+Estimated beam: bmin=156.7 mas, bmaj=175.2 mas, bpa=-3.507 degrees
+Estimated noise=0.481711 mJy/beam.
+0>STAGE2_RMS 4 6.30444e-05 
+0>Writing 5 model components to file: /Users/d/Work/lenspipe/data/stage2/full-band/0712.D/.0712.D.if64_edge0.work/if_00004.mod
+0>0>Selecting polarization: I,  channels: 257..320
+Reading IF 1 channels: (none)
+Reading IF 2 channels: (none)
+Reading IF 3 channels: (none)
+Reading IF 4 channels: (none)
+Reading IF 5 channels: 257..320
+Reading IF 6 channels: (none)
+Reading IF 7 channels: (none)
+Reading IF 8 channels: (none)
+Reading IF 9 channels: (none)
+Reading IF 10 channels: (none)
+Reading IF 11 channels: (none)
+Reading IF 12 channels: (none)
+Reading IF 13 channels: (none)
+Reading IF 14 channels: (none)
+Reading IF 15 channels: (none)
+Reading IF 16 channels: (none)
+Reading IF 17 channels: (none)
+Reading IF 18 channels: (none)
+Reading IF 19 channels: (none)
+Reading IF 20 channels: (none)
+Reading IF 21 channels: (none)
+Reading IF 22 channels: (none)
+Reading IF 23 channels: (none)
+Reading IF 24 channels: (none)
+Reading IF 25 channels: (none)
+Reading IF 26 channels: (none)
+Reading IF 27 channels: (none)
+Reading IF 28 channels: (none)
+Reading IF 29 channels: (none)
+Reading IF 30 channels: (none)
+Reading IF 31 channels: (none)
+Reading IF 32 channels: (none)
+Reading IF 33 channels: (none)
+Reading IF 34 channels: (none)
+Reading IF 35 channels: (none)
+Reading IF 36 channels: (none)
+Reading IF 37 channels: (none)
+Reading IF 38 channels: (none)
+Reading IF 39 channels: (none)
+Reading IF 40 channels: (none)
+Reading IF 41 channels: (none)
+Reading IF 42 channels: (none)
+Reading IF 43 channels: (none)
+Reading IF 44 channels: (none)
+Reading IF 45 channels: (none)
+Reading IF 46 channels: (none)
+Reading IF 47 channels: (none)
+Reading IF 48 channels: (none)
+0>clrmod: Cleared the established and tentative models.
+A total of 5 model components were read from file /Users/d/Work/lenspipe/data/stage2/full-band/0712.D/0712.D.stage2.mod
+0>Partitioning the model into established and variable parts.
+The fixed established model contains 0 components (0 Jy).
+The variable part of the model contains 5 components (0.0331699 Jy).
+There are 5 variables and 46471 usable visibilities.
+This gives 2 x 46471 - 5 = 92937 degrees of freedom.
+Reduced Chi-squared = Chi-squared / 92937.
+
+Iteration 00: Reduced Chi-squared=0.016765545  Degrees of Freedom=92937
+! Flux (Jy) Radius (mas)  Theta (deg)  Major FWHM (mas)  Axial ratio   Phi (deg) T \
+! Freq (Hz)     SpecIndex
+ 0.0146018v     588.917     -80.0643      12.5725     0.339833    -26.5282  1 \
+ 1.49990e+10           0 
+ 0.0110948v     526.637     -96.2569      14.4068  8.99173e-09    -28.5930  1 \
+ 1.49990e+10           0 
+0.00576616v     610.438      157.704      13.0748      0.00000    -1.72295  1 \
+ 1.49990e+10           0 
+0.000431269v     674.671      152.896      187.444      0.00000    -64.1783  1 \
+ 1.49990e+10           0 
+0.00127583v     810.160      46.2845      28.5955     0.412126    -78.4019  1 \
+ 1.49990e+10           0 
+
+Iteration 01: Reduced Chi-squared=0.016719347  Degrees of Freedom=92937
+! Flux (Jy) Radius (mas)  Theta (deg)  Major FWHM (mas)  Axial ratio   Phi (deg) T \
+! Freq (Hz)     SpecIndex
+ 0.0152663v     588.917     -80.0643      12.5725     0.339833    -26.5282  1 \
+ 1.49990e+10           0 
+ 0.0117716v     526.637     -96.2569      14.4068  8.99173e-09    -28.5930  1 \
+ 1.49990e+10           0 
+0.00593571v     610.438      157.704      13.0748      0.00000    -1.72295  1 \
+ 1.49990e+10           0 
+0.000631241v     674.671      152.896      187.444      0.00000    -64.1783  1 \
+ 1.49990e+10           0 
+0.00129909v     810.160      46.2845      28.5955     0.412126    -78.4019  1 \
+ 1.49990e+10           0 
+
+Iteration 02: Reduced Chi-squared=0.016719347  Degrees of Freedom=92937
+! Flux (Jy) Radius (mas)  Theta (deg)  Major FWHM (mas)  Axial ratio   Phi (deg) T \
+! Freq (Hz)     SpecIndex
+ 0.0152666v     588.917     -80.0643      12.5725     0.339833    -26.5282  1 \
+ 1.49990e+10           0 
+ 0.0117719v     526.637     -96.2569      14.4068  8.99173e-09    -28.5930  1 \
+ 1.49990e+10           0 
+0.00593577v     610.438      157.704      13.0748      0.00000    -1.72295  1 \
+ 1.49990e+10           0 
+0.000631322v     674.671      152.896      187.444      0.00000    -64.1783  1 \
+ 1.49990e+10           0 
+0.00129913v     810.160      46.2845      28.5955     0.412126    -78.4019  1 \
+ 1.49990e+10           0 
+
+Iteration 03: Reduced Chi-squared=0.016719347 (Increased)
+Iteration 04: Reduced Chi-squared=0.016719347 (Increased)
+Iteration 05: Reduced Chi-squared=0.016719347 (Increased)
+Iteration 06: Reduced Chi-squared=0.016719347 (Increased)
+Iteration 07: Reduced Chi-squared=0.016719347 (Increased)
+Iteration 08: Reduced Chi-squared=0.016719347 (Increased)
+Iteration 09: Reduced Chi-squared=0.016719347 (Increased)
+Iteration 10: Reduced Chi-squared=0.016719347 (Increased)
+Iteration 11: Reduced Chi-squared=0.016719347 (Increased)
+Iteration 12: Reduced Chi-squared=0.016719347 (Increased)
+Iteration 13: Reduced Chi-squared=0.016719347 (Increased)
+Iteration 14: Reduced Chi-squared=0.016719347 (Increased)
+Iteration 15: Reduced Chi-squared=0.016719347 (Increased)
+Iteration 16: Reduced Chi-squared=0.016719347 (Increased)
+Iteration 17: Reduced Chi-squared=0.016719347 (Increased)
+Iteration 18: Reduced Chi-squared=0.016719347 (Increased)
+Iteration 19: Reduced Chi-squared=0.016719347 (Increased)
+Iteration 20: Reduced Chi-squared=0.016719347 (Increased)
+#    Flux (Jy)          East (arcsec)        North (arcsec)    Shape   R.A. (deg)       Dec (deg)  Major FWHM (arcsec) Minor FWHM (arcsec)  Theta (deg)     Freq (Hz)      Spectral Index  
+#  Value     Stdev      Value     Stdev      Value     Stdev                                          Value    Stdev     Value    Stdev     Value  Stdev                   Value     Stdev 
+#------------------  -------------------  ------------------- ------  -------------- -------------- -----------------  -----------------  ---------------  -----------  -------------------
+ 1.5267e-02 5.0e-04  -5.8008e-01 0.0e+00   1.0161e-01 0.0e+00  gauss  109.0149005780  47.1472640590 1.257e-02 0.0e+00  4.273e-03 0.0e+00   -26.53 0.0e+00  1.49990e+10   0.000e+00  0.0e+00
+ 1.1772e-02 5.0e-04  -5.2350e-01 0.0e+00  -5.7396e-02 0.0e+00  gauss  109.0149236887  47.1472198897 1.441e-02 0.0e+00  1.295e-10 0.0e+00   -28.59 0.0e+00  1.49990e+10   0.000e+00  0.0e+00
+ 5.9358e-03 6.8e-04   2.3160e-01 0.0e+00  -5.6480e-01 0.0e+00  gauss  109.0152320893  47.1470789446 1.307e-02 0.0e+00  0.000e+00 0.0e+00    -1.72 0.0e+00  1.49990e+10   0.000e+00  0.0e+00
+ 6.3132e-04 9.2e-04   3.0738e-01 0.0e+00  -6.0058e-01 0.0e+00  gauss  109.0152630438  47.1470690057 1.874e-01 0.0e+00  0.000e+00 0.0e+00   -64.18 0.0e+00  1.49990e+10   0.000e+00  0.0e+00
+ 1.2991e-03 5.0e-04   5.8557e-01 0.0e+00   5.5988e-01 0.0e+00  gauss  109.0153766621  47.1473913563 2.860e-02 0.0e+00  1.178e-02 0.0e+00   -78.40 0.0e+00  1.49990e+10   0.000e+00  0.0e+00
+0>Adding 5 model components to the UV plane model.
+The established model now contains 5 components and 0.0349047 Jy
+Inverting map and beam 
+Estimated beam: bmin=155.9 mas, bmaj=173.8 mas, bpa=-3.279 degrees
+Estimated noise=0.499254 mJy/beam.
+0>STAGE2_RMS 5 6.01579e-05 
+0>Writing 5 model components to file: /Users/d/Work/lenspipe/data/stage2/full-band/0712.D/.0712.D.if64_edge0.work/if_00005.mod
+0>0>Selecting polarization: I,  channels: 321..384
+Reading IF 1 channels: (none)
+Reading IF 2 channels: (none)
+Reading IF 3 channels: (none)
+Reading IF 4 channels: (none)
+Reading IF 5 channels: (none)
+Reading IF 6 channels: 321..384
+Reading IF 7 channels: (none)
+Reading IF 8 channels: (none)
+Reading IF 9 channels: (none)
+Reading IF 10 channels: (none)
+Reading IF 11 channels: (none)
+Reading IF 12 channels: (none)
+Reading IF 13 channels: (none)
+Reading IF 14 channels: (none)
+Reading IF 15 channels: (none)
+Reading IF 16 channels: (none)
+Reading IF 17 channels: (none)
+Reading IF 18 channels: (none)
+Reading IF 19 channels: (none)
+Reading IF 20 channels: (none)
+Reading IF 21 channels: (none)
+Reading IF 22 channels: (none)
+Reading IF 23 channels: (none)
+Reading IF 24 channels: (none)
+Reading IF 25 channels: (none)
+Reading IF 26 channels: (none)
+Reading IF 27 channels: (none)
+Reading IF 28 channels: (none)
+Reading IF 29 channels: (none)
+Reading IF 30 channels: (none)
+Reading IF 31 channels: (none)
+Reading IF 32 channels: (none)
+Reading IF 33 channels: (none)
+Reading IF 34 channels: (none)
+Reading IF 35 channels: (none)
+Reading IF 36 channels: (none)
+Reading IF 37 channels: (none)
+Reading IF 38 channels: (none)
+Reading IF 39 channels: (none)
+Reading IF 40 channels: (none)
+Reading IF 41 channels: (none)
+Reading IF 42 channels: (none)
+Reading IF 43 channels: (none)
+Reading IF 44 channels: (none)
+Reading IF 45 channels: (none)
+Reading IF 46 channels: (none)
+Reading IF 47 channels: (none)
+Reading IF 48 channels: (none)
+0>clrmod: Cleared the established and tentative models.
+A total of 5 model components were read from file /Users/d/Work/lenspipe/data/stage2/full-band/0712.D/0712.D.stage2.mod
+0>Partitioning the model into established and variable parts.
+The fixed established model contains 0 components (0 Jy).
+The variable part of the model contains 5 components (0.0331699 Jy).
+There are 5 variables and 46475 usable visibilities.
+This gives 2 x 46475 - 5 = 92945 degrees of freedom.
+Reduced Chi-squared = Chi-squared / 92945.
+
+Iteration 00: Reduced Chi-squared=0.017023015  Degrees of Freedom=92945
+! Flux (Jy) Radius (mas)  Theta (deg)  Major FWHM (mas)  Axial ratio   Phi (deg) T \
+! Freq (Hz)     SpecIndex
+ 0.0146018v     588.917     -80.0643      12.5725     0.339833    -26.5282  1 \
+ 1.49990e+10           0 
+ 0.0110948v     526.637     -96.2569      14.4068  8.99173e-09    -28.5930  1 \
+ 1.49990e+10           0 
+0.00576616v     610.438      157.704      13.0748      0.00000    -1.72295  1 \
+ 1.49990e+10           0 
+0.000431269v     674.671      152.896      187.444      0.00000    -64.1783  1 \
+ 1.49990e+10           0 
+0.00127583v     810.160      46.2845      28.5955     0.412126    -78.4019  1 \
+ 1.49990e+10           0 
+
+Iteration 01: Reduced Chi-squared=0.016984011  Degrees of Freedom=92945
+! Flux (Jy) Radius (mas)  Theta (deg)  Major FWHM (mas)  Axial ratio   Phi (deg) T \
+! Freq (Hz)     SpecIndex
+ 0.0152903v     588.917     -80.0643      12.5725     0.339833    -26.5282  1 \
+ 1.49990e+10           0 
+ 0.0116292v     526.637     -96.2569      14.4068  8.99173e-09    -28.5930  1 \
+ 1.49990e+10           0 
+0.00596383v     610.438      157.704      13.0748      0.00000    -1.72295  1 \
+ 1.49990e+10           0 
+0.000680046v     674.671      152.896      187.444      0.00000    -64.1783  1 \
+ 1.49990e+10           0 
+0.00131646v     810.160      46.2845      28.5955     0.412126    -78.4019  1 \
+ 1.49990e+10           0 
+
+Iteration 02: Reduced Chi-squared=0.016984011  Degrees of Freedom=92945
+! Flux (Jy) Radius (mas)  Theta (deg)  Major FWHM (mas)  Axial ratio   Phi (deg) T \
+! Freq (Hz)     SpecIndex
+ 0.0152906v     588.917     -80.0643      12.5725     0.339833    -26.5282  1 \
+ 1.49990e+10           0 
+ 0.0116294v     526.637     -96.2569      14.4068  8.99173e-09    -28.5930  1 \
+ 1.49990e+10           0 
+0.00596390v     610.438      157.704      13.0748      0.00000    -1.72295  1 \
+ 1.49990e+10           0 
+0.000680143v     674.671      152.896      187.444      0.00000    -64.1783  1 \
+ 1.49990e+10           0 
+0.00131649v     810.160      46.2845      28.5955     0.412126    -78.4019  1 \
+ 1.49990e+10           0 
+
+Iteration 03: Reduced Chi-squared=0.016984011 (Increased)
+Iteration 04: Reduced Chi-squared=0.016984011 (Increased)
+Iteration 05: Reduced Chi-squared=0.016984011 (Increased)
+Iteration 06: Reduced Chi-squared=0.016984011 (Increased)
+Iteration 07: Reduced Chi-squared=0.016984011 (Increased)
+Iteration 08: Reduced Chi-squared=0.016984011 (Increased)
+Iteration 09: Reduced Chi-squared=0.016984011 (Increased)
+Iteration 10: Reduced Chi-squared=0.016984011 (Increased)
+Iteration 11: Reduced Chi-squared=0.016984011 (Increased)
+Iteration 12: Reduced Chi-squared=0.016984011 (Increased)
+Iteration 13: Reduced Chi-squared=0.016984011 (Increased)
+Iteration 14: Reduced Chi-squared=0.016984011 (Increased)
+Iteration 15: Reduced Chi-squared=0.016984011 (Increased)
+Iteration 16: Reduced Chi-squared=0.016984011 (Increased)
+Iteration 17: Reduced Chi-squared=0.016984011 (Increased)
+Iteration 18: Reduced Chi-squared=0.016984011 (Increased)
+Iteration 19: Reduced Chi-squared=0.016984011 (Increased)
+Iteration 20: Reduced Chi-squared=0.016984011 (Increased)
+#    Flux (Jy)          East (arcsec)        North (arcsec)    Shape   R.A. (deg)       Dec (deg)  Major FWHM (arcsec) Minor FWHM (arcsec)  Theta (deg)     Freq (Hz)      Spectral Index  
+#  Value     Stdev      Value     Stdev      Value     Stdev                                          Value    Stdev     Value    Stdev     Value  Stdev                   Value     Stdev 
+! [stderr] Quitting program
+#------------------  -------------------  ------------------- ------  -------------- -------------- -----------------  -----------------  ---------------  -----------  -------------------
+ 1.5291e-02 5.1e-04  -5.8008e-01 0.0e+00   1.0161e-01 0.0e+00  gauss  109.0149005780  47.1472640590 1.257e-02 0.0e+00  4.273e-03 0.0e+00   -26.53 0.0e+00  1.49990e+10   0.000e+00  0.0e+00
+ 1.1629e-02 5.1e-04  -5.2350e-01 0.0e+00  -5.7396e-02 0.0e+00  gauss  109.0149236887  47.1472198897 1.441e-02 0.0e+00  1.295e-10 0.0e+00   -28.59 0.0e+00  1.49990e+10   0.000e+00  0.0e+00
+ 5.9639e-03 6.9e-04   2.3160e-01 0.0e+00  -5.6480e-01 0.0e+00  gauss  109.0152320893  47.1470789446 1.307e-02 0.0e+00  0.000e+00 0.0e+00    -1.72 0.0e+00  1.49990e+10   0.000e+00  0.0e+00
+ 6.8014e-04 9.4e-04   3.0738e-01 0.0e+00  -6.0058e-01 0.0e+00  gauss  109.0152630438  47.1470690057 1.874e-01 0.0e+00  0.000e+00 0.0e+00   -64.18 0.0e+00  1.49990e+10   0.000e+00  0.0e+00
+ 1.3165e-03 5.1e-04   5.8557e-01 0.0e+00   5.5988e-01 0.0e+00  gauss  109.0153766621  47.1473913563 2.860e-02 0.0e+00  1.178e-02 0.0e+00   -78.40 0.0e+00  1.49990e+10   0.000e+00  0.0e+00
+0>Adding 5 model components to the UV plane model.
+The established model now contains 5 components and 0.0348806 Jy
+Inverting map and beam 
+Estimated beam: bmin=154 mas, bmaj=172.3 mas, bpa=-3.588 degrees
+Estimated noise=0.510071 mJy/beam.
+0>STAGE2_RMS 6 6.32397e-05 
+0>Writing 5 model components to file: /Users/d/Work/lenspipe/data/stage2/full-band/0712.D/.0712.D.if64_edge0.work/if_00006.mod
+0>0>Log file difmap.log_1 closed on Thu Oct 22 16:05:50 2026

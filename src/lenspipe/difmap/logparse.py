@@ -8,6 +8,12 @@ Two kinds of information are recovered:
 * The final per-component ``Flux (Jy) / Value Stdev`` table DifMAP prints
   after ``modelfit``. DifMAP occasionally interleaves asynchronous map-size
   warnings in the middle of a printed row; the parser reassembles rows.
+
+When DifMAP's stdout is a terminal (``project.difmap.stream = "pty"``) it
+prints its command prompt, ``0>``, without a newline before reading each
+command, so the next output line arrives as ``0>STAGE2_RMS 17 0.00123`` or
+even ``0>0>Log file ... closed``. Every line-anchored pattern here therefore
+allows any number of ``<digits>>`` prompts in front of the text.
 """
 
 from __future__ import annotations
@@ -20,6 +26,7 @@ __all__ = [
     "extract_last_numeric",
     "modelfit_flux_measurements_by_fit",
     "repair_merged_warnings",
+    "strip_prompts",
     "tagged_scalar",
     "tagged_values",
 ]
@@ -28,6 +35,13 @@ STAGE1_RMS_MARKER = "STAGE1_RMS"
 STAGE2_RMS_MARKER = "STAGE2_RMS"
 
 _NUMBER = r"[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[EeDd][+-]?\d+)?"
+_PROMPTS = r"(?:\s*\d+>)*"  # DifMAP's "0>" prompt(s) glued to the start of a line in pty mode
+_PROMPT_PREFIX = re.compile(r"^(?:\s*\d+>)+")
+
+
+def strip_prompts(line: str) -> str:
+    """Remove leading DifMAP ``N>`` prompts from one log line."""
+    return _PROMPT_PREFIX.sub("", line, count=1)
 _LAST_NUMERIC = re.compile(r"^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[Ee][+-]?\d+)?$")
 
 
@@ -77,7 +91,7 @@ def tagged_values(log_text: str, marker: str) -> dict[int, float]:
     """Extract ``marker <index> <value>`` lines as ``{index: value}``."""
     log_text = repair_merged_warnings(log_text)
     pattern = re.compile(
-        rf"^\s*!?\s*{re.escape(marker)}\s+(?P<index>\d+)\s+(?P<value>{_NUMBER})\s*$"
+        rf"^{_PROMPTS}\s*!?\s*{re.escape(marker)}\s+(?P<index>\d+)\s+(?P<value>{_NUMBER})\s*$"
     )
     values: dict[int, float] = {}
     for raw_line in log_text.splitlines():
@@ -94,7 +108,7 @@ def tagged_values(log_text: str, marker: str) -> dict[int, float]:
 def tagged_scalar(log_text: str, marker: str) -> float | None:
     """Extract the last ``marker <value>`` line, or None if absent."""
     log_text = repair_merged_warnings(log_text)
-    pattern = re.compile(rf"^\s*!?\s*{re.escape(marker)}\s+(?P<value>{_NUMBER})\s*$")
+    pattern = re.compile(rf"^{_PROMPTS}\s*!?\s*{re.escape(marker)}\s+(?P<value>{_NUMBER})\s*$")
     result: float | None = None
     for raw_line in log_text.splitlines():
         match = pattern.fullmatch(raw_line)
@@ -105,7 +119,7 @@ def tagged_scalar(log_text: str, marker: str) -> float | None:
 
 def extract_last_numeric(log_text: str) -> float | None:
     """Legacy Stage 1 fallback: the last line that is purely a number."""
-    for line in reversed([line.strip() for line in log_text.splitlines()]):
+    for line in reversed([strip_prompts(line).strip() for line in log_text.splitlines()]):
         if _LAST_NUMERIC.fullmatch(line):
             return float(line)
     return None
@@ -133,7 +147,7 @@ def modelfit_flux_measurements_by_fit(
         rf"(?P<shape>[A-Za-z][A-Za-z0-9_-]*)\s+"
     )
     marker_pattern = re.compile(
-        rf"^\s*!?\s*{re.escape(marker)}\s+(?P<index>\d+)\s+(?P<value>{_NUMBER})\s*$"
+        rf"^{_PROMPTS}\s*!?\s*{re.escape(marker)}\s+(?P<index>\d+)\s+(?P<value>{_NUMBER})\s*$"
     )
     final_table_rule = re.compile(r"^\s*#-+")
     # DifMAP writes its map-pixel warning to stderr while stdout is block-buffered,
@@ -161,6 +175,7 @@ def modelfit_flux_measurements_by_fit(
             continue
         if raw_line.lstrip().startswith("! [stderr]"):
             continue
+        raw_line = strip_prompts(raw_line)
 
         stripped = raw_line.strip()
         if previous_was_comment and bare_rule.fullmatch(stripped):
