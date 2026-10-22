@@ -3,6 +3,16 @@
 Each entry says whether existing products need re-running. The `lenspipe`
 version that made a product is recorded in its metadata JSON.
 
+## 2.1.3 — 2026-10-22
+
+**Re-run needed:** Stage 3, to regenerate the per-visit map figures.
+
+- Changed: the per-visit clean and residual map figures
+  (`<prefix>.image_clean`, `<prefix>.image_residual`) are no longer A4
+  pages with a caption. Each is just the map, its axes and colour bar on
+  a plain white background, trimmed to the content. The combined
+  all-visits pages are unchanged (A4, transparent, shared colour scale).
+
 ## 2.1.2 — 2026-10-20
 
 **Re-run needed:** no.

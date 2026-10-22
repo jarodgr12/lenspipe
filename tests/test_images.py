@@ -105,7 +105,7 @@ def _png_size(path: Path) -> tuple[int, int]:
         return image.size
 
 
-def test_stage3_writes_a4_pages_per_map_and_all_epochs_grids(staged: Path, fake_difmap: Path) -> None:
+def test_stage3_writes_trimmed_visit_maps_and_a4_all_epochs_grids(staged: Path, fake_difmap: Path) -> None:
     quiet = Reporter(stream=io.StringIO())
     cfg = _config(fake_difmap, center="64.24,5.57", size_arcsec=[1.2, 0.9], cmap="magma", pmax=99.0, residual_pmax=97.0)
     assert run_stage3(staged, cfg, reporter=quiet, workers=1).ok
@@ -113,7 +113,10 @@ def test_stage3_writes_a4_pages_per_map_and_all_epochs_grids(staged: Path, fake_
     clean, residual = plots / "MG0414.A.channel.image_clean.png", plots / "MG0414.A.channel.image_residual.png"
     assert clean.is_file() and residual.is_file()
     assert not (plots / "MG0414.A.channel.images.png").exists()  # the 2.0.14 side-by-side figure is gone
-    assert _png_size(clean) == (1654, 2338) and _png_size(residual) == (1654, 2338)  # A4 portrait at 200 dpi
+    for png in (clean, residual):  # trimmed to the panel: much smaller than an A4 page, wider than tall for this cutout
+        w, h = _png_size(png)
+        assert w < 1654 and h < 1500 and w > h, (png.name, w, h)
+    assert _alpha_at_corner(clean) == 255  # plain white background, not transparent
     meta = json.loads(next((plots.parent).glob("*.stage3.metadata.json")).read_text())
     settings = meta["images"]["settings"]
     assert meta["images"]["written"] is True and settings["cmap"] == "magma"
@@ -216,7 +219,7 @@ def test_all_epochs_pages_share_the_reference_visit_scale_and_are_transparent(st
     page = combined / "plots" / "MG0414.channel.images_clean_all_epochs.png"
     visit_page = staged / "stage3" / "full-band" / "MG0414.A" / "channel" / "plots" / "MG0414.A.channel.image_clean.png"
     assert _alpha_at_corner(page) == 0  # transparent background
-    assert _alpha_at_corner(visit_page) == 255  # per-visit pages stay opaque
+    assert _alpha_at_corner(visit_page) == 255  # per-visit figures stay opaque
 
     # An unknown reference falls back to the first visit rather than failing.
     assert run_stage3(staged, _config(fake_difmap, reference_epoch="nope"), reporter=quiet, workers=1, overwrite=True).ok

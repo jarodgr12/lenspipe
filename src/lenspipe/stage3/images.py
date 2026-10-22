@@ -2,8 +2,9 @@
 
 Stage 1 leaves two images per epoch: the restored (clean) map and the residual
 map that DifMAP's ``wdmap`` writes. Stage 3 shows a cutout of each around a
-chosen centre with the restoring beam drawn: one A4 page per map per visit,
-and in the combined product A4 pages per map kind with every visit on them.
+chosen centre with the restoring beam drawn: one trimmed figure per map per
+visit (the map, its axes and colour bar on white, no page), and in the combined
+product A4 pages per map kind with every visit on them.
 Axes are offsets from the cutout centre in arcseconds (east to the left). The
 clean and residual maps have their own colour-scale percentile; on the
 all-epochs pages one visit, the reference, fixes the scale for every panel so
@@ -102,7 +103,7 @@ class ImageSettings:
             "reference_epoch": self.reference_epoch,
             "transparent_all_epochs": self.transparent_all_epochs,
             "axes": "offsets from the cutout centre in arcsec, east to the left",
-            "page_inches": {"visit": list(A4_PORTRAIT), "all_epochs": list(A4_PORTRAIT)},
+            "page_inches": {"visit": None, "all_epochs": list(A4_PORTRAIT)},  # visit figures are trimmed
         }
 
 
@@ -258,29 +259,26 @@ def _panel(image_path: Path, settings: ImageSettings, beam_fallback: Path | None
     return cutout(image, parse_center(settings.center, image), settings.size_arcsec)
 
 
+VISIT_PANEL_INCHES = 5.0  # width of the map panel in a per-visit figure; the figure is trimmed to its content
+
+
 def write_visit_images(
     clean_path: Path, residual_path: Path, base_prefix: Path, settings: ImageSettings, title: str
 ) -> dict[str, str]:
-    """One A4 portrait page per map for one visit: ``<prefix>.image_clean`` and ``<prefix>.image_residual``.
+    """One figure per map for one visit: ``<prefix>.image_clean`` and ``<prefix>.image_residual``.
 
-    Returns the file stem (no extension) written for each kind.
+    Just the map, its axes and colour bar on a plain white background, trimmed
+    to the content (no page, no caption). Returns the file stem written per kind.
     """
     written: dict[str, str] = {}
     for kind, path in zip(KINDS, (clean_path, residual_path), strict=True):
         image = _panel(path, settings, beam_fallback=clean_path if kind == "residual" else None)
-        fig = plt.figure(figsize=A4_PORTRAIT)
-        ax = fig.add_axes([0.14, 0.32, 0.72, 0.5])  # square-ish panel mid-page
+        width, height = settings.size_arcsec
+        aspect = height / width if width > 0 else 1.0
+        fig, ax = plt.subplots(figsize=(VISIT_PANEL_INCHES * 1.3, VISIT_PANEL_INCHES * aspect + 0.8))
         draw_map(ax, image, settings, f"{title}  {kind}", kind)
-        fig.text(
-            0.5, 0.2,
-            f"{title} {kind} map. Cutout {settings.size_arcsec[0]:g} x {settings.size_arcsec[1]:g} arcsec "
-            f"around the reference position; axes are offsets from it. Colour scale "
-            f"{settings.vmin if settings.vmin is not None else f'p{100 - settings.pmax_for(kind):g}'} "
-            f"to p{settings.pmax_for(kind):g}, {settings.cmap}.",
-            ha="center", va="top", fontsize=9, wrap=True,
-        )
         base = base_prefix.with_name(f"{base_prefix.name}.image_{kind}")
-        plotting.save_figure(fig, base, dpi=200, bbox_inches=None)  # keep the A4 page
+        plotting.save_figure(fig, base, dpi=200, bbox_inches="tight")
         written[kind] = base.name  # names, not paths: the plots dir is renamed when the visit completes
     return written
 
