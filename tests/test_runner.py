@@ -124,3 +124,8 @@ def test_probe_recognises_difmap_that_prints_only_quitting(tmp_path: Path) -> No
 def test_pty_stream_mode(fake_difmap: Path, tmp_path: Path) -> None:
     result = run_difmap(str(fake_difmap), 'print "PTY", 2, imstat(rms)\nquit\n', tmp_path / "p.log", stream="pty")
     assert result.ok and "PTY 2 0" in result.log_text
+    # On a terminal DifMAP glues its "0>" prompt to the next output line; the parsers must cope.
+    from lenspipe.difmap.logparse import tagged_values
+
+    assert "0>PTY 2 0" in result.log_text
+    assert tagged_values(result.log_text, "PTY") == {2: 0.0}

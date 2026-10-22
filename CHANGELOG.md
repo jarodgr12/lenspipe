@@ -3,6 +3,25 @@
 Each entry says whether existing products need re-running. The `lenspipe`
 version that made a product is recorded in its metadata JSON.
 
+## 2.1.4 — 2026-10-23
+
+**Re-run needed:** no. A Stage 2 run that failed with "tagged RMS
+measurements do not match the requested fits (requested N, found 0)"
+can be finished with `lenspipe stage2 <project> --resume`; the kept
+DifMAP output is re-parsed.
+
+- Fixed: with `project.difmap.stream = "pty"` DifMAP sees a terminal and
+  prints its `0>` prompt without a newline before reading each command,
+  so the next output line lands in the log as `0>STAGE2_RMS 1 7.6e-05`
+  (and `0>0>Log file ... closed` at the end). The log parsers required
+  the marker at the start of the line and found nothing, so Stage 2
+  reported every fit missing although DifMAP had completed them all.
+  Every parser now strips leading `N>` prompts; this also covers the
+  Stage 1 residual RMS, which silently fell back to a guess in pty mode.
+  Regression test on the first shard of the real macOS log, and the fake
+  DifMAP now prints prompts on a terminal so pty mode is exercised end
+  to end.
+
 ## 2.1.3 — 2026-10-22
 
 **Re-run needed:** Stage 3, to regenerate the per-visit map figures.

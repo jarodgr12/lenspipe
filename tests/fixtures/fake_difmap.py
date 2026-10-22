@@ -41,8 +41,17 @@ class State:
         self.cell_mas: float = 25.0
 
 
+PROMPT = "0>" if sys.stdout.isatty() else ""  # like DifMAP: the prompt is printed only on a terminal
+_prompt_pending = False
+
+
 def emit(text: str) -> None:
-    sys.stdout.write(text + "\n")
+    """Write one output line. On a terminal the prompt DifMAP printed before reading the
+    command (no newline) is glued to the front of the first line of the response."""
+    global _prompt_pending
+    prefix = PROMPT if _prompt_pending else ""
+    _prompt_pending = False
+    sys.stdout.write(prefix + text + "\n")
     sys.stdout.flush()
 
 
@@ -272,7 +281,9 @@ def main() -> int:
         Path("difmap.log_1").write_text(f"! Started logfile: difmap.log_1\n! {BANNER}\n", encoding="utf-8")
     except OSError:
         pass
+    global _prompt_pending
     for raw in sys.stdin:
+        _prompt_pending = bool(PROMPT)  # a prompt was shown before this command was read
         line = raw.strip()
         if not line or line.startswith("!"):
             continue

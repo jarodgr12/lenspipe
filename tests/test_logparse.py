@@ -123,3 +123,26 @@ def test_stage1_scalar_and_fallback() -> None:
     assert logparse.tagged_scalar("nothing", "STAGE1_RMS") is None
     assert logparse.extract_last_numeric("a\n1.5e-3\nb\n") == 1.5e-3
     assert logparse.extract_last_numeric("a\nb\n") is None
+
+
+PTY_PROMPTS = (FIXTURES / "stage2_pty_prompts.log").read_text()
+
+
+def test_real_mac_log_with_difmap_prompts_glued_to_lines() -> None:
+    """First shard of a real 2.5q run on macOS with ``stream = "pty"`` (0712 epoch D, 48 IFs).
+
+    DifMAP's stdout was a terminal, so its ``0>`` prompt was printed without a
+    newline and the next output line arrived as ``0>STAGE2_RMS 1 7.58734e-05``.
+    Before 2.1.4 no marker matched and Stage 2 failed with "requested 48, found 0".
+    """
+    assert PTY_PROMPTS.count("0>STAGE2_RMS") == 6
+    assert logparse.tagged_values(PTY_PROMPTS, "STAGE2_RMS") == {
+        1: 7.58734e-05, 2: 6.44958e-05, 3: 6.38647e-05, 4: 6.30444e-05, 5: 6.01579e-05, 6: 6.32397e-05,
+    }
+    measurements = logparse.modelfit_flux_measurements_by_fit(PTY_PROMPTS, expected_component_count=5)
+    assert sorted(measurements) == [1, 2, 3, 4, 5, 6]
+    assert measurements[1][0] == (1.5473e-02, 5.8e-04) and measurements[6][0] == (1.5291e-02, 5.1e-04)
+    assert logparse.strip_prompts("0>0>Log file difmap.log_1 closed") == "Log file difmap.log_1 closed"
+    assert logparse.strip_prompts(" 1.5291e-02 5.1e-04") == " 1.5291e-02 5.1e-04"
+    assert logparse.tagged_scalar("0>STAGE1_RMS 0.00042\n", "STAGE1_RMS") == 0.00042
+    assert logparse.extract_last_numeric("0>1.5e-3\n") == 1.5e-3
