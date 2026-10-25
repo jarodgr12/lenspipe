@@ -401,8 +401,8 @@ def stage3(
     error_source: Annotated[str | None, typer.Option("--error-source", help="'rms' or 'difmap'.")] = None,
     fit_method: Annotated[str | None, typer.Option("--fit-method", help="'least_squares' or 'emcee'.")] = None,
     reference_frequency: Annotated[float | None, typer.Option("--reference-frequency", help="GHz.")] = None,
-    exclude_channels: Annotated[str | None, typer.Option("--exclude-channels")] = None,
-    exclude_epoch_channels: Annotated[list[str] | None, typer.Option("--exclude-epoch-channels", help="EPOCH:SPEC; repeatable.")] = None,
+    exclude_channels: Annotated[str | None, typer.Option("--exclude-channels", help="'spw3:0-3,60-63; spw7' (CASA spw and channels from 0) or Stage 2 fit indices '1-4,61-64'.")] = None,
+    exclude_epoch_channels: Annotated[list[str] | None, typer.Option("--exclude-epoch-channels", help="EPOCH:SPEC, same syntax, e.g. 'E:spw14:0-63; spw15'; repeatable.")] = None,
     annotations: Annotated[bool | None, typer.Option("--annotations/--no-annotations")] = None,
     error_bars: Annotated[bool | None, typer.Option("--error-bars/--no-error-bars", help="Error bars on every figure.")] = None,
     formats: Annotated[str | None, typer.Option("--formats", help="Figure formats, e.g. 'png' or 'pdf,png'.")] = None,
@@ -418,6 +418,7 @@ def stage3(
     workers: Annotated[int | None, typer.Option("--workers", help="Plot processes.")] = None,
     list_products: Annotated[bool, typer.Option("--list-products", help="List Stage 2 products and exit.")] = False,
     calibration_mode: CalibrationModeOpt = None,
+    dry_run: Annotated[bool, typer.Option("--dry-run", help="Report what would be analysed and written; write nothing.")] = False,
 ) -> None:
     """Fit spectra and flux ratios, write per-visit and combined plots (stage2/<mode>/ -> stage3/<mode>/)."""
     from lenspipe.stage3 import run_stage3
@@ -469,7 +470,7 @@ def stage3(
         summary = run_stage3(
             root, cfg, epochs=set(epoch) if epoch else None,
             products=set(product) if product else None, overwrite=overwrite,
-            workers=workers, reporter=default_reporter(),
+            workers=workers, reporter=default_reporter(), dry_run=dry_run,
         )
     except (FileNotFoundError, ValueError, RuntimeError) as exc:
         typer.echo(f"ERROR: {exc}", err=True)

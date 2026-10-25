@@ -237,6 +237,8 @@ def test_stage3_products_match_legacy(project: Path, fake_difmap: Path, fake_dif
     assert set(legacy_csv) <= set(new_csv)
     assert set(new_csv) - set(legacy_csv) == {
         "combined/MG0414/channel/tables/MG0414.channel.normalised_reference_fluxes_vs_mjd.csv",
+        "MG0414.A/channel/fits/MG0414.A.channel.scatter.csv",  # within-epoch scatter (2.1.5)
+        "MG0414.B/channel/fits/MG0414.B.channel.scatter.csv",
     }
     assert len(new_csv) >= 12
     for name, legacy_path in legacy_csv.items():
@@ -263,7 +265,7 @@ def test_stage3_products_match_legacy(project: Path, fake_difmap: Path, fake_dif
             str(p.relative_to(root / "stage3")).replace("full-band/", "", 1) for p in tree.rglob("*.png")
             if "rms_" not in p.name and ".image" not in p.name
             and "normalised_reference_fluxes" not in p.name and "fluxes_vs_mjd_per_image" not in p.name
-            and "normalised_rcusp" not in p.name
+            and "normalised_rcusp" not in p.name and "_scatter" not in p.name
             and p.name not in {
                 "MG0414.A.channel.png", "MG0414.B.channel.png", "MG0414.channel.png",
             }

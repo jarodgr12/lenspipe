@@ -295,3 +295,67 @@ def test_legacy_products_without_provenance_are_unknown(project: Path) -> None:
     )
     checks = verify_project(project)
     assert checks[0].status == "unknown"
+
+
+# ---------------------------------------------------------------------------
+# One working directory per DifMAP process
+
+
+def test_fake_difmap_refuses_a_shared_scratch_directory(fake_difmap: Path, tmp_path: Path, monkeypatch) -> None:
+    """The fake models DifMAP's fixed-name scratch file: two processes in one cwd collide."""
+    import threading
+
+    from lenspipe.difmap import run_difmap
+
+    monkeypatch.setenv("FAKE_DIFMAP_SCRATCH", "1")
+    monkeypatch.setenv("FAKE_DIFMAP_SCRATCH_HOLD", "1.0")
+    data = tmp_path / "x.uvf"
+    data.write_bytes(b"uv")
+    shared = tmp_path / "shared"
+    shared.mkdir()
+    results: dict[int, object] = {}
+
+    def one(index: int) -> None:
+        results[index] = run_difmap(
+            str(fake_difmap), f"observe {data}\nquit\n", tmp_path / f"p{index}.log", cwd=shared, stream="pipe"
+        )
+
+    threads = [threading.Thread(target=one, args=(i,)) for i in range(2)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+    assert sorted(r.ok for r in results.values()) == [False, True]
+    assert any("shares this directory" in r.log_text for r in results.values())
+
+
+def test_stage2_shards_each_run_difmap_in_their_own_directory(project: Path, fake_difmap: Path, quiet, monkeypatch, tmp_path: Path) -> None:
+    """A macOS user lost random channels with 8 shards: DifMAP builds without _POSIX_C_SOURCE create
+    uvdata.scr with a check-then-create race, so processes sharing a cwd can share one scratch inode.
+    Every shard now runs in its own sub-directory; the fake fails hard on a shared one."""
+    monkeypatch.setenv("FAKE_DIFMAP_SCRATCH", "1")
+    monkeypatch.setenv("FAKE_DIFMAP_SCRATCH_HOLD", "0.5")
+    run_stage1(project, _config(fake_difmap), reporter=quiet, workers=1)
+    clean_root = tmp_path / "clean"
+    shutil.copytree(project, clean_root)
+    monkeypatch.delenv("FAKE_DIFMAP_SCRATCH")
+    run_stage2(clean_root, _config(fake_difmap, mode="channel", shards=1), reporter=quiet, workers=1)
+    monkeypatch.setenv("FAKE_DIFMAP_SCRATCH", "1")
+
+    # Default scratch location (the work dir) with four shards, and two epochs at once.
+    results = run_stage2(project, _config(fake_difmap, mode="channel", shards=4), reporter=quiet, workers=2)
+    assert all(r.ok for r in results), [r.message for r in results]
+    for epoch in ("A", "B"):
+        name = f"MG0414.{epoch}.channel"
+        ours = (project / "stage2" / "full-band" / f"MG0414.{epoch}" / f"{name}.spectrum.csv").read_text()
+        assert ours == (clean_root / "stage2" / "full-band" / f"MG0414.{epoch}" / f"{name}.spectrum.csv").read_text()
+        assert not work_directory_for(project / "stage2" / "full-band" / f"MG0414.{epoch}", name).exists()
+
+    # An explicit stage2.scratch_dir: the per-process directories live under it and are removed after.
+    scratch = tmp_path / "scratch"
+    results = run_stage2(
+        project, _config(fake_difmap, mode="channel", shards=3, scratch_dir=str(scratch)),
+        reporter=quiet, workers=1, overwrite=True, epochs={"A"},
+    )
+    assert results[0].ok, results[0].message
+    assert not list(scratch.rglob("uvdata.scr")) and not (scratch / "MG0414.A.channel").exists()

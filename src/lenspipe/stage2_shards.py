@@ -24,6 +24,7 @@ __all__ = [
     "mark_done",
     "plan_fingerprint",
     "shard_done_path",
+    "shard_cwd",
     "shard_log_path",
     "work_directory_for",
 ]
@@ -37,6 +38,18 @@ def work_directory_for(output_directory: Path, product_prefix: str) -> Path:
 
 def shard_log_path(work_dir: Path, index: int) -> Path:
     return work_dir / f"shard_{index:02d}.difmap.log"
+
+
+def shard_cwd(difmap_cwd: Path, index: int) -> Path:
+    """The private working directory of one DifMAP process.
+
+    DifMAP writes a hidden scratch copy of its input (``uvdata.scr``) and its own
+    ``difmap.log`` into the directory it runs in, both by fixed name. Two processes
+    in one directory race for those names; on a build without ``_POSIX_C_SOURCE``
+    (macOS) the scratch file is created with a check-then-create sequence, so both
+    can end up writing one inode and random channels come out fully flagged.
+    """
+    return difmap_cwd / f"shard_{index:02d}"
 
 
 def shard_done_path(work_dir: Path, index: int) -> Path:

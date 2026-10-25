@@ -55,6 +55,7 @@ from lenspipe.stage2_shards import (
     completed_shards,
     mark_done,
     plan_fingerprint,
+    shard_cwd,
     shard_log_path,
     work_directory_for,
 )
@@ -705,6 +706,10 @@ def run_epoch(
     # DifMAP runs in a working directory of our choosing and keeps a hidden scratch
     # copy of the input there, so that directory decides both the disk budget and
     # where difmap.log_N files land. Default: the work dir beside the products.
+    # Every DifMAP process gets its own sub-directory (see shard_cwd): DifMAP creates
+    # its scratch file by name in the cwd, and a build without _POSIX_C_SOURCE (macOS)
+    # does so with a check-then-create race, so two processes starting together in
+    # one directory can share the same scratch inode and corrupt each other's data.
     work_dir = work_directory_for(paths.output_directory, paths.product_prefix)
     scratch_root = Path(stage2.scratch_dir).expanduser() if stage2.scratch_dir else None
     difmap_cwd = scratch_root / paths.product_prefix if scratch_root else work_dir
@@ -843,7 +848,8 @@ def run_epoch(
         shard_log = shard_log_path(work_dir, index)
         if shard_log.exists():
             shard_log.unlink()
-        difmap_cwd.mkdir(parents=True, exist_ok=True)
+        process_cwd = shard_cwd(difmap_cwd, index)
+        process_cwd.mkdir(parents=True, exist_ok=True)
         result = run_difmap(
             config.project.difmap.executable,
             commands,
@@ -852,8 +858,10 @@ def run_epoch(
             cancel_event=cancel_event,
             stream=config.project.difmap.stream,
             nice=config.run.nice,
-            cwd=difmap_cwd,  # scratch copies and difmap.log_N files land here, not in the user's cwd
+            cwd=process_cwd,  # this process's scratch copy and difmap.log land here, nowhere shared
         )
+        if result.ok:
+            shutil.rmtree(process_cwd, ignore_errors=True)  # only DifMAP's own log remains in it
         if result.ok:
             mark_done(
                 work_dir,

@@ -81,8 +81,21 @@ def _size_text(size: float | list[float]) -> str:
 
 
 def _epoch_exclusions(text: str) -> list[str]:
-    """Split ``E:897-960 F:1-4`` (whitespace or semicolons) into repeatable EPOCH:SPEC flags."""
-    return [item for item in text.replace(";", " ").split() if item]
+    """Split per-epoch entries into repeatable EPOCH:SPEC flags.
+
+    Entries are separated by whitespace *between* entries, but a spec may itself
+    contain spaces after its semicolons (``E:spw14:0-63; spw15``), so a token
+    that does not start a new ``EPOCH:`` entry is glued onto the previous one.
+    """
+    entries: list[str] = []
+    for token in text.split():
+        head, separator, _ = token.partition(":")
+        starts_entry = bool(separator) and bool(head) and not head.lower().startswith("spw")
+        if starts_entry or not entries:
+            entries.append(token)
+        else:
+            entries[-1] = f"{entries[-1]} {token}"
+    return entries
 
 
 @ui.page("/run")
@@ -222,18 +235,21 @@ def run_page() -> None:
                             ).props("dense outlined use-chips options-dense").classes("w-56")
                         with ui.row().classes("gap-4 items-center"):
                             exclude_channels = ui.input(
-                                "Exclude fit indices (all epochs)", value=config.stage3.exclude_channels or "",
-                                placeholder="1-4,61-64",
-                            ).props(dense).classes("w-64")
+                                "Exclude channels (all epochs)", value=config.stage3.exclude_channels or "",
+                                placeholder="spw3:0-3,60-63; spw7",
+                            ).props(dense).classes("w-72")
                             exclude_epoch_channels = ui.input(
                                 "Per-epoch exclusions", value=" ".join(config.stage3.exclude_epoch_channels),
-                                placeholder="E:897-960 F:1-4",
-                            ).props(dense).classes("w-72")
+                                placeholder="E:spw14:0-63 F:1-4",
+                            ).props(dense).classes("w-80")
                         with ui.row().classes("gap-6 items-center"):
                             annotations = ui.switch("Annotated spectra", value=config.stage3.annotations)
                             s3_error_bars = ui.switch("Error bars", value=config.stage3.plot_error_bars)
                         ui.label(
-                            "Exclusions are fit indices (channel or IF numbers) as in stage3.exclude_channels."
+                            "Exclusions: 'spw3:0-3,60-63' is CASA spectral window 3 (numbered from 0), channels "
+                            "0-3 and 60-63 inside it (from 0); 'spw7' drops the whole window; plain numbers are "
+                            "Stage 2 fit indices (from 1). Separate items with ';'. Per-epoch entries are "
+                            "EPOCH:spec, separated by spaces."
                         ).classes("text-caption opacity-70")
                         ui.label("Clean and residual map figures (from the Stage 1 FITS images)").classes(
                             "text-caption q-mt-sm"
