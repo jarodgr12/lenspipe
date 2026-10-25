@@ -972,6 +972,83 @@ def plot_epoch_normalized_weighted_flux_ratios_vs_mjd(
     _save_figure(fig, output_base)
 
 
+def plot_epoch_channel_scatter(
+    frequency_ghz,
+    normalised_series,
+    scatter_statistics,
+    output_base,
+    *,
+    y_label: str,
+    caption: str,
+    mjd=None,
+    epoch=None,
+    x_limits=None,
+    colour_offset: int = 0,
+) -> None:
+    """Within-epoch scatter: one stacked panel per normalised series against frequency.
+
+    ``normalised_series`` maps a label to ``{"values", "errors"}`` already divided
+    by the model (power-law fit for spectra, weighted mean for ratios) and
+    aligned with ``frequency_ghz``'s finite entries after the same mask, or to a
+    series carrying its own ``"frequency_ghz"``. A dashed line marks 1; the panel
+    label with sigma_w and sigma_u sits in the right margin; ``caption`` states
+    the definitions under the bottom panel. Nothing is drawn inside the axes.
+    """
+    items = list(normalised_series.items())
+    if not items:
+        raise ValueError("No normalised series were supplied.")
+    n_panels = len(items)
+    fig, axes = plt.subplots(
+        n_panels, 1, figsize=(8, max(2.30 * n_panels, 4.5)), sharex=True, squeeze=False,
+        gridspec_kw={"hspace": 0.0},
+    )
+    axes = axes.ravel()
+    x_lo, x_hi = _resolve_x_limits(x_limits)
+    for panel_index, (axis, (label, series)) in enumerate(zip(axes, items, strict=False)):
+        correct_tick_marks(axis)
+        colour = COLOURS[(panel_index + colour_offset) % len(COLOURS)]
+        values = np.asarray(series["values"], dtype=float)
+        errors = np.asarray(series["errors"], dtype=float)
+        frequency = np.asarray(series.get("frequency_ghz", frequency_ghz), dtype=float)
+        mask = np.isfinite(frequency) & np.isfinite(values) & np.isfinite(errors) & (errors >= 0)
+        if np.any(mask):
+            axis.errorbar(
+                frequency[mask], values[mask], yerr=_yerr(errors[mask]), fmt="o", ms=3.0,
+                capsize=0, linestyle="none", color=colour, zorder=3,
+            )
+            axis.set_ylim(*_symmetric_limits_around_centre(
+                values[mask], centre=1.0, min_half_range=0.02, padding_fraction=0.10,
+            ))
+        else:
+            axis.set_ylim(0.95, 1.05)
+        axis.plot([x_lo, x_hi], [1.0, 1.0], color="black", linewidth=1.2, linestyle=(0, (5, 5)), zorder=2)
+        annotation = label
+        statistic = scatter_statistics.get(label) if scatter_statistics else None
+        if statistic is not None and np.isfinite(statistic.sigma_weighted_percent):
+            annotation = (
+                f"{label}\n"
+                rf"$\sigma_{{\rm w}}={statistic.sigma_weighted_percent:.2f}\%$" "\n"
+                rf"$\sigma_{{\rm u}}={statistic.sigma_unweighted_percent:.2f}\%$"
+            )
+        axis.text(1.02, 0.5, annotation, transform=axis.transAxes, ha="left", va="center", fontsize=10)
+        if panel_index < n_panels - 1:
+            axis.tick_params(labelbottom=False)
+    axes[0].set_title(f"Epoch {epoch}" if mjd is None else f"MJD {_format_mjd(mjd)}")
+    axes[-1].set_xlim(x_lo, x_hi)
+    axes[-1].set_xticks(SUMMARY_FREQUENCY_TICKS_GHZ)
+    axes[-1].set_xlabel("Frequency [GHz]")
+    fig.subplots_adjust(left=0.12, right=0.98, bottom=0.10, top=0.95, hspace=0.0)
+    middle = axes[n_panels // 2]
+    middle.set_ylabel(y_label)
+    if n_panels % 2 == 0:  # centre the shared label on the stack rather than on one panel
+        middle.yaxis.set_label_coords(-0.09, 1.0)
+    # caption_below's default offset clears the tick and axis labels of an 8 inch panel;
+    # scale it to this (shorter) bottom panel so the caption still sits under the label.
+    panel_height_inches = fig.get_size_inches()[1] * 0.85 / n_panels
+    caption_below(axes[-1], [caption], offset=0.11 * 8.0 / panel_height_inches)
+    _save_figure(fig, output_base)
+
+
 def plot_epoch_reference_fluxes_vs_mjd(
     mjds,
     reference_flux_series,

@@ -401,10 +401,17 @@ class Stage3Config(_Model):
     )
     use_tex: bool = False
     exclude_channels: str | None = Field(
-        None, description="Fit indices excluded from every epoch, e.g. '1-4,61-64'."
+        None,
+        description=(
+            "Channels excluded from every epoch. Items separated by ';': 'spw<N>:<channels>' with the "
+            "CASA spectral window N (from 0) and channels 0-based inside it ('spw3:0-3,60-63'), 'spw<N>' "
+            "for a whole window, or plain Stage 2 fit indices (1-based, '1-4,61-64'). "
+            "E.g. 'spw3:0-3,60-63; spw7; 1-4'. On an IF product only whole windows can be excluded."
+        ),
     )
     exclude_epoch_channels: list[str] = Field(
-        default_factory=list, description="Per-epoch exclusions, e.g. ['E:897-960']."
+        default_factory=list,
+        description="Per-epoch exclusions, 'EPOCH:<spec>' with the same syntax, e.g. ['E:spw14:0-63; spw15', 'F:1-4'].",
     )
     images: ImageConfig = Field(default_factory=ImageConfig)
 
@@ -598,8 +605,9 @@ annotations = true
 plot_error_bars = true              # error bars on every Stage 3 figure
 figure_formats = ["pdf", "png"]     # ["png"] for quick iteration runs
 use_tex = false
-# exclude_channels = "1-4,61-64"
-# exclude_epoch_channels = ["E:897-960"]
+# exclude_channels = "spw3:0-3,60-63; spw7"        # CASA spw (from 0) and channels inside it (from 0);
+#                                                   # 'spw7' = whole window; plain numbers = Stage 2 fit indices
+# exclude_epoch_channels = ["E:spw14:0-63; spw15", "F:1-4"]
 
 [stage3.images]                     # clean and residual map figures from the Stage 1 FITS images
 enabled = true

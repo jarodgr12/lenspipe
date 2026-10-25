@@ -133,8 +133,11 @@ def test_stage2_runs_difmap_in_the_scratch_dir_and_cleans_it_up(project: Path, f
     monkeypatch.setattr(stage2_module, "run_difmap", spy)
     results = run_stage2(project, cfg, reporter=quiet, workers=1, epochs={"A"})
     assert results and all(r.ok for r in results), [r.message for r in results]
-    assert cwds and all(cwd.parent == scratch and cwd.name.startswith("MG0414.A.channel") for cwd in cwds)
-    assert not any(cwd.exists() for cwd in cwds)  # per-epoch scratch directory removed on completion
+    # One private directory per DifMAP process under <scratch>/<product>/ (2.2.0), all distinct.
+    assert cwds and all(cwd.parent.parent == scratch and cwd.parent.name == "MG0414.A.channel" for cwd in cwds)
+    assert len(set(cwds)) == len(cwds) == 2 and all(cwd.name.startswith("shard_") for cwd in cwds)
+    assert not any(cwd.exists() for cwd in cwds)  # per-process directories removed on completion
+    assert not (scratch / "MG0414.A.channel").exists()  # and the per-epoch directory with them
     assert scratch.is_dir()  # the configured root itself is left alone
 
 
@@ -146,7 +149,8 @@ def test_stage2_default_scratch_is_the_work_dir(project: Path, fake_difmap: Path
     real_run = stage2_module.run_difmap
     monkeypatch.setattr(stage2_module, "run_difmap", lambda *a, **k: (cwds.append(Path(k["cwd"])), real_run(*a, **k))[1])
     run_stage2(project, cfg, reporter=quiet, workers=1, epochs={"A"})
-    assert cwds and cwds[0] == project / "stage2" / "full-band" / "MG0414.A" / ".MG0414.A.channel.work"
+    work = project / "stage2" / "full-band" / "MG0414.A" / ".MG0414.A.channel.work"
+    assert cwds and cwds[0] == work / "shard_00"  # a private directory per process inside the work dir
 
 
 def test_stage2_unflag_is_explicit_about_all_channels() -> None:

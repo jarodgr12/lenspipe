@@ -3,6 +3,52 @@
 Each entry says whether existing products need re-running. The `lenspipe`
 version that made a product is recorded in its metadata JSON.
 
+## 2.2.0 — 2026-10-25
+
+**Re-run needed:** Stage 2 on macOS for any epoch that reported missing
+channels (see below); Stage 3 to get the new per-epoch scatter figures.
+
+- Fixed: random channels failing in Stage 2 on macOS ("tagged RMS
+  measurements do not match the requested fits", DifMAP reporting
+  "no unflagged visibilities" for channels that fit fine on another
+  run). All shards of an epoch ran DifMAP in one directory. DifMAP writes
+  its scratch copy of the input there under the fixed name `uvdata.scr`;
+  a build without `_POSIX_C_SOURCE` (macOS clang leaves it undefined,
+  Linux gcc defines it) creates that file with a check-then-create
+  sequence, so processes starting together could share one scratch inode
+  and corrupt each other's visibilities. Each DifMAP process now runs in
+  its own `shard_NN/` sub-directory (also under `stage2.scratch_dir`),
+  removed when the shard finishes. The fake DifMAP models the scratch
+  file and fails on a shared directory, and Stage 2 is tested with four
+  shards and two concurrent epochs. Not a memory problem: DifMAP's peak
+  RSS in those runs was 50 MB.
+- Added: per-epoch scatter. Each visit now gets `<prefix>.spectra_scatter`
+  (each image's flux divided by that epoch's fitted power law, one panel
+  per image) and `<prefix>.flux_ratio_scatter` (each ratio divided by its
+  inverse-variance weighted mean over channels), with σ_w (sample std,
+  ddof=1, of the normalised values) and σ_u (RMS about 1 of the values
+  normalised by their plain mean) in the margin: the same two definitions
+  the combined product uses across visits, here applied across channels.
+  Numbers are in `fits/<prefix>.scatter.csv` (spectra also carry the
+  slope-included scatter about the weighted mean) and in the `scatter`
+  block of the epoch metadata.
+- Added: Stage 3 channel exclusions can name spectral windows.
+  `stage3.exclude_channels` and `exclude_epoch_channels` accept
+  `spw<N>:<channels>` (CASA spectral window N from 0, channels from 0
+  inside it), `spw<N>` for a whole window, or Stage 2 fit indices as
+  before; items are separated by `;`, e.g. `"spw3:0-3,60-63; spw7; 1-4"`
+  and `["E:spw14:0-63; spw15"]`. Window items are resolved per product
+  from the Stage 2 metadata (channel products map to fit indices, IF
+  products to the window's fit; a channel sub-selection on an IF product
+  is refused). The metadata records the resolved fit indices and
+  `spw N ch a-b` labels. Run page fields and CLI help updated;
+  plain-index output tags are unchanged, spw specs get tags such as
+  `exclude_spw3_0-3_60-63`.
+- Added: `lenspipe stage3 --dry-run` (and the Run page dry run now
+  includes Stage 3): lists each visit with its rows after exclusions, the
+  resolved exclusions, and the per-visit and combined output directories;
+  writes nothing.
+
 ## 2.1.4 — 2026-10-23
 
 **Re-run needed:** no. A Stage 2 run that failed with "tagged RMS

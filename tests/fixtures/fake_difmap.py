@@ -39,6 +39,7 @@ class State:
         self.fitted = False
         self.map_pixels: int = 1024
         self.cell_mas: float = 25.0
+        self.scratch: Path | None = None  # FAKE_DIFMAP_SCRATCH: the uvdata.scr stand-in, removed at quit
 
 
 PROMPT = "0>" if sys.stdout.isatty() else ""  # like DifMAP: the prompt is printed only on a terminal
@@ -296,6 +297,21 @@ def main() -> int:
             if not path.is_file():
                 emit(f"observe: unable to open {path}")
                 return 1
+            if os.environ.get("FAKE_DIFMAP_SCRATCH"):
+                # Like DifMAP: a scratch copy named uvdata.scr in the cwd. Real DifMAP (hidden
+                # after open) would silently share the inode when two processes race for the
+                # name; the fake refuses instead, so a shared cwd is caught deterministically.
+                scratch = Path.cwd() / "uvdata.scr"
+                try:
+                    fd = os.open(scratch, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+                except FileExistsError:
+                    sys.stderr.write("fake difmap: uvdata.scr already exists in cwd: another DifMAP shares this directory\n")
+                    sys.stderr.flush()
+                    return 3
+                os.write(fd, b"scratch")
+                os.close(fd)
+                state.scratch = scratch
+                time.sleep(float(os.environ.get("FAKE_DIFMAP_SCRATCH_HOLD", "0.5")))
             state.observed = path
             emit(f"Reading UV FITS file: {path}")
             emit("AN table 1: 27 integrations on 351 of 351 possible baselines.")
@@ -359,6 +375,8 @@ def main() -> int:
             emit("Deliberate failure requested")
             return 3
         elif command == "quit":
+            if state.scratch is not None:
+                state.scratch.unlink(missing_ok=True)
             emit("Exiting program")
             return 0
         else:

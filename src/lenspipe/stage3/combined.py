@@ -9,7 +9,7 @@ from typing import Any
 
 import numpy as np
 
-from lenspipe.stage3.fitting import PowerLawFit, fit_power_law
+from lenspipe.stage3.fitting import PowerLawFit, fit_power_law, power_law
 
 
 @dataclass
@@ -134,6 +134,114 @@ def fit_average_flux_ratios(
         label: fit_constant(label, series["values"], series["errors"])
         for label, series in averaged_ratio_series.items()
     }
+
+
+@dataclass
+class EpochScatter:
+    """Channel-to-channel scatter of one series within a single epoch.
+
+    ``kind`` is ``spectrum`` or ``flux_ratio``. For a spectrum the series is the
+    measured flux divided by the fitted power law at each channel's frequency
+    (``normalisation = "power_law_fit"``), so it is the fractional residual about
+    the fit; ``slope_included`` carries the same statistics for the flux divided
+    by its weighted mean instead, which still contains the spectral slope. For a
+    flux ratio the series is the ratio divided by its inverse-variance weighted
+    mean over channels (``normalisation = "weighted_mean"``). The sigmas are the
+    two ``NormalisedScatter`` definitions applied across channels.
+    """
+
+    kind: str
+    label: str
+    normalisation: str
+    n_points: int
+    sigma_weighted_percent: float
+    sigma_unweighted_percent: float
+    weighted_mean: float
+    unweighted_mean: float
+    reduced_chi_square_about_unity: float
+    fit_status: str
+    slope_included: dict[str, float] | None = None
+
+    def as_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
+def _normalised_series(values: Any, errors: Any, model: Any) -> dict[str, np.ndarray]:
+    """Divide a series and its errors by a positive model; non-finite entries drop out."""
+    y = np.asarray(values, dtype=float)
+    sigma = np.asarray(errors, dtype=float)
+    m = np.asarray(model, dtype=float)
+    mask = np.isfinite(y) & np.isfinite(sigma) & np.isfinite(m) & (sigma > 0) & (m > 0)
+    return {"values": y[mask] / m[mask], "errors": sigma[mask] / m[mask]}
+
+
+def _scatter_of(kind: str, label: str, normalisation: str, series: dict[str, np.ndarray]) -> EpochScatter:
+    stat = calculate_normalised_scatter({label: series})[label]
+    return EpochScatter(
+        kind=kind,
+        label=label,
+        normalisation=normalisation,
+        n_points=stat.n_points,
+        sigma_weighted_percent=stat.sigma_weighted_percent,
+        sigma_unweighted_percent=stat.sigma_unweighted_percent,
+        weighted_mean=stat.weighted_mean,
+        unweighted_mean=stat.unweighted_mean,
+        reduced_chi_square_about_unity=stat.reduced_chi_square_about_unity,
+        fit_status=stat.fit_status,
+    )
+
+
+def epoch_spectrum_scatter(
+    label: str,
+    frequency_ghz: Any,
+    flux_jy: Any,
+    uncertainty_jy: Any,
+    fit: PowerLawFit | None,
+) -> tuple[EpochScatter, dict[str, np.ndarray]]:
+    """Scatter of one image's flux across channels about its fitted power law.
+
+    Returns the statistics and the normalised series (flux / fit) for plotting.
+    Without a usable fit the series is normalised by its weighted mean instead
+    and ``normalisation`` says so.
+    """
+    nu = np.asarray(frequency_ghz, dtype=float)
+    y = np.asarray(flux_jy, dtype=float)
+    sigma = np.asarray(uncertainty_jy, dtype=float)
+    mask = np.isfinite(y) & np.isfinite(sigma) & (sigma > 0)
+    weights = np.zeros_like(y)
+    weights[mask] = 1.0 / np.square(sigma[mask])
+    weighted_mean = float(np.sum(weights * np.where(mask, y, 0.0)) / np.sum(weights)) if np.any(mask) else np.nan
+    about_mean = _normalised_series(y, sigma, np.full_like(y, weighted_mean))
+    if fit is None or not (np.isfinite(fit.s_ref_jy) and np.isfinite(fit.alpha)) or fit.s_ref_jy <= 0:
+        result = _scatter_of("spectrum", label, "weighted_mean", about_mean)
+        return result, about_mean
+    model = power_law(nu, fit.s_ref_jy, fit.alpha, fit.reference_frequency_ghz)
+    about_fit = _normalised_series(y, sigma, model)
+    result = _scatter_of("spectrum", label, "power_law_fit", about_fit)
+    reference = _scatter_of("spectrum", label, "weighted_mean", about_mean)
+    result.slope_included = {
+        "sigma_weighted_percent": reference.sigma_weighted_percent,
+        "sigma_unweighted_percent": reference.sigma_unweighted_percent,
+        "weighted_mean_jy": reference.weighted_mean * weighted_mean if np.isfinite(weighted_mean) else np.nan,
+    }
+    return result, about_fit
+
+
+def epoch_ratio_scatter(
+    label: str, ratio: Any, ratio_error: Any
+) -> tuple[EpochScatter, dict[str, np.ndarray]]:
+    """Scatter of one flux ratio across channels about its inverse-variance weighted mean."""
+    y = np.asarray(ratio, dtype=float)
+    sigma = np.asarray(ratio_error, dtype=float)
+    mask = np.isfinite(y) & np.isfinite(sigma) & (sigma > 0)
+    if not np.any(mask):
+        empty = {"values": np.array([]), "errors": np.array([])}
+        return _scatter_of("flux_ratio", label, "weighted_mean", empty), empty
+    weights = 1.0 / np.square(sigma[mask])
+    mean = float(np.sum(weights * y[mask]) / np.sum(weights))
+    series = _normalised_series(y, sigma, np.full_like(y, mean))
+    result = _scatter_of("flux_ratio", label, "weighted_mean", series)
+    return result, series
 
 
 def calculate_normalised_scatter(

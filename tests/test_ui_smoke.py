@@ -44,16 +44,16 @@ def test_build_steps_one_job_per_stage_in_order(tmp_path: Path) -> None:
     assert command_line(steps[0].argv).startswith("lenspipe stage1 ")
 
 
-def test_build_steps_dry_run_skips_stage3_and_channel_mode(tmp_path: Path) -> None:
+def test_build_steps_dry_run_includes_stage3_and_channel_mode(tmp_path: Path) -> None:
     request = RunRequest(
         root=tmp_path, stages=[2, 3], dry_run=True, stage2_mode="channel",
         stage2_channels="1-4", stage2_channels_per_if=64,
     )
     steps, notes = build_steps(request)
-    assert [s.stage for s in steps] == ["stage2"]
+    assert [s.stage for s in steps] == ["stage2", "stage3"]  # stage3 has --dry-run since 2.2.0
     assert "--channels" in steps[0].argv and "--channels-per-if" not in steps[0].argv
-    assert steps[0].argv[-1] == "--dry-run"
-    assert any("stage3" in note for note in notes)
+    assert steps[0].argv[-1] == "--dry-run" and "--dry-run" in steps[1].argv
+    assert not any("stage3 has no" in note for note in notes)
 
 
 def test_calibrate_step(tmp_path: Path) -> None:

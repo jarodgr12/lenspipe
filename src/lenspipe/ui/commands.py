@@ -137,41 +137,40 @@ def build_steps(request: RunRequest) -> tuple[list[ChainStep], list[str]]:
         steps.append(ChainStep(argv, f"Stage 2{suffix}", "stage2"))
 
     if 3 in request.stages:
+        argv = ["stage3", root, *epochs, *mode_flag]
+        if request.stage3_product:
+            argv += ["--product", request.stage3_product]
+        if request.stage3_error_source:
+            argv += ["--error-source", request.stage3_error_source]
+        if request.stage3_fit_method:
+            argv += ["--fit-method", request.stage3_fit_method]
+        argv += _number(request.stage3_reference_frequency, "--reference-frequency")
+        if request.stage3_exclude_channels:
+            argv += ["--exclude-channels", request.stage3_exclude_channels]
+        for item in request.stage3_exclude_epoch_channels:
+            argv += ["--exclude-epoch-channels", item]
+        argv += _toggle(request.stage3_annotations, "--annotations", "--no-annotations")
+        argv += _toggle(request.stage3_error_bars, "--error-bars", "--no-error-bars")
+        if request.stage3_formats:
+            argv += ["--formats", request.stage3_formats]
+        argv += _toggle(request.stage3_images, "--images", "--no-images")
+        if request.stage3_image_center:
+            argv += ["--image-center", request.stage3_image_center]
+        if request.stage3_image_size:
+            argv += ["--image-size", request.stage3_image_size]
+        if request.stage3_image_cmap:
+            argv += ["--image-cmap", request.stage3_image_cmap]
+        argv += _number(request.stage3_image_pmax, "--image-pmax")
+        argv += _number(request.stage3_image_residual_pmax, "--image-residual-pmax")
+        if request.stage3_image_reference_epoch:
+            argv += ["--image-reference-epoch", request.stage3_image_reference_epoch]
+        if request.stage3_workers:
+            argv += ["--workers", str(request.stage3_workers)]
+        if request.overwrite:
+            argv.append("--overwrite")
         if request.dry_run:
-            notes.append("stage3 has no --dry-run; it is left out of a dry run.")
-        else:
-            argv = ["stage3", root, *epochs, *mode_flag]
-            if request.stage3_product:
-                argv += ["--product", request.stage3_product]
-            if request.stage3_error_source:
-                argv += ["--error-source", request.stage3_error_source]
-            if request.stage3_fit_method:
-                argv += ["--fit-method", request.stage3_fit_method]
-            argv += _number(request.stage3_reference_frequency, "--reference-frequency")
-            if request.stage3_exclude_channels:
-                argv += ["--exclude-channels", request.stage3_exclude_channels]
-            for item in request.stage3_exclude_epoch_channels:
-                argv += ["--exclude-epoch-channels", item]
-            argv += _toggle(request.stage3_annotations, "--annotations", "--no-annotations")
-            argv += _toggle(request.stage3_error_bars, "--error-bars", "--no-error-bars")
-            if request.stage3_formats:
-                argv += ["--formats", request.stage3_formats]
-            argv += _toggle(request.stage3_images, "--images", "--no-images")
-            if request.stage3_image_center:
-                argv += ["--image-center", request.stage3_image_center]
-            if request.stage3_image_size:
-                argv += ["--image-size", request.stage3_image_size]
-            if request.stage3_image_cmap:
-                argv += ["--image-cmap", request.stage3_image_cmap]
-            argv += _number(request.stage3_image_pmax, "--image-pmax")
-            argv += _number(request.stage3_image_residual_pmax, "--image-residual-pmax")
-            if request.stage3_image_reference_epoch:
-                argv += ["--image-reference-epoch", request.stage3_image_reference_epoch]
-            if request.stage3_workers:
-                argv += ["--workers", str(request.stage3_workers)]
-            if request.overwrite:
-                argv.append("--overwrite")
-            steps.append(ChainStep(argv, f"Stage 3{suffix}", "stage3"))
+            argv.append("--dry-run")
+        steps.append(ChainStep(argv, f"Stage 3{suffix}", "stage3"))
 
     if len(steps) > 1:
         notes.append("Later stages are submitted only after the previous job completes.")

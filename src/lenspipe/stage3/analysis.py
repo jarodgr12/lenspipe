@@ -76,7 +76,7 @@ import multiprocessing
 import shutil
 from collections import defaultdict
 from concurrent.futures import ProcessPoolExecutor
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -92,15 +92,26 @@ from lenspipe.provenance import fingerprint
 from lenspipe.stage3 import plotting
 from lenspipe.stage3.combined import (
     calculate_normalised_scatter,
+    epoch_ratio_scatter,
+    epoch_spectrum_scatter,
     fit_average_flux_ratios,
     fit_average_spectra,
     fit_constant,
+)
+from lenspipe.stage3.exclusions import (
+    SpwLayout,
+    describe_fit_indices,
+    parse_epoch_exclusion_specs,
+    parse_exclusion_spec,
+    resolve_exclusions,
+    spw_layout_from_metadata,
 )
 from lenspipe.stage3.fitting import (
     calculate_ratio,
     fit_power_law,
     fit_power_law_emcee,
     fit_ratio_power_law,
+    power_law,
 )
 from lenspipe.stage3.images import (
     ImageSettings,
@@ -124,6 +135,7 @@ from lenspipe.stage3.plotting import (
     plot_all_epochs_spectra,
     plot_combined_average_flux_ratios,
     plot_combined_average_spectrum,
+    plot_epoch_channel_scatter,
     plot_epoch_fluxes_vs_mjd_per_image,
     plot_epoch_normalized_weighted_flux_ratios_vs_mjd,
     plot_epoch_rcusp_vs_mjd,
@@ -156,6 +168,8 @@ class EpochAnalysis:
     ratio_errors: dict[str, np.ndarray]
     ratio_fits: dict[str, Any]
     reference_group: str
+    excluded_labels: list[str] = field(default_factory=list)  # "spw 3 ch 0-3" lines for the exclusions
+    spw_layout: dict[str, Any] | None = None  # channels_per_spw / n_spw / mode / source
 
     def plot_record(self) -> dict[str, Any]:
         return {
@@ -169,63 +183,6 @@ class EpochAnalysis:
             "ratios": self.ratios,
             "ratio_errors": self.ratio_errors,
         }
-
-
-def _parse_index_spec(spec: str, option_name: str) -> list[int]:
-    """Parse a comma-separated list of positive integers and ranges."""
-    values: set[int] = set()
-    for chunk in str(spec).split(","):
-        token = chunk.strip()
-        if not token:
-            continue
-        if "-" in token:
-            start_text, end_text = token.split("-", 1)
-            try:
-                start = int(start_text)
-                end = int(end_text)
-            except ValueError as exc:
-                raise ValueError(
-                    f"Invalid range in {option_name}: {token!r}"
-                ) from exc
-            if start <= 0 or end <= 0 or end < start:
-                raise ValueError(f"Invalid range in {option_name}: {token!r}")
-            values.update(range(start, end + 1))
-        else:
-            try:
-                value = int(token)
-            except ValueError as exc:
-                raise ValueError(
-                    f"Invalid index in {option_name}: {token!r}"
-                ) from exc
-            if value <= 0:
-                raise ValueError(f"Invalid index in {option_name}: {token!r}")
-            values.add(value)
-    if not values:
-        raise ValueError(f"{option_name} did not contain any valid indices.")
-    return sorted(values)
-
-
-def _parse_epoch_exclusion_specs(
-    specifications: list[str],
-) -> dict[str, list[int]]:
-    """Parse repeatable EPOCH:INDEX-SPEC exclusion arguments."""
-    exclusions: dict[str, set[int]] = defaultdict(set)
-    for specification in specifications:
-        epoch, separator, index_spec = str(specification).partition(":")
-        epoch = epoch.strip()
-        index_spec = index_spec.strip()
-        if not separator or not epoch or not index_spec:
-            raise ValueError(
-                "--exclude-epoch-channels must use EPOCH:CHANNELS syntax, "
-                "for example 'E:897-960'."
-            )
-        exclusions[epoch].update(
-            _parse_index_spec(index_spec, "--exclude-epoch-channels")
-        )
-    return {
-        epoch: sorted(indices)
-        for epoch, indices in sorted(exclusions.items())
-    }
 
 
 def _format_index_spec(values: list[int] | tuple[int, ...]) -> str:
@@ -257,39 +214,115 @@ def _tag_token(value: str) -> str:
     return token or "epoch"
 
 
+def _spec_token(indices: list[int], spw_text: list[str] | None) -> str:
+    """Directory-safe token for one exclusion list: plain indices, then spw items as written."""
+    parts: list[str] = []
+    if indices:
+        parts.append(_format_index_spec(indices).replace(",", "_"))
+    for text in spw_text or []:
+        cleaned = text.lower().replace(":", "_").replace(",", "_").replace("*", "all")
+        parts.append("".join(c if (c.isalnum() or c == "-") else "_" for c in cleaned).strip("_"))
+    return "_".join(parts)
+
+
 def _analysis_tag_from_settings(
     global_indices: list[int],
     epoch_indices: dict[str, list[int]],
     error_source: str,
+    global_spw_text: list[str] | None = None,
+    epoch_spw_text: dict[str, list[str]] | None = None,
 ) -> str | None:
-    """Create a deterministic output-directory tag for non-default settings."""
+    """Create a deterministic output-directory tag for non-default settings.
+
+    Plain fit indices render exactly as before (so existing output directories
+    keep their names); spectral-window items render from their text, e.g.
+    ``exclude_spw3_0-3_60-63``, and never from the resolved indices, which can
+    differ between products with different channel layouts.
+    """
     tags: list[str] = []
+    epoch_spw_text = epoch_spw_text or {}
 
     # RMS is the Stage 3 default and therefore keeps the historical output path.
     # Opt-in DifMAP-error runs are separated so they can coexist with RMS results.
     if error_source != "rms":
         tags.append(f"error_{_tag_token(error_source)}")
 
-    if global_indices or epoch_indices:
-        if global_indices and not epoch_indices:
-            exclusion_tag = (
-                "exclude_" + _format_index_spec(global_indices).replace(",", "_")
-            )
+    has_global = bool(global_indices or global_spw_text)
+    epochs = sorted(set(epoch_indices) | set(epoch_spw_text))
+    has_epoch = any(epoch_indices.get(e) or epoch_spw_text.get(e) for e in epochs)
+    if has_global or has_epoch:
+        if has_global and not has_epoch:
+            exclusion_tag = "exclude_" + _spec_token(global_indices, global_spw_text)
         else:
             parts: list[str] = []
-            if global_indices:
-                parts.append(
-                    "all_" + _format_index_spec(global_indices).replace(",", "_")
-                )
-            for epoch, indices in sorted(epoch_indices.items()):
-                parts.append(
-                    f"{_tag_token(epoch)}_"
-                    f"{_format_index_spec(indices).replace(',', '_')}"
-                )
+            if has_global:
+                parts.append("all_" + _spec_token(global_indices, global_spw_text))
+            for epoch in epochs:
+                token = _spec_token(epoch_indices.get(epoch, []), epoch_spw_text.get(epoch))
+                if token:
+                    parts.append(f"{_tag_token(epoch)}_{token}")
             exclusion_tag = "exclude_" + "__".join(parts)
         tags.append(exclusion_tag)
 
     return "__".join(tags) if tags else None
+
+
+def _stage1_metadata_for(dataset: Stage2Dataset) -> dict[str, Any] | None:
+    """The Stage 1 metadata of a dataset's epoch, if it can be found (layout fallback only)."""
+    directory = Path(dataset.project_root) / "stage1" / dataset.calibration_mode / dataset.observation_prefix
+    candidate = directory / f"{dataset.observation_prefix}.stage1.metadata.json"
+    if not candidate.is_file():
+        return None
+    try:
+        return json.loads(candidate.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+
+
+def _stage3_dry_run(
+    datasets: list[Stage2Dataset],
+    resolved: dict[str, tuple[list[int], list[str], SpwLayout]],
+    settings: Any,
+    analysis_tag: str | None,
+    calibration_mode: str,
+    root: Path,
+    reporter: Reporter,
+) -> Stage3Summary:
+    """Report what a Stage 3 run would do, without fitting or writing anything."""
+    products_out: list[str] = []
+    reporter.log(
+        f"[stage3] DRY RUN: {len(datasets)} visit(s), errors={settings.error_source} fit={settings.fit_method} "
+        f"formats={','.join(settings.figure_formats)} map figures={'on' if settings.images.enabled else 'off'}"
+        + (f" tag={analysis_tag}" if analysis_tag else "")
+    )
+    combined: dict[tuple[str, str], int] = defaultdict(int)
+    for dataset in datasets:
+        indices, labels, layout = resolved[dataset.prefix]
+        try:
+            n_rows = len(load_spectrum(dataset, excluded_fit_indices=set(indices) or None))
+        except Exception as exc:  # noqa: BLE001 - a dry run reports, it does not stop
+            n_rows_text = f"rows unreadable ({exc})"
+        else:
+            n_rows_text = f"{n_rows} rows after exclusions"
+        excluded = "; ".join(labels) if labels else "none"
+        reporter.log(
+            f"[stage3]   {dataset.observation_prefix} {dataset.product_tag} [{dataset.calibration_mode}] {n_rows_text}; "
+            f"layout {layout.channels_per_spw} ch/spw ({layout.source}); excluded: {excluded}"
+        )
+        reporter.log(f"[stage3]     -> {dataset.output_directory}")
+        products_out.append(str(dataset.output_directory))
+        combined[(dataset.source, dataset.product_tag)] += 1
+    for (source, product_tag), n_visits in sorted(combined.items()):
+        combined_dir = Layout.at(root).stage_dir(3, calibration_mode) / "combined" / source / product_tag
+        if analysis_tag:
+            combined_dir = combined_dir / analysis_tag
+        reporter.log(f"[stage3]   combined {source}.{product_tag}: {n_visits} visit(s) -> {combined_dir}")
+        products_out.append(str(combined_dir))
+    reporter.log("[stage3] DRY RUN: nothing written")
+    return Stage3Summary(
+        analyses=len(datasets), per_visit_written_or_skipped=0, combined_written_or_skipped=0,
+        failures=0, analysis_tag=analysis_tag, products=products_out,
+    )
 
 
 def _exclusion_configuration(
@@ -851,6 +884,93 @@ def analyse_dataset(
     )
 
 
+SPECTRUM_SCATTER_CAPTION = (
+    r"$\sigma_{\rm w}$: std of $S/S_{\rm fit}$ (ddof=1); "
+    r"$\sigma_{\rm u}$: RMS of $S/\overline{S_{\rm fit\,norm}}$ about 1. "
+    r"$S_{\rm fit}$ is this epoch's power-law fit."
+)
+RATIO_SCATTER_CAPTION = (
+    r"$\sigma_{\rm w}$: std of $R/\overline{R}_{\rm w}$ (ddof=1); "
+    r"$\sigma_{\rm u}$: RMS of $R/\overline{R}$ about 1. "
+    r"$\overline{R}_{\rm w}$ is the inverse-variance weighted mean over channels."
+)
+
+
+def _write_epoch_scatter(analysis: EpochAnalysis, fits_dir: Path, plots_dir: Path) -> dict[str, Any]:
+    """Within-epoch channel-to-channel scatter of each spectrum (about its power-law fit)
+    and each flux ratio (about its weighted mean): figures, tables and the metadata block."""
+    dataset = analysis.dataset
+    rows: list[dict[str, Any]] = []
+    record: dict[str, Any] = {
+        "description": (
+            "Scatter across channels within this epoch. Spectra are normalised by the fitted "
+            "power law at each channel (slope_included repeats the statistics with the flux "
+            "normalised by its weighted mean instead); flux ratios by their inverse-variance "
+            "weighted mean. sigma_weighted: sample std (ddof=1) of the normalised values; "
+            "sigma_unweighted: population RMS about 1 of the values normalised by their plain mean."
+        ),
+        "spectra": {},
+        "flux_ratios": {},
+        "figures": {},
+    }
+    spectrum_series: dict[str, dict[str, np.ndarray]] = {}
+    spectrum_stats: dict[str, Any] = {}
+    for group in analysis.fluxes:
+        statistic, series = epoch_spectrum_scatter(
+            group, analysis.frequency_ghz, analysis.fluxes[group], analysis.uncertainties[group],
+            analysis.spectral_fits.get(group),
+        )
+        mask = (
+            np.isfinite(analysis.fluxes[group]) & np.isfinite(analysis.uncertainties[group])
+            & (analysis.uncertainties[group] > 0)
+        )
+        if statistic.normalisation == "power_law_fit":
+            fit = analysis.spectral_fits[group]
+            model = power_law(analysis.frequency_ghz, fit.s_ref_jy, fit.alpha, fit.reference_frequency_ghz)
+            mask &= np.isfinite(model) & (model > 0)
+        series["frequency_ghz"] = np.asarray(analysis.frequency_ghz, dtype=float)[mask]
+        spectrum_series[group] = series
+        spectrum_stats[group] = statistic
+        record["spectra"][group] = statistic.as_dict()
+        rows.append({k: v for k, v in statistic.as_dict().items() if k != "slope_included"})
+        if statistic.slope_included:
+            rows[-1].update({f"slope_included_{k}": v for k, v in statistic.slope_included.items()})
+    ratio_series: dict[str, dict[str, np.ndarray]] = {}
+    ratio_stats: dict[str, Any] = {}
+    for label in analysis.ratios:
+        statistic, series = epoch_ratio_scatter(label, analysis.ratios[label], analysis.ratio_errors[label])
+        mask = (
+            np.isfinite(analysis.ratios[label]) & np.isfinite(analysis.ratio_errors[label])
+            & (analysis.ratio_errors[label] > 0)
+        )
+        series["frequency_ghz"] = np.asarray(analysis.frequency_ghz, dtype=float)[mask]
+        ratio_series[label] = series
+        ratio_stats[label] = statistic
+        record["flux_ratios"][label] = statistic.as_dict()
+        rows.append({k: v for k, v in statistic.as_dict().items() if k != "slope_included"})
+
+    write_csv(fits_dir / f"{dataset.prefix}.scatter.csv", rows)
+    write_json(fits_dir / f"{dataset.prefix}.scatter.json", rows)
+
+    if spectrum_series:
+        base = plots_dir / f"{dataset.prefix}.spectra_scatter"
+        plot_epoch_channel_scatter(
+            analysis.frequency_ghz, spectrum_series, spectrum_stats, base,
+            y_label=r"$S\,/\,S_{\rm fit}$", caption=SPECTRUM_SCATTER_CAPTION, mjd=analysis.mjd,
+            epoch=dataset.epoch, x_limits=plotting.SUMMARY_FREQUENCY_LIMITS_GHZ, colour_offset=0,
+        )
+        record["figures"]["spectra"] = base.name
+    if ratio_series:
+        base = plots_dir / f"{dataset.prefix}.flux_ratio_scatter"
+        plot_epoch_channel_scatter(
+            analysis.frequency_ghz, ratio_series, ratio_stats, base,
+            y_label=r"$R\,/\,\overline{R}_{\rm w}$", caption=RATIO_SCATTER_CAPTION, mjd=analysis.mjd,
+            epoch=dataset.epoch, x_limits=plotting.SUMMARY_FREQUENCY_LIMITS_GHZ, colour_offset=1,
+        )
+        record["figures"]["flux_ratios"] = base.name
+    return record
+
+
 def _write_measured_ratios(path_csv: Path, path_json: Path, analysis: EpochAnalysis) -> None:
     rows: list[dict[str, float]] = []
     for row_index, frequency_ghz in enumerate(analysis.frequency_ghz):
@@ -1206,6 +1326,7 @@ def write_epoch_products(
         plot_epoch_rms_diagnostic(
             analysis, plots_dir / f"{dataset.prefix}.rms_vs_channel"
         )
+        scatter_record = _write_epoch_scatter(analysis, fits_dir, plots_dir)
         images_record = _write_visit_image_figure(dataset, plots_dir, image_settings)
 
         created = datetime.now(UTC).isoformat()
@@ -1257,7 +1378,10 @@ def write_epoch_products(
                 "effective_fit_indices_for_epoch": list(
                     analysis.excluded_fit_indices
                 ),
+                "effective_exclusions_for_epoch": list(analysis.excluded_labels),  # "spw 3 ch 0-3" ...
+                "spw_layout": analysis.spw_layout,
             },
+            "scatter": scatter_record,
             "uncertainty_model": {
                 "requested": analysis.error_source,
                 "per_group_source": analysis.uncertainty_sources,
@@ -1863,6 +1987,9 @@ def write_combined_products(
                         )
                         for analysis in analyses
                     },
+                    "effective_exclusions_by_epoch": {
+                        analysis.dataset.epoch: list(analysis.excluded_labels) for analysis in analyses
+                    },
                 },
                 "uncertainty_model": {
                     "requested": analyses[0].error_source,
@@ -2011,8 +2138,13 @@ def run_stage3(
     overwrite: bool = False,
     workers: int | None = None,
     reporter: Reporter | None = None,
+    dry_run: bool = False,
 ) -> Stage3Summary:
-    """Fit every selected Stage 2 product and write per-visit and combined outputs."""
+    """Fit every selected Stage 2 product and write per-visit and combined outputs.
+
+    ``dry_run`` stops after discovery and exclusion resolution: it reports what
+    would be analysed and where it would be written, and writes nothing.
+    """
     reporter = reporter or Reporter()
     settings = config.stage3
     root = Layout.at(project_root).root
@@ -2020,15 +2152,26 @@ def run_stage3(
     for note in migrate_flat_layout(root):
         reporter.log(f"[stage3] layout: {note}")
 
-    global_excluded = (
-        _parse_index_spec(settings.exclude_channels, "stage3.exclude_channels")
-        if settings.exclude_channels else []
+    # Specs are parsed once; spectral-window items are resolved per dataset below,
+    # since each Stage 2 product carries its own channel layout.
+    global_spec = parse_exclusion_spec(settings.exclude_channels, "stage3.exclude_channels")
+    epoch_specs = parse_epoch_exclusion_specs(settings.exclude_epoch_channels)
+    global_excluded = list(global_spec.fit_indices)
+    epoch_excluded = {epoch: list(spec.fit_indices) for epoch, spec in epoch_specs.items()}
+    # The output tag is built from the spec text (plain indices, or the spw items as written),
+    # so the same request always lands in the same directory whatever the product's layout.
+    analysis_tag = _analysis_tag_from_settings(
+        global_excluded, epoch_excluded, settings.error_source,
+        global_spw_text=[item.text for item in global_spec.spw_items],
+        epoch_spw_text={epoch: [item.text for item in spec.spw_items] for epoch, spec in epoch_specs.items()},
     )
-    epoch_excluded = _parse_epoch_exclusion_specs(settings.exclude_epoch_channels)
-    analysis_tag = _analysis_tag_from_settings(global_excluded, epoch_excluded, settings.error_source)
     exclusion_configuration = _exclusion_configuration(
         settings.exclude_channels, global_excluded, settings.exclude_epoch_channels, epoch_excluded
     )
+    exclusion_configuration["global_spw_items"] = [item.describe() for item in global_spec.spw_items]
+    exclusion_configuration["per_epoch_spw_items"] = {
+        epoch: [item.describe() for item in spec.spw_items] for epoch, spec in epoch_specs.items()
+    }
 
     if settings.fit_method == "emcee":
         try:
@@ -2049,7 +2192,7 @@ def run_stage3(
         calibration_mode=calibration_mode,
     )
     selected_epochs = {dataset.epoch for dataset in datasets}
-    unknown = sorted(set(epoch_excluded) - selected_epochs)
+    unknown = sorted(set(epoch_specs) - selected_epochs)
     if unknown:
         raise ValueError(
             f"stage3.exclude_epoch_channels refers to epoch(s) not selected: {unknown}. "
@@ -2060,6 +2203,23 @@ def run_stage3(
             replace(dataset, output_directory=dataset.output_directory / analysis_tag)
             for dataset in datasets
         ]
+
+    # Resolve every dataset's exclusions up front so a bad spw spec fails before any fitting.
+    resolved: dict[str, tuple[list[int], list[str], SpwLayout]] = {}
+    for dataset in datasets:
+        metadata = load_stage2_metadata(dataset)
+        layout = spw_layout_from_metadata(metadata, _stage1_metadata_for(dataset))
+        indices = set(resolve_exclusions(global_spec, layout, f"{dataset.prefix} stage3.exclude_channels"))
+        epoch_spec = epoch_specs.get(dataset.epoch)
+        if epoch_spec is not None:
+            indices.update(resolve_exclusions(epoch_spec, layout, f"{dataset.prefix} exclude_epoch_channels"))
+        ordered = sorted(indices)
+        resolved[dataset.prefix] = (ordered, describe_fit_indices(ordered, layout), layout)
+
+    if dry_run:
+        return _stage3_dry_run(
+            datasets, resolved, settings, analysis_tag, calibration_mode, root, reporter,
+        )
 
     image_settings = ImageSettings.from_config(settings.images)
     emcee_settings = {
@@ -2083,18 +2243,21 @@ def run_stage3(
     for position, dataset in enumerate(datasets, start=1):
         reporter.progress("stage3 analysis", position - 1, len(datasets), dataset.prefix)
         try:
-            effective = set(global_excluded)
-            effective.update(epoch_excluded.get(dataset.epoch, []))
-            analyses.append(
-                analyse_dataset(
-                    dataset,
-                    reference_frequency_ghz=settings.reference_frequency_ghz,
-                    fit_method=settings.fit_method,
-                    emcee_settings=emcee_settings,
-                    error_source=settings.error_source,
-                    excluded_fit_indices=effective or None,
-                )
+            effective, labels, layout = resolved[dataset.prefix]
+            analysis = analyse_dataset(
+                dataset,
+                reference_frequency_ghz=settings.reference_frequency_ghz,
+                fit_method=settings.fit_method,
+                emcee_settings=emcee_settings,
+                error_source=settings.error_source,
+                excluded_fit_indices=set(effective) or None,
             )
+            analysis.excluded_labels = labels
+            analysis.spw_layout = {
+                "channels_per_spw": layout.channels_per_spw, "n_spw": layout.n_spw,
+                "mode": layout.mode, "source": layout.source,
+            }
+            analyses.append(analysis)
         except Exception as exc:  # noqa: BLE001 - report and continue with other visits
             failures += 1
             reporter.error(f"analysis failed for {dataset.prefix}: {exc}")
