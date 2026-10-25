@@ -80,6 +80,24 @@ def _size_text(size: float | list[float]) -> str:
     return ",".join(f"{float(v):g}" for v in values)
 
 
+EXCLUSION_TOOLTIP = (
+    "Items separated by ';'. 'spw3:0-3,60-63' = CASA spectral window 3, channels 0-3 and 60-63 inside it "
+    "(both numbered from 0, as in CASA flagging). 'spw7' = the whole window. A plain number or range is a "
+    "Stage 2 fit index (from 1). On an IF product only whole windows can be excluded."
+)
+
+
+def _examples(title: str, rows: list[tuple[str, str]]):
+    """A compact hint block: a title line, then monospace example / meaning pairs."""
+    with ui.column().classes("gap-0 q-mt-xs") as block:
+        ui.label(title).classes("text-caption opacity-70")
+        with ui.element("div").classes("grid gap-x-4").style("grid-template-columns: max-content 1fr"):
+            for example, meaning in rows:
+                ui.label(example).classes("text-caption font-mono")
+                ui.label(meaning).classes("text-caption opacity-70")
+    return block
+
+
 def _epoch_exclusions(text: str) -> list[str]:
     """Split per-epoch entries into repeatable EPOCH:SPEC flags.
 
@@ -161,13 +179,27 @@ def run_page() -> None:
                             "Final-IF channels per IF",
                             value=config.stage1.final_if_selfcal.channels or "",
                             placeholder=f"empty = edge {config.stage1.final_if_selfcal.edge_channels}; e.g. 1:3-62; 2:5-60,62; 7-12:1-64",
-                        ).props("dense outlined").classes("w-[28rem]")
+                        ).props("dense outlined stack-label").classes("w-[28rem]")
+                        final_if_channels.tooltip(
+                            "Which channels each IF's self-cal uses. IF:channels entries separated by ';'; IF and "
+                            "channel numbers are DifMAP's, starting at 1, channels counted within the IF. IFs not "
+                            "listed keep the edge_channels default."
+                        )
                         reimage_only = ui.switch("Re-image only (common grid)", value=False)
                         ui.label(
                             f"{config.stage1.final_if_selfcal.if_count} IFs x "
                             f"{config.stage1.final_if_selfcal.channels_per_if} channels; "
                             "self-cal schedule and unflag are set on the Parameters page"
                         ).classes("text-caption opacity-70")
+                    final_if_examples = _examples(
+                        "How to write the final-IF channels (DifMAP numbering: IF and channel start at 1, channels within the IF)",
+                        [
+                            ("1:3-62", "IF 1 uses channels 3 to 62"),
+                            ("2:5-60,62", "IF 2 uses 5 to 60 and 62 (a gap is fine)"),
+                            ("7-12:1-64", "IFs 7 to 12 use every channel"),
+                            ("1:3-62; 2:5-60,62; 7-12:1-64", "several IFs, separated by ';'; unlisted IFs keep the edge default"),
+                        ],
+                    )
 
                 with ui.card().classes("w-full q-pa-md gap-2").props("flat bordered") as stage2_card:
                     ui.label("Stage 2").classes("text-subtitle2")
@@ -237,20 +269,28 @@ def run_page() -> None:
                             exclude_channels = ui.input(
                                 "Exclude channels (all epochs)", value=config.stage3.exclude_channels or "",
                                 placeholder="spw3:0-3,60-63; spw7",
-                            ).props(dense).classes("w-72")
+                            ).props(dense + " stack-label").classes("w-72")  # stack-label: the example shows in the empty field
+                            exclude_channels.tooltip(EXCLUSION_TOOLTIP)
                             exclude_epoch_channels = ui.input(
                                 "Per-epoch exclusions", value=" ".join(config.stage3.exclude_epoch_channels),
                                 placeholder="E:spw14:0-63 F:1-4",
-                            ).props(dense).classes("w-80")
+                            ).props(dense + " stack-label").classes("w-80")
+                            exclude_epoch_channels.tooltip(
+                                "One entry per epoch, separated by spaces: EPOCH:spec, where spec uses the "
+                                "same syntax as the all-epochs field. " + EXCLUSION_TOOLTIP
+                            )
                         with ui.row().classes("gap-6 items-center"):
                             annotations = ui.switch("Annotated spectra", value=config.stage3.annotations)
                             s3_error_bars = ui.switch("Error bars", value=config.stage3.plot_error_bars)
-                        ui.label(
-                            "Exclusions: 'spw3:0-3,60-63' is CASA spectral window 3 (numbered from 0), channels "
-                            "0-3 and 60-63 inside it (from 0); 'spw7' drops the whole window; plain numbers are "
-                            "Stage 2 fit indices (from 1). Separate items with ';'. Per-epoch entries are "
-                            "EPOCH:spec, separated by spaces."
-                        ).classes("text-caption opacity-70")
+                        _examples(
+                            "How to write exclusions (CASA numbering: spw and channel both start at 0)",
+                            [
+                                ("spw3:0-3,60-63", "channels 0-3 and 60-63 of spectral window 3"),
+                                ("spw7", "all of spectral window 7"),
+                                ("spw3:0-3,60-63; spw7; 1-4", "several items, separated by ';' (plain numbers are Stage 2 fit indices, from 1)"),
+                                ("E:spw14:0-63; spw15   F:1-4", "per-epoch field: EPOCH:spec, one entry per epoch, separated by spaces"),
+                            ],
+                        )
                         ui.label("Clean and residual map figures (from the Stage 1 FITS images)").classes(
                             "text-caption q-mt-sm"
                         )
@@ -383,6 +423,7 @@ def run_page() -> None:
             for widget in (if_count, s1_channels_per_if, s1_edge):
                 widget.set_visibility(calibration_mode.value == "per-if")
             final_if_channels.set_visibility(bool(final_if.value))
+            final_if_examples.set_visibility(bool(final_if.value))
             stage2_card.set_visibility(stage_boxes[2].value)
             stage3_card.set_visibility(stage_boxes[3].value)
             channels.set_visibility(mode.value == "channel")
