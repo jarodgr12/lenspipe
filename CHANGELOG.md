@@ -3,6 +3,20 @@
 Each entry says whether existing products need re-running. The `lenspipe`
 version that made a product is recorded in its metadata JSON.
 
+## 2.2.4 — 2026-10-27
+
+**Re-run needed:** no.
+
+- Fixed: after a successful install on a fresh Linux account, `lenspipe`
+  was "command not found" in the user's shell. `uv tool install` puts the
+  command in `~/.local/bin`; the installer had added that directory to its
+  own PATH, so its final `lenspipe doctor` worked while the user's shell
+  never saw it. The installer now checks the user's login shell, appends
+  the PATH line to `~/.bashrc` / `~/.zshrc` when missing, and prints an
+  IMPORTANT notice to open a new terminal (with the full-path fallback).
+  `lenspipe doctor` gained a `path` check that warns when the installed
+  command's directory is not on the PATH.
+
 ## 2.2.3 — 2026-10-26
 
 **Re-run needed:** Stage 3, for the new combined figures.
