@@ -593,6 +593,76 @@ def verify(
 
 
 @app.command()
+def flags(
+    project: ProjectArg = Path("."),
+    config: ConfigOpt = None,
+    epoch: EpochOpt = None,
+    file: Annotated[list[Path] | None, typer.Option("--file", "-f", help="A UV-FITS file to inspect instead of the project's calibrated data; repeatable.")] = None,
+    raw: Annotated[bool, typer.Option("--raw", help="Inspect the raw inputs/ UV-FITS files instead of Stage 1's calibrated output.")] = False,
+    calibration_mode: CalibrationModeOpt = None,
+    verbose: Annotated[bool, typer.Option("--verbose", "-v", help="One line per IF, not only the fully flagged ones.")] = False,
+    as_json: Annotated[bool, typer.Option("--json")] = False,
+) -> None:
+    """Report which spectral windows (IFs) are fully flagged in the UV data, from the weights.
+
+    A Stage 2 fit that reports "no unflagged visibilities" for an IF can be checked
+    against the file here: weights <= 0 are flagged, as DifMAP sees them.
+    """
+    from lenspipe.flags import flag_report
+
+    paths: list[Path]
+    if file:
+        paths = [Path(f).expanduser() for f in file]
+    else:
+        root, cfg = _load(project, config)
+        cfg = _with_calibration_mode(cfg, calibration_mode)
+        if raw:
+            from lenspipe.stage1 import discover_inputs as discover_raw
+
+            paths = discover_raw(root, cfg.stage1.input_pattern, set(epoch) if epoch else None)
+        else:
+            from lenspipe.stage2 import discover_inputs as discover_calibrated
+
+            paths = discover_calibrated(
+                root, cfg.stage2.input_pattern, set(epoch) if epoch else None, cfg.stage1.calibration_mode
+            )
+        if not paths:
+            typer.echo("ERROR: no UV-FITS files found to inspect.", err=True)
+            raise typer.Exit(code=1)
+    reports = []
+    for path in paths:
+        if not path.is_file():
+            typer.echo(f"ERROR: {path} not found", err=True)
+            raise typer.Exit(code=1)
+        if not as_json:
+            typer.echo(f"reading {path} ...", err=True)
+        reports.append(flag_report(path))
+    if as_json:
+        typer.echo(json.dumps([report.to_dict() for report in reports], indent=2))
+        if any(report.fully_flagged_ifs for report in reports):
+            raise typer.Exit(code=3)
+        return
+    for report in reports:
+        lines = report.lines()
+        typer.echo(lines[0])
+        typer.echo(lines[1])
+        if verbose:
+            for line in lines[2:]:
+                typer.echo(line)
+        else:
+            partial = [item for item in report.ifs if item.fully_flagged_channels and not item.fully_flagged]
+            if partial:
+                typer.echo(
+                    f"  {len(partial)} IF(s) with some fully flagged channels: "
+                    + ", ".join(f"IF {i.if_number} ({len(i.fully_flagged_channels)} ch)" for i in partial)
+                    + "  (--verbose for the list)"
+                )
+        typer.echo("")
+    if any(report.fully_flagged_ifs for report in reports):
+        raise typer.Exit(code=3)
+
+
+@app.command()
 def calibrate(
     project: ProjectArg = Path("."),
     config: ConfigOpt = None,
