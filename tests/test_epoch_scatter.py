@@ -106,6 +106,20 @@ def test_stage3_writes_per_epoch_scatter_figures_tables_and_metadata(project: Pa
     assert block["figures"] == {
         "spectra": "MG0414.A.channel.spectra_scatter", "flux_ratios": "MG0414.A.channel.flux_ratio_scatter",
     }
+    combined = project / "stage3" / "full-band" / "combined" / "MG0414" / "channel"
+    assert (combined / "plots" / "MG0414.channel.average_spectrum_scatter.png").is_file()
+    assert (combined / "plots" / "MG0414.channel.average_flux_ratio_scatter.png").is_file()
+    with (combined / "tables" / "MG0414.channel.average_scatter.csv").open() as handle:
+        crows = list(csv.DictReader(handle))
+    assert sorted(r["label"] for r in crows if r["kind"] == "spectrum") == sorted(groups)
+    assert len([r for r in crows if r["kind"] == "flux_ratio"]) == len(groups) - 1
+    cmeta = json.loads(next(combined.glob("*.combined.stage3.metadata.json")).read_text())
+    average = cmeta["combined_fits"]["average_scatter"]
+    assert set(average["spectra"]) == set(groups) and average["figures"]["spectra"] == "MG0414.channel.average_spectrum_scatter"
+    with (combined / "tables" / "MG0414.channel.combined_fits.csv").open() as handle:
+        products = {r["product"] for r in csv.DictReader(handle)}
+    assert {"average_spectrum_scatter", "average_flux_ratio_scatter"} <= products
+
     first = block["spectra"][groups[0]]
     assert first["sigma_weighted_percent"] == pytest.approx(float(spectra[0]["sigma_weighted_percent"]) if spectra[0]["label"] == groups[0] else first["sigma_weighted_percent"])
     assert first["slope_included"]["sigma_unweighted_percent"] >= first["sigma_unweighted_percent"] * 0  # present and numeric
