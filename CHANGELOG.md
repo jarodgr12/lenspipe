@@ -3,6 +3,18 @@
 Each entry says whether existing products need re-running. The `lenspipe`
 version that made a product is recorded in its metadata JSON.
 
+## 2.2.5 — 2026-10-27
+
+**Re-run needed:** no.
+
+- Added: `lenspipe flags`. Reads the weights of the calibrated UV-FITS
+  files (or `--raw` inputs, or any `--file`) and reports per spectral
+  window the unflagged fraction and whether it is fully flagged, in DifMAP
+  and CASA numbering, with `--verbose` per-channel detail and `--json`.
+  Exit status 3 when a window is fully flagged. Written for Stage 2 runs
+  that report "no unflagged visibilities" for an IF: the data decides
+  whether that window is really empty.
+
 ## 2.2.4 — 2026-10-27
 
 **Re-run needed:** no.

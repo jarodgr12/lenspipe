@@ -215,6 +215,17 @@ rebuilds the CSV, plots and metadata from an existing `*.stage2.difmap.log`
 without running DifMAP. Logs from sharded runs are concatenated into that
 file, so recovery works on them too.
 
+**Flags.** `lenspipe flags <project>` reads the weights of every calibrated
+UV-FITS file (or `--raw` for `inputs/`, `--file` for any file) and reports,
+per spectral window, the unflagged fraction and whether the window is
+fully flagged, in both DifMAP (IF from 1) and CASA (spw from 0) numbering.
+Weights at or below zero are flags, which is exactly what DifMAP sees, so a
+Stage 2 fit that reported "no unflagged visibilities" for an IF can be
+checked against the data. `--verbose` lists every window and any fully
+flagged channels inside it; `--json` is machine-readable; exit status 3
+means at least one window is fully flagged. A multi-gigabyte visit is one
+sequential read.
+
 **Verify.** Every product records the size, mtime and hash of the files it was
 made from. `lenspipe verify <project>` compares them with the files as they
 are now and reports each product as `fresh`, `stale` (its own inputs changed),
