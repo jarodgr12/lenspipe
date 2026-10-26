@@ -43,6 +43,12 @@ reports Python, DifMAP, CASA, fonts, cores and memory, and says how to fix
 anything missing. System Python and CASA are not touched. It needs `git` and
 internet access once; runs are offline afterwards.
 
+If `~/.local/bin` is not on your PATH the installer adds it to your shell
+profile (`~/.bashrc` or `~/.zshrc`) and says so; **open a new terminal** before
+the first `lenspipe` command, otherwise the shell reports
+`Command 'lenspipe' not found`. Until then `~/.local/bin/lenspipe` works by
+full path, and `lenspipe doctor` has a `path` check that names the problem.
+
 From a checkout, `bash scripts/install.sh` installs that checkout instead, and
 `--from <url> --ref v2.0.1` pins a release. Developers can use
 `uv sync --all-extras` and `uv run lenspipe`.

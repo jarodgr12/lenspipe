@@ -19,6 +19,7 @@ from lenspipe.doctor import detect_difmap, run_checks
 from lenspipe.progress import Reporter
 from lenspipe.stage1 import run_stage1
 from lenspipe.stage2 import run_stage2
+from tests.conftest import REPO_ROOT
 
 runner = CliRunner()
 
@@ -194,3 +195,61 @@ def test_compare_reports_missing_counterparts(project: Path, fake_difmap: Path, 
     empty.mkdir()
     diffs = compare_projects(project, empty)
     assert diffs and all(d.status == "missing" for d in diffs)
+
+
+def test_doctor_path_check(monkeypatch, tmp_path: Path) -> None:
+    import shutil as _shutil
+
+    from lenspipe.doctor import _path_check
+
+    # Not an installed command (uv run / pytest): the check is informational.
+    monkeypatch.setattr("sys.argv", ["/somewhere/else/pytest"])
+    assert _path_check().status == "ok"
+    # Installed under ~/.local/bin but that directory is not on PATH: warn with the fix.
+    bin_dir = tmp_path / ".local" / "bin"
+    bin_dir.mkdir(parents=True)
+    exe = bin_dir / "lenspipe"
+    exe.write_text("#!/bin/sh\n")
+    monkeypatch.setattr("sys.argv", [str(exe)])
+    monkeypatch.setattr(_shutil, "which", lambda name: None)
+    check = _path_check()
+    assert check.status == "warn" and str(bin_dir) in check.detail and "export PATH" in (check.fix or "")
+    monkeypatch.setattr(_shutil, "which", lambda name: str(exe))
+    assert _path_check().status == "ok"
+
+
+def test_install_script_appends_path_line_to_a_profile_without_it(tmp_path: Path) -> None:
+    """Simulate the Linux report: lenspipe lands in ~/.local/bin, the login shell has no PATH entry."""
+    import os
+    import subprocess
+
+    home = tmp_path / "home"
+    (home / ".local" / "bin").mkdir(parents=True)
+    bashrc = home / ".bashrc"
+    bashrc.write_text("# user rc\n")
+    fake_bin = tmp_path / "fakebin"
+    fake_bin.mkdir()
+    # uv: pretend the tool install succeeded by dropping an executable into ~/.local/bin
+    (fake_bin / "uv").write_text(
+        "#!/bin/sh\nprintf '#!/bin/sh\\necho lenspipe 9.9.9\\n' > \"$HOME/.local/bin/lenspipe\"; chmod +x \"$HOME/.local/bin/lenspipe\"\n"
+    )
+    (fake_bin / "uv").chmod(0o755)
+    # a "login shell" whose PATH lacks ~/.local/bin, whatever the rc file says
+    (fake_bin / "fakesh").write_text("#!/bin/sh\ncase \"$1\" in -lic) printf %s \"/usr/bin:/bin\";; *) exec /bin/sh \"$@\";; esac\n")
+    (fake_bin / "fakesh").chmod(0o755)
+    env = {**os.environ, "HOME": str(home), "SHELL": str(fake_bin / "fakesh"), "PATH": f"{fake_bin}:/usr/bin:/bin"}
+    result = subprocess.run(
+        ["bash", str(REPO_ROOT / "scripts" / "install.sh"), "--from", str(REPO_ROOT)],
+        env=env, text=True, capture_output=True, check=False,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert 'export PATH="$HOME/.local/bin:$PATH"' in bashrc.read_text()
+    assert "IMPORTANT: Added ~/.local/bin to your PATH" in result.stdout
+    assert "Open a NEW terminal" in result.stdout
+    # Second run: line already there, still told to open a new terminal, not appended twice.
+    result = subprocess.run(
+        ["bash", str(REPO_ROOT / "scripts" / "install.sh"), "--from", str(REPO_ROOT)],
+        env=env, text=True, capture_output=True, check=False,
+    )
+    assert result.returncode == 0 and bashrc.read_text().count(".local/bin") == 1
+    assert "is set in" in result.stdout and "Open a NEW terminal" in result.stdout

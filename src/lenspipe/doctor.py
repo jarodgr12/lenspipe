@@ -96,6 +96,7 @@ def run_checks(project_root: Path | None, config: LenspipeConfig | None = None) 
         )
     )
     results.append(CheckResult("lenspipe", OK, f"version {__version__}"))
+    results.append(_path_check())
 
     difmap_path = detect_difmap(config.project.difmap.executable)
     if difmap_path is None:
@@ -240,6 +241,29 @@ def run_checks(project_root: Path | None, config: LenspipeConfig | None = None) 
         results.append(_disk_check(scratch_where, free, largest, decision.shards, config.run.epoch_workers))
         results.append(_rcusp_check(models, config.stage3.rcusp_images))
     return results
+
+
+def _path_check() -> CheckResult:
+    """Is the directory holding this lenspipe executable on the PATH of the calling shell?
+
+    `uv tool install` puts the command in ~/.local/bin; when that is not on the
+    PATH, `lenspipe` fails with "command not found" although the install
+    succeeded (the installer itself runs with the directory added, so it does
+    not see the problem). Checked only for an installed command, not `uv run`.
+    """
+    import shutil
+
+    bin_dir = Path(sys.argv[0]).resolve().parent if sys.argv and sys.argv[0] else None
+    if bin_dir is None or bin_dir.name != "bin" or "uv/tools" not in str(bin_dir) and ".local" not in str(bin_dir):
+        return CheckResult("path", OK, "not an installed command; PATH not applicable")
+    found = shutil.which("lenspipe")
+    if found:
+        return CheckResult("path", OK, f"lenspipe resolves to {found}")
+    return CheckResult(
+        "path", WARN, f"{bin_dir} is not on your PATH, so 'lenspipe' is not found from a plain shell",
+        f'add to your shell profile: export PATH="{bin_dir}:$PATH" (then open a new terminal), '
+        "or run: uv tool update-shell",
+    )
 
 
 def _rcusp_check(models: list[Path], images: list[str]) -> CheckResult:
