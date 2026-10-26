@@ -239,6 +239,7 @@ def test_stage3_products_match_legacy(project: Path, fake_difmap: Path, fake_dif
         "combined/MG0414/channel/tables/MG0414.channel.normalised_reference_fluxes_vs_mjd.csv",
         "MG0414.A/channel/fits/MG0414.A.channel.scatter.csv",  # within-epoch scatter (2.1.5)
         "MG0414.B/channel/fits/MG0414.B.channel.scatter.csv",
+        "combined/MG0414/channel/tables/MG0414.channel.average_scatter.csv",  # all-visit scatter (2.2.3)
     }
     assert len(new_csv) >= 12
     for name, legacy_path in legacy_csv.items():
@@ -247,7 +248,7 @@ def test_stage3_products_match_legacy(project: Path, fake_difmap: Path, fake_dif
         if name.endswith("combined_fits.csv"):
             # 2.0.16 adds per-image normalised flux scatter rows the legacy script never had,
             # and 2.0.18 renames the ratio scatter parameter to sigma_weighted_percent.
-            right = right[~right["product"].isin(["normalised_reference_flux", "normalised_rcusp"])]
+            right = right[~right["product"].isin(["normalised_reference_flux", "normalised_rcusp", "average_spectrum_scatter", "average_flux_ratio_scatter"])]
             right = right[~right["parameter"].isin(["sigma_unweighted_percent", "visit_scatter"])].reset_index(drop=True)
             right["parameter"] = right["parameter"].replace({"sigma_weighted_percent": "sigma_percent"})
         # The package may add columns; every legacy column must still match exactly.

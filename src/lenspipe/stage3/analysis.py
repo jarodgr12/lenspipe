@@ -39,6 +39,8 @@ Combined outputs
     plots/<source>.<product>.fluxes_vs_mjd_per_image.pdf
     plots/<source>.<product>.average_spectrum.pdf
     plots/<source>.<product>.average_flux_ratios.pdf
+    plots/<source>.<product>.average_spectrum_scatter.pdf
+    plots/<source>.<product>.average_flux_ratio_scatter.pdf
     plots/<source>.<product>.weighted_flux_ratios_vs_mjd.pdf
     plots/<source>.<product>.normalised_weighted_flux_ratios_vs_mjd.pdf
     plots/<source>.<product>.rcusp_vs_mjd.pdf
@@ -971,6 +973,119 @@ def _write_epoch_scatter(analysis: EpochAnalysis, fits_dir: Path, plots_dir: Pat
     return record
 
 
+AVERAGE_SPECTRUM_SCATTER_CAPTION = (
+    r"$\sigma_{\rm w}$: std of $\overline{S}/S_{\rm fit}$ (ddof=1); "
+    r"$\sigma_{\rm u}$: RMS of $\overline{S}/\overline{S_{\rm fit\,norm}}$ about 1. "
+    r"$\overline{S}$ is the all-visit average spectrum, $S_{\rm fit}$ its power-law fit."
+)
+AVERAGE_RATIO_SCATTER_CAPTION = (
+    r"$\sigma_{\rm w}$: std of $\overline{R}/\overline{R}_{\rm w}$ (ddof=1); "
+    r"$\sigma_{\rm u}$: RMS of $\overline{R}/\overline{R}$ about 1. "
+    r"$\overline{R}$ is the all-visit average ratio per channel, $\overline{R}_{\rm w}$ its weighted mean over channels."
+)
+
+
+def _write_combined_scatter(
+    *,
+    stem: str,
+    plots_dir: Path,
+    tables_dir: Path,
+    spectrum_frequency: np.ndarray | None,
+    spectrum_series: dict[str, dict[str, np.ndarray]] | None,
+    spectrum_fits: dict[str, Any] | None,
+    ratio_frequency: np.ndarray | None,
+    ratio_series: dict[str, dict[str, np.ndarray]] | None,
+) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+    """Channel-to-channel scatter of the all-visit average spectrum (about its power-law
+    fit) and of the all-visit average flux ratios (about their weighted mean): the same
+    figures and statistics as each epoch's ``spectra_scatter`` / ``flux_ratio_scatter``,
+    applied to the combined series. Returns the metadata block and combined-fit rows."""
+    record: dict[str, Any] = {
+        "description": (
+            "Scatter across channels of the all-visit average series: the average spectrum "
+            "normalised by its power-law fit, the average flux ratios by their inverse-variance "
+            "weighted mean over channels. Same sigma definitions as the per-epoch scatter."
+        ),
+        "spectra": {},
+        "flux_ratios": {},
+        "figures": {},
+    }
+    rows: list[dict[str, Any]] = []
+    fit_rows: list[dict[str, Any]] = []
+
+    def _mask(values, errors) -> np.ndarray:
+        values = np.asarray(values, dtype=float)
+        errors = np.asarray(errors, dtype=float)
+        return np.isfinite(values) & np.isfinite(errors) & (errors > 0)
+
+    def _fit_rows(product: str, statistic) -> list[dict[str, Any]]:
+        return [
+            {
+                "product": product, "label": statistic.label, "parameter": parameter, "value": value,
+                "error": None, "reference_frequency_ghz": None,
+                "chi_square": None, "reduced_chi_square": statistic.reduced_chi_square_about_unity,
+                "degrees_of_freedom": max(statistic.n_points - 1, 0), "n_points": statistic.n_points,
+            }
+            for parameter, value in (
+                ("sigma_weighted_percent", statistic.sigma_weighted_percent),
+                ("sigma_unweighted_percent", statistic.sigma_unweighted_percent),
+            )
+        ]
+
+    if spectrum_series and spectrum_frequency is not None:
+        plotted: dict[str, dict[str, np.ndarray]] = {}
+        stats: dict[str, Any] = {}
+        frequency = np.asarray(spectrum_frequency, dtype=float)
+        for label, series in spectrum_series.items():
+            fit = (spectrum_fits or {}).get(label)
+            statistic, normalised = epoch_spectrum_scatter(label, frequency, series["values"], series["errors"], fit)
+            mask = _mask(series["values"], series["errors"])
+            if statistic.normalisation == "power_law_fit" and fit is not None:
+                model = power_law(frequency, fit.s_ref_jy, fit.alpha, fit.reference_frequency_ghz)
+                mask &= np.isfinite(model) & (model > 0)
+            normalised["frequency_ghz"] = frequency[mask]
+            plotted[label] = normalised
+            stats[label] = statistic
+            record["spectra"][label] = statistic.as_dict()
+            row = {k: v for k, v in statistic.as_dict().items() if k != "slope_included"}
+            if statistic.slope_included:
+                row.update({f"slope_included_{k}": v for k, v in statistic.slope_included.items()})
+            rows.append(row)
+            fit_rows.extend(_fit_rows("average_spectrum_scatter", statistic))
+        base = plots_dir / f"{stem}.average_spectrum_scatter"
+        plot_epoch_channel_scatter(
+            frequency, plotted, stats, base,
+            y_label=r"$\overline{S}\,/\,S_{\rm fit}$", caption=AVERAGE_SPECTRUM_SCATTER_CAPTION,
+            title="All epochs: average spectrum", x_limits=plotting.SUMMARY_FREQUENCY_LIMITS_GHZ, colour_offset=0,
+        )
+        record["figures"]["spectra"] = base.name
+
+    if ratio_series and ratio_frequency is not None:
+        plotted = {}
+        stats = {}
+        frequency = np.asarray(ratio_frequency, dtype=float)
+        for label, series in ratio_series.items():
+            statistic, normalised = epoch_ratio_scatter(label, series["values"], series["errors"])
+            normalised["frequency_ghz"] = frequency[_mask(series["values"], series["errors"])]
+            plotted[label] = normalised
+            stats[label] = statistic
+            record["flux_ratios"][label] = statistic.as_dict()
+            rows.append({k: v for k, v in statistic.as_dict().items() if k != "slope_included"})
+            fit_rows.extend(_fit_rows("average_flux_ratio_scatter", statistic))
+        base = plots_dir / f"{stem}.average_flux_ratio_scatter"
+        plot_epoch_channel_scatter(
+            frequency, plotted, stats, base,
+            y_label=r"$\overline{R}\,/\,\overline{R}_{\rm w}$", caption=AVERAGE_RATIO_SCATTER_CAPTION,
+            title="All epochs: average flux ratios", x_limits=plotting.SUMMARY_FREQUENCY_LIMITS_GHZ, colour_offset=1,
+        )
+        record["figures"]["flux_ratios"] = base.name
+
+    if rows:
+        write_csv(tables_dir / f"{stem}.average_scatter.csv", rows)
+        write_json(tables_dir / f"{stem}.average_scatter.json", rows)
+    return record, fit_rows
+
+
 def _write_measured_ratios(path_csv: Path, path_json: Path, analysis: EpochAnalysis) -> None:
     rows: list[dict[str, float]] = []
     for row_index, frequency_ghz in enumerate(analysis.frequency_ghz):
@@ -1509,6 +1624,7 @@ def write_combined_products(
             analyses, plots_dir, tables_dir, stem
         )
 
+        average_spectrum_fits: dict[str, Any] = {}
         (
             average_spectrum_fit_indices,
             average_spectrum_frequency,
@@ -1645,6 +1761,19 @@ def write_combined_products(
                 tables_dir / f"{stem}.average_flux_ratios.json",
                 average_ratio_rows,
             )
+
+        # Channel-to-channel scatter of the averaged series, the all-visit counterpart of
+        # each epoch's spectra_scatter / flux_ratio_scatter figures.
+        combined_scatter, scatter_fit_rows = _write_combined_scatter(
+            stem=stem, plots_dir=plots_dir, tables_dir=tables_dir,
+            spectrum_frequency=average_spectrum_frequency if average_spectrum_series else None,
+            spectrum_series=average_spectrum_series or None,
+            spectrum_fits=average_spectrum_fits,
+            ratio_frequency=average_ratio_frequency if average_ratio_series else None,
+            ratio_series=average_ratio_series or None,
+        )
+        combined_fit_payload["average_scatter"] = combined_scatter
+        combined_fit_rows.extend(scatter_fit_rows)
 
         plot_all_epochs_spectra(
             records,

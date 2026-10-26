@@ -3,6 +3,20 @@
 Each entry says whether existing products need re-running. The `lenspipe`
 version that made a product is recorded in its metadata JSON.
 
+## 2.2.3 — 2026-10-26
+
+**Re-run needed:** Stage 3, for the new combined figures.
+
+- Added: the combined product now carries the scatter figures too.
+  `<source>.<product>.average_spectrum_scatter` and
+  `.average_flux_ratio_scatter` apply the per-epoch definitions to the
+  all-visit average series: the average spectrum divided by its power-law
+  fit, the average flux ratios by their weighted mean over channels, σ_w
+  and σ_u in the margin. Numbers in `tables/<stem>.average_scatter.csv`,
+  in the combined fits table (products `average_spectrum_scatter`,
+  `average_flux_ratio_scatter`) and under `combined_fits.average_scatter`
+  in the combined metadata.
+
 ## 2.2.2 — 2026-10-26
 
 **Re-run needed:** Stage 3, if you want the new opacities applied.

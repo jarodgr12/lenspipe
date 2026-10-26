@@ -977,6 +977,7 @@ def plot_epoch_channel_scatter(
     epoch=None,
     x_limits=None,
     colour_offset: int = 0,
+    title: str | None = None,
 ) -> None:
     """Within-epoch scatter: one stacked panel per normalised series against frequency.
 
@@ -1025,7 +1026,7 @@ def plot_epoch_channel_scatter(
         axis.text(1.02, 0.5, annotation, transform=axis.transAxes, ha="left", va="center", fontsize=10)
         if panel_index < n_panels - 1:
             axis.tick_params(labelbottom=False)
-    axes[0].set_title(f"Epoch {epoch}" if mjd is None else f"MJD {_format_mjd(mjd)}")
+    axes[0].set_title(title if title else (f"Epoch {epoch}" if mjd is None else f"MJD {_format_mjd(mjd)}"))
     axes[-1].set_xlim(x_lo, x_hi)
     axes[-1].set_xticks(SUMMARY_FREQUENCY_TICKS_GHZ)
     axes[-1].set_xlabel("Frequency [GHz]")
