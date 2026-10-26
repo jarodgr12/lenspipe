@@ -282,6 +282,16 @@ def run_page() -> None:
                         with ui.row().classes("gap-6 items-center"):
                             annotations = ui.switch("Annotated spectra", value=config.stage3.annotations)
                             s3_error_bars = ui.switch("Error bars", value=config.stage3.plot_error_bars)
+                        with ui.row().classes("gap-12 items-end q-mt-sm"):
+                            with ui.column().classes("gap-1 w-56"):
+                                point_opacity_label = ui.label().classes("text-caption")
+                                point_opacity = ui.slider(min=0.0, max=1.0, step=0.05, value=config.stage3.point_opacity)
+                            with ui.column().classes("gap-1 w-56"):
+                                bar_opacity_label = ui.label().classes("text-caption")
+                                error_bar_opacity = ui.slider(min=0.0, max=1.0, step=0.05, value=config.stage3.error_bar_opacity)
+                        ui.label(
+                            "Opacity of the data points and of their error bars, set separately (0 = invisible, 1 = solid)"
+                        ).classes("text-caption opacity-70")
                         _examples(
                             "How to write exclusions (CASA numbering: spw and channel both start at 0)",
                             [
@@ -392,6 +402,8 @@ def run_page() -> None:
                 ),
                 stage3_annotations=_override(bool(annotations.value), s3.annotations),
                 stage3_error_bars=_override(bool(s3_error_bars.value), s3.plot_error_bars),
+                stage3_point_opacity=_override(round(float(point_opacity.value), 2), s3.point_opacity),
+                stage3_error_bar_opacity=_override(round(float(error_bar_opacity.value), 2), s3.error_bar_opacity),
                 stage3_formats=(
                     ",".join(chosen_formats)
                     if chosen_formats and chosen_formats != list(s3.figure_formats) else None
@@ -419,6 +431,8 @@ def run_page() -> None:
         }
 
         def refresh_preview() -> None:
+            point_opacity_label.set_text(f"Point opacity {float(point_opacity.value):.2f}")
+            bar_opacity_label.set_text(f"Error-bar opacity {float(error_bar_opacity.value):.2f}")
             stage1_card.set_visibility(stage_boxes[1].value)
             for widget in (if_count, s1_channels_per_if, s1_edge):
                 widget.set_visibility(calibration_mode.value == "per-if")
@@ -458,7 +472,7 @@ def run_page() -> None:
             s1_channels_per_if, s1_edge, final_if, final_if_channels, reimage_only, mode, channels_per_if,
             channels, shards, edge, iterations, unflag, keep_models, plots, s2_error_bars,
             error_source, product, plot_workers, fit_method, reference_frequency, formats,
-            exclude_channels, exclude_epoch_channels, annotations, s3_error_bars,
+            exclude_channels, exclude_epoch_channels, annotations, s3_error_bars, point_opacity, error_bar_opacity,
             images_on, image_center, image_size, image_cmap, image_pmax, image_residual_pmax,
             image_reference_epoch,
         ):

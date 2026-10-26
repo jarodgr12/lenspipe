@@ -395,6 +395,12 @@ class Stage3Config(_Model):
     plot_error_bars: bool = Field(
         True, description="Draw error bars on every Stage 3 figure; off plots the points alone."
     )
+    point_opacity: float = Field(
+        1.0, ge=0.0, le=1.0, description="Opacity of the data markers on every Stage 3 figure (0 transparent, 1 opaque)."
+    )
+    error_bar_opacity: float = Field(
+        1.0, ge=0.0, le=1.0, description="Opacity of the error bars, set separately from the markers (0 to 1)."
+    )
     figure_formats: list[Literal["pdf", "png", "svg"]] = Field(
         default_factory=lambda: ["pdf", "png"],
         description="Formats written for every Stage 3 figure; png alone roughly halves plot time.",
@@ -603,6 +609,8 @@ frequency_ticks_ghz = [12.0, 13.0, 14.0, 15.0, 16.0, 17.0, 18.0]
 rcusp_images = ["A1", "A2", "B"]    # [] disables R_cusp
 annotations = true
 plot_error_bars = true              # error bars on every Stage 3 figure
+point_opacity = 1.0                 # markers, 0 (transparent) to 1 (opaque)
+error_bar_opacity = 1.0             # error bars, set separately from the markers
 figure_formats = ["pdf", "png"]     # ["png"] for quick iteration runs
 use_tex = false
 # exclude_channels = "spw3:0-3,60-63; spw7"        # CASA spw (from 0) and channels inside it (from 0);

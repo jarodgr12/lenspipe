@@ -3,6 +3,17 @@
 Each entry says whether existing products need re-running. The `lenspipe`
 version that made a product is recorded in its metadata JSON.
 
+## 2.2.2 — 2026-10-26
+
+**Re-run needed:** Stage 3, if you want the new opacities applied.
+
+- Added: `stage3.point_opacity` and `stage3.error_bar_opacity` (0 to 1,
+  default 1), the opacity of the data markers and of the error bars on
+  every Stage 3 figure, set independently, so error bars can be drawn
+  faint under solid points or the reverse. CLI `--point-opacity`,
+  `--error-bar-opacity`; two sliders on the Run page under Stage 3
+  Advanced. Recorded in the per-visit `plot_style` metadata.
+
 ## 2.2.1 — 2026-10-26
 
 **Re-run needed:** no.
