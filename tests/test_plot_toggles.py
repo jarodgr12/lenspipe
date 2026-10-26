@@ -6,6 +6,7 @@ import io
 import json
 from pathlib import Path
 
+import pytest
 from typer.testing import CliRunner
 
 from lenspipe.cli import app
@@ -81,3 +82,41 @@ def test_cli_flags_map_to_config(project: Path, fake_difmap: Path) -> None:
     per_visit = next((project / "stage3" / "full-band" / "MG0414.A").rglob("*.stage3.metadata.json"))
     assert json.loads(per_visit.read_text())["plot_style"]["error_bars"] is False
     plotting.configure_error_bars(True)
+
+
+def test_stage3_opacity_settings_apply_to_markers_and_bars_separately(project: Path, fake_difmap: Path, monkeypatch) -> None:
+    import matplotlib
+
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    import numpy as np
+
+    from lenspipe.stage3 import plotting
+
+    # The helper: bars and markers are separate artists with their own alphas; label only on the markers.
+    plotting.configure_opacity(points=0.9, error_bars=0.3)
+    fig, ax = plt.subplots()
+    plotting.draw_points(ax, np.array([1.0, 2.0]), np.array([1.0, 2.0]), np.array([0.1, 0.1]), color="C0", label="A")
+    alphas = sorted(a.get_alpha() for a in ax.collections) + sorted(line.get_alpha() for line in ax.lines if line.get_marker() == "o")
+    assert 0.3 in alphas and 0.9 in alphas
+    assert [h.get_label() for h in ax.get_legend_handles_labels()[0]] == ["A"]
+    plt.close(fig)
+    with pytest.raises(ValueError):
+        plotting.configure_opacity(points=1.5)
+    plotting.configure_opacity()
+
+    # End to end: config -> figures and metadata.
+    quiet = Reporter(stream=io.StringIO())
+    run_stage1(project, _config(fake_difmap), reporter=quiet, workers=1)
+    run_stage2(project, _config(fake_difmap, mode="channel", shards=1), reporter=quiet, workers=1)
+    cfg = _config(fake_difmap).with_overrides(
+        stage3={"point_opacity": 0.8, "error_bar_opacity": 0.25, "figure_formats": ["png"]}
+    )
+    assert run_stage3(project, cfg, reporter=quiet, workers=1).ok
+    per_visit = next((project / "stage3").rglob("MG0414.A.channel.stage3.metadata.json"))
+    style = json.loads(per_visit.read_text())["plot_style"]
+    assert style["point_opacity"] == 0.8 and style["error_bar_opacity"] == 0.25
+    from pydantic import ValidationError
+
+    with pytest.raises(ValidationError):
+        _config(fake_difmap).with_overrides(stage3={"point_opacity": 2.0})

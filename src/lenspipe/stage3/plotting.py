@@ -60,6 +60,39 @@ def _yerr(values):
     return values if SHOW_ERROR_BARS else None
 
 
+POINT_ALPHA = 1.0
+ERROR_BAR_ALPHA = 1.0
+
+
+def configure_opacity(points: float = 1.0, error_bars: float = 1.0) -> None:
+    """Opacity (0 transparent to 1 opaque) of the data markers and of the error bars, separately."""
+    global POINT_ALPHA, ERROR_BAR_ALPHA
+    for name, value in (("points", points), ("error_bars", error_bars)):
+        if not 0.0 <= float(value) <= 1.0:
+            raise ValueError(f"opacity of {name} must be between 0 and 1, not {value}")
+    POINT_ALPHA = float(points)
+    ERROR_BAR_ALPHA = float(error_bars)
+
+
+def draw_points(ax, x, y, yerr, *, color, label=None, ms=3.0, zorder=3):
+    """Markers and error bars with their own opacities.
+
+    ``ax.errorbar`` gives markers and bars one alpha, so the bars are drawn first
+    (markerless, at ``ERROR_BAR_ALPHA``) and the markers on top at ``POINT_ALPHA``;
+    only the marker artist carries the legend label. ``yerr`` None (bars off)
+    skips the first pass. Returns the marker container.
+    """
+    if yerr is not None and ERROR_BAR_ALPHA > 0:
+        ax.errorbar(
+            x, y, yerr=yerr, fmt="none", ecolor=color, elinewidth=1.0, capsize=0,
+            alpha=ERROR_BAR_ALPHA, zorder=zorder - 0.5,
+        )
+    return ax.errorbar(
+        x, y, fmt="o", ms=ms, linestyle="none", color=color, label=label,
+        alpha=POINT_ALPHA, zorder=zorder,
+    )
+
+
 def _format_mjd(mjd: float) -> str:
     """Format MJD to four decimal places."""
     return f"{float(mjd):.4f}"
@@ -342,17 +375,8 @@ def _draw_spectrum_panel(
             & np.isfinite(yerr)
             & (yerr > 0)
         )
-        ax.errorbar(
-            frequency[mask],
-            y[mask],
-            yerr=_yerr(yerr[mask]),
-            fmt="o",
-            ms=marker_size,
-            capsize=0,
-            linestyle="none",
-            color=colour,
-            label=label,
-            zorder=3,
+        draw_points(
+            ax, frequency[mask], y[mask], _yerr(yerr[mask]), color=colour, label=label, ms=marker_size, zorder=3,
         )
 
         fit = fits[label]
@@ -397,17 +421,8 @@ def _draw_ratio_panel(
             & np.isfinite(yerr)
             & (yerr > 0)
         )
-        ax.errorbar(
-            frequency[mask],
-            y[mask],
-            yerr=_yerr(yerr[mask]),
-            fmt="o",
-            ms=marker_size,
-            capsize=0,
-            linestyle="none",
-            color=colour,
-            label=label,
-            zorder=3,
+        draw_points(
+            ax, frequency[mask], y[mask], _yerr(yerr[mask]), color=colour, label=label, ms=marker_size, zorder=3,
         )
 
         mean, _ = _weighted_mean(y, yerr)
@@ -583,15 +598,8 @@ def plot_spectra_with_residuals(
             flux[mask] - model_at_data[mask]
         ) / sigma[mask]
 
-        ax.errorbar(
-            frequency[mask],
-            flux[mask] * 1000.0,
-            yerr=_yerr(sigma[mask] * 1000.0),
-            fmt="o",
-            ms=4.5,
-            linestyle="none",
-            color=colour,
-            label=label,
+        draw_points(
+            ax, frequency[mask], flux[mask] * 1000.0, _yerr(sigma[mask] * 1000.0), color=colour, label=label, ms=4.5,
         )
         ax.plot(
             grid,
@@ -681,10 +689,8 @@ def plot_combined_average_spectrum(
                 rf"{s_value}\pm{s_error}$ mJy, "
                 rf"$\alpha={a_value}\pm{a_error}$"
             )
-        ax.errorbar(
-            frequency[mask], values[mask], yerr=_yerr(errors[mask]),
-            fmt="o", ms=4.5, capsize=0, linestyle="none",
-            color=colour, label=label, zorder=3,
+        draw_points(
+            ax, frequency[mask], values[mask], _yerr(errors[mask]), color=colour, label=label, ms=4.5, zorder=3,
         )
         if fits is not None and label in fits:
             fit = fits[label]
@@ -750,17 +756,8 @@ def plot_combined_average_flux_ratios(
         if fit is not None:
             value_text, error_text = _format_value_uncertainty(fit.value, fit.error)
             caption_lines.append(rf"{label}: $R={value_text}\pm{error_text}$")
-        ax.errorbar(
-            frequency[mask],
-            values[mask],
-            yerr=_yerr(errors[mask]),
-            fmt="o",
-            ms=4.5,
-            capsize=0,
-            linestyle="none",
-            color=colour,
-            label=label,
-            zorder=3,
+        draw_points(
+            ax, frequency[mask], values[mask], _yerr(errors[mask]), color=colour, label=label, ms=4.5, zorder=3,
         )
 
         mean = fit.value if fit is not None else _weighted_mean(values[mask], errors[mask])[0]
@@ -814,10 +811,8 @@ def plot_epoch_weighted_flux_ratios_vs_mjd(
         )
         if not np.any(mask):
             continue
-        ax.errorbar(
-            mjd[mask], values[mask], yerr=_yerr(errors[mask]),
-            fmt="o", ms=4.5, capsize=0, linestyle="none",
-            color=colour, label=label, zorder=3,
+        draw_points(
+            ax, mjd[mask], values[mask], _yerr(errors[mask]), color=colour, label=label, ms=4.5, zorder=3,
         )
         limit_arrays.extend([values[mask], values[mask] + errors[mask]])
 
@@ -882,10 +877,8 @@ def plot_epoch_normalized_weighted_flux_ratios_vs_mjd(
         )
 
         if np.any(mask):
-            axis.errorbar(
-                mjd[mask], values[mask], yerr=_yerr(errors[mask]),
-                fmt="o", ms=4.5, capsize=0, linestyle="none",
-                color=colour, zorder=3,
+            draw_points(
+                axis, mjd[mask], values[mask], _yerr(errors[mask]), color=colour, ms=4.5, zorder=3,
             )
             panel_limits.append(
                 _symmetric_limits_around_centre(
@@ -1012,9 +1005,8 @@ def plot_epoch_channel_scatter(
         frequency = np.asarray(series.get("frequency_ghz", frequency_ghz), dtype=float)
         mask = np.isfinite(frequency) & np.isfinite(values) & np.isfinite(errors) & (errors >= 0)
         if np.any(mask):
-            axis.errorbar(
-                frequency[mask], values[mask], yerr=_yerr(errors[mask]), fmt="o", ms=3.0,
-                capsize=0, linestyle="none", color=colour, zorder=3,
+            draw_points(
+                axis, frequency[mask], values[mask], _yerr(errors[mask]), color=colour, ms=3.0, zorder=3,
             )
             axis.set_ylim(*_symmetric_limits_around_centre(
                 values[mask], centre=1.0, min_half_range=0.02, padding_fraction=0.10,
@@ -1080,10 +1072,8 @@ def plot_epoch_reference_fluxes_vs_mjd(
         )
         if not np.any(mask):
             continue
-        ax.errorbar(
-            mjd[mask], values[mask], yerr=_yerr(errors[mask]),
-            fmt="o", ms=4.5, capsize=0, linestyle="none",
-            color=colour, label=label, zorder=3,
+        draw_points(
+            ax, mjd[mask], values[mask], _yerr(errors[mask]), color=colour, label=label, ms=4.5, zorder=3,
         )
         limit_arrays.extend([values[mask], values[mask] + errors[mask]])
 
@@ -1130,9 +1120,8 @@ def plot_epoch_fluxes_vs_mjd_per_image(
         mask = np.isfinite(mjd) & np.isfinite(values) & np.isfinite(errors) & (errors >= 0)
         mean_mjy = float(np.mean(values[mask])) if np.any(mask) else float("nan")
         if np.any(mask):
-            axis.errorbar(
-                mjd[mask], values[mask], yerr=_yerr(errors[mask]),
-                fmt="o", ms=4.5, capsize=0, linestyle="none", color=colour, zorder=3,
+            draw_points(
+                axis, mjd[mask], values[mask], _yerr(errors[mask]), color=colour, ms=4.5, zorder=3,
             )
             x0, x1 = float(np.nanmin(mjd[mask])), float(np.nanmax(mjd[mask]))
             axis.plot([x0, x1], [mean_mjy, mean_mjy], color="black", linewidth=1.2, linestyle=(0, (5, 5)), zorder=2)
@@ -1186,10 +1175,8 @@ def plot_epoch_rcusp_vs_mjd(
     )
 
     if np.any(mask):
-        ax.errorbar(
-            mjd[mask], values[mask], yerr=_yerr(errors[mask]),
-            fmt="o", ms=4.5, capsize=0, linestyle="none",
-            color=COLOURS[0], zorder=3,
+        draw_points(
+            ax, mjd[mask], values[mask], _yerr(errors[mask]), color=COLOURS[0], ms=4.5, zorder=3,
         )
 
         if fit is not None and np.isfinite(fit.value):

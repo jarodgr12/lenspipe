@@ -417,6 +417,8 @@ def stage3(
     exclude_epoch_channels: Annotated[list[str] | None, typer.Option("--exclude-epoch-channels", help="EPOCH:SPEC, same syntax, e.g. 'E:spw14:0-63; spw15'; repeatable.")] = None,
     annotations: Annotated[bool | None, typer.Option("--annotations/--no-annotations")] = None,
     error_bars: Annotated[bool | None, typer.Option("--error-bars/--no-error-bars", help="Error bars on every figure.")] = None,
+    point_opacity: Annotated[float | None, typer.Option("--point-opacity", min=0.0, max=1.0, help="Marker opacity, 0 to 1.")] = None,
+    error_bar_opacity: Annotated[float | None, typer.Option("--error-bar-opacity", min=0.0, max=1.0, help="Error-bar opacity, 0 to 1.")] = None,
     formats: Annotated[str | None, typer.Option("--formats", help="Figure formats, e.g. 'png' or 'pdf,png'.")] = None,
     use_tex: Annotated[bool | None, typer.Option("--use-tex/--no-use-tex")] = None,
     images: Annotated[bool | None, typer.Option("--images/--no-images", help="Clean/residual map figures.")] = None,
@@ -473,6 +475,8 @@ def stage3(
                 "exclude_epoch_channels": exclude_epoch_channels,
                 "annotations": annotations,
                 "plot_error_bars": error_bars,
+                "point_opacity": point_opacity,
+                "error_bar_opacity": error_bar_opacity,
                 "figure_formats": (
                     [f.strip() for f in formats.split(",") if f.strip()] if formats else None
                 ),

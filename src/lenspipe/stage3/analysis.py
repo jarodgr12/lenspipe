@@ -1353,6 +1353,8 @@ def write_epoch_products(
                 "major_ticks": "inward on all four sides",
                 "minor_ticks": False,
                 "error_bars": plotting.SHOW_ERROR_BARS,
+                "point_opacity": plotting.POINT_ALPHA,
+                "error_bar_opacity": plotting.ERROR_BAR_ALPHA,
                 "frequency_limits_ghz": list(plotting.SUMMARY_FREQUENCY_LIMITS_GHZ),
                 "spectrum_y_limits_mjy": list(spectrum_y_limits),
                 "ratio_y_limits": (
@@ -2186,6 +2188,7 @@ def run_stage3(
     plotting.configure_frequency_frame(settings.frequency_frame_ghz, settings.frequency_ticks_ghz)
     plotting.configure_figure_formats(settings.figure_formats)
     plotting.configure_error_bars(settings.plot_error_bars)
+    plotting.configure_opacity(settings.point_opacity, settings.error_bar_opacity)
 
     datasets = discover_stage2_datasets(
         root, requested_epochs=epochs or None, requested_products=products or None,
