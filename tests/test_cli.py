@@ -79,3 +79,33 @@ def test_dry_run_prints_commands_without_writing(project: Path, fake_difmap: Pat
 def test_stage3_with_missing_stage2_is_a_clean_error(project: Path) -> None:
     result = _invoke("stage3", project)
     assert result.exit_code == 1 and "Stage 2 directory not found" in result.output
+
+
+# ---------------------------------------------------------------------------
+# Project root detection (2.2.1): a wrong cwd is named, a sub-directory climbs to its project
+
+
+def test_commands_refuse_a_directory_that_is_not_a_project(tmp_path: Path) -> None:
+    elsewhere = tmp_path / "CASA" / "raw" / "Run2" / "A"
+    elsewhere.mkdir(parents=True)
+    result = _invoke("stage3", elsewhere)
+    assert result.exit_code == 1
+    assert "is not a lenspipe project" in result.output and "lenspipe stage3 /path/to/project" in result.output
+    assert "Stage 2 directory not found" not in result.output
+    assert _invoke("inventory", elsewhere).exit_code == 1
+
+
+def test_commands_run_from_inside_a_project_find_its_root(project: Path, fake_difmap: Path) -> None:
+    from lenspipe.project import find_project_root, is_project_root
+
+    assert is_project_root(project) and not is_project_root(project.parent)
+    inside = project / "stage2" / "full-band" / "MG0414.A"
+    inside.mkdir(parents=True)
+    assert find_project_root(inside) == (project.resolve(), True)
+    assert find_project_root(project) == (project.resolve(), False)
+    result = _invoke("inventory", inside)
+    assert result.exit_code == 0 and f"Using project {project.resolve()}" in result.output
+    assert "MG0414.A" in result.output
+    # init must still accept a brand-new directory
+    fresh = project.parent / "fresh"
+    assert _invoke("init", fresh, "--no-detect").exit_code == 0 and (fresh / "lenspipe.toml").is_file()
