@@ -15,7 +15,7 @@ import typer
 from lenspipe import __version__
 from lenspipe.config import CONFIG_FILENAME, LenspipeConfig, load_config
 from lenspipe.progress import default_reporter
-from lenspipe.project import Layout, inventory
+from lenspipe.project import Layout, NotAProject, find_project_root, inventory
 
 app = typer.Typer(
     help="DifMAP spectral pipeline: self-cal (stage1), per-channel fits (stage2), science plots (stage3).",
@@ -70,12 +70,24 @@ def _root(
     """lenspipe command line."""
 
 
+def _project_root(project: Path) -> Path:
+    """The project ``project`` belongs to, climbing out of sub-directories; a clear error otherwise."""
+    try:
+        root, climbed = find_project_root(project)
+    except NotAProject as exc:
+        typer.echo(f"ERROR: {exc}", err=True)
+        raise typer.Exit(code=1) from exc
+    if climbed:
+        typer.echo(f"Using project {root} (found above {Path(project).expanduser().resolve()})", err=True)
+    return root
+
+
 def _load(project: Path, config_path: Path | None) -> tuple[Path, LenspipeConfig]:
     import tomllib
 
     from pydantic import ValidationError
 
-    root = Layout.at(project).root
+    root = _project_root(project)
     try:
         return root, load_config(root, config_path)
     except tomllib.TOMLDecodeError as exc:
@@ -172,7 +184,7 @@ def doctor(
     cfg = None
     root = None
     if project is not None:
-        root = Layout.at(project).root
+        root = Layout.at(project).root  # doctor reports on the path it was given, it does not climb
         try:
             cfg = load_config(root, config)
         except Exception as exc:  # noqa: BLE001 - doctor must still report
@@ -241,7 +253,7 @@ def inventory_cmd(
     as_json: Annotated[bool, typer.Option("--json", help="Machine-readable output.")] = False,
 ) -> None:
     """Show which epochs have inputs, Stage 1, Stage 2 and Stage 3 products."""
-    summary = inventory(Layout.at(project).root)
+    summary = inventory(_project_root(project))
     if as_json:
         typer.echo(json.dumps(summary, indent=2))
         return
@@ -558,7 +570,7 @@ def verify(
     """Check every product against the inputs it was made from; exit 3 if any is stale."""
     from lenspipe.provenance import verify_project
 
-    checks = verify_project(Layout.at(project).root, force_hash=hash_all)
+    checks = verify_project(_project_root(project), force_hash=hash_all)
     if as_json:
         typer.echo(json.dumps([check.to_dict() for check in checks], indent=2))
     else:
@@ -657,7 +669,7 @@ def ui(
     except ImportError as exc:  # pragma: no cover - depends on optional install
         typer.echo(f"ERROR: the console needs nicegui: {exc}", err=True)
         raise typer.Exit(code=1) from exc
-    serve(Layout.at(project).root if project is not None else None, host=host, port=port, open_browser=not no_browser)
+    serve(_project_root(project) if project is not None else None, host=host, port=port, open_browser=not no_browser)
 
 
 @app.command()
@@ -674,7 +686,7 @@ def stop(
     from lenspipe.console_registry import find_consoles, stop_console
     from lenspipe.jobs import JobManager
 
-    root = Layout.at(project).root if project is not None else None
+    root = _project_root(project) if project is not None else None
     consoles = find_consoles(root=root, port=port)
     if not consoles:
         typer.echo("No running console found" + (f" for {root}" if root else "") + (f" on port {port}" if port else "") + ".")

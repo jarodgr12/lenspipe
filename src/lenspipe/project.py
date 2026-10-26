@@ -16,6 +16,9 @@ from lenspipe.config import CONFIG_FILENAME
 __all__ = [
     "CALIBRATION_MODES",
     "Layout",
+    "NotAProject",
+    "find_project_root",
+    "is_project_root",
     "migrate_flat_layout",
     "ShardDecision",
     "auto_shards",
@@ -93,6 +96,43 @@ class Layout:
     @classmethod
     def at(cls, root: Path | str) -> Layout:
         return cls(Path(root).expanduser().resolve())
+
+
+PROJECT_MARKERS = (CONFIG_FILENAME, "inputs", "stage1", "stage2", "stage3", ".jobs")
+
+
+class NotAProject(FileNotFoundError):
+    """The given directory, and none of its parents, is a lenspipe project."""
+
+
+def is_project_root(path: Path | str) -> bool:
+    """True when ``path`` holds a config file, an inputs directory or any stage tree."""
+    root = Path(path)
+    return root.is_dir() and any((root / marker).exists() for marker in PROJECT_MARKERS)
+
+
+def find_project_root(path: Path | str) -> tuple[Path, bool]:
+    """Resolve the project that ``path`` belongs to.
+
+    Returns ``(root, climbed)``: ``path`` itself when it is a project, else the
+    nearest parent that is one (so a command run from inside ``stage2/full-band/X``
+    still finds its project), with ``climbed`` True. Raises ``NotAProject`` when
+    nothing above ``path`` is a project, naming the directory and what was expected,
+    instead of letting a later stage complain about a missing sub-directory.
+    """
+    start = Path(path).expanduser().resolve()
+    if not start.is_dir():
+        raise NotAProject(f"{start} does not exist or is not a directory.")
+    if is_project_root(start):
+        return start, False
+    for parent in start.parents:
+        if is_project_root(parent):
+            return parent, True
+    raise NotAProject(
+        f"{start} is not a lenspipe project: it has no {CONFIG_FILENAME}, no inputs/ and no stage1/, stage2/ "
+        "or stage3/ directory, and neither has any directory above it. Pass the project root, e.g. "
+        "'lenspipe stage3 /path/to/project', or run the command from inside the project."
+    )
 
 
 def _flat_entries(parent: Path, marker_glob: str) -> list[Path]:

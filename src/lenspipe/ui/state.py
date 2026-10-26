@@ -54,8 +54,19 @@ class Console:
         return Layout.at(self.root)
 
     def open_root(self, root: Path | str) -> None:
-        """Switch the whole console to another project root."""
-        layout = Layout.at(root)
+        """Switch the whole console to another project root.
+
+        A path inside a project (``.../stage2/full-band/X``) opens that project; a
+        directory that is no project at all is still opened as given, so a new
+        project can be started from the console, but its page says so.
+        """
+        from lenspipe.project import NotAProject, find_project_root
+
+        try:
+            resolved, _ = find_project_root(root)
+        except NotAProject:
+            resolved = Layout.at(root).root
+        layout = Layout.at(resolved)
         self.root = layout.root
         self.manager = JobManager(self.root, max_concurrent=1)
         self.pipelines.clear()

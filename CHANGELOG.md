@@ -3,6 +3,22 @@
 Each entry says whether existing products need re-running. The `lenspipe`
 version that made a product is recorded in its metadata JSON.
 
+## 2.2.1 — 2026-10-26
+
+**Re-run needed:** no.
+
+- Fixed: a command run without a project path from a directory that is not
+  a project (for example a CASA data directory) used that directory as the
+  project and failed later with "Stage 2 directory not found for
+  calibration mode full-band: <that dir>/stage2/full-band". The project
+  root is now checked first: a directory with no `lenspipe.toml`, `inputs/`
+  or stage tree is refused with a message naming it and how to pass the
+  project path; a path inside a project (`.../stage2/full-band/X`) resolves
+  to that project and says so; a path that does not exist is an error.
+  `lenspipe init` still accepts a new directory, and `lenspipe doctor`
+  reports on exactly the path it is given. The console's "Open" field
+  resolves a sub-directory to its project the same way.
+
 ## 2.2.0 — 2026-10-25
 
 **Re-run needed:** Stage 2 on macOS for any epoch that reported missing
