@@ -100,6 +100,45 @@ def inventory_rows(summary: dict[str, Any]) -> list[dict[str, Any]]:
     return rows
 
 
+def _flag_card(report, verbose: bool) -> None:
+    """One file's flag report: summary line, the fully flagged windows, optionally every window."""
+    lines = report.lines()
+    dead = report.fully_flagged_ifs
+    with ui.card().classes("w-full q-pa-sm gap-1").props("flat bordered"):
+        with ui.row().classes("items-center gap-2 no-wrap"):
+            ui.badge(f"{len(dead)} empty" if dead else "ok", color="red-7" if dead else "green-7")
+            ui.label(lines[0]).classes(MONO + " text-sm")
+        if dead:
+            ui.label(lines[1]).classes(MONO + " text-sm text-negative")
+        partial = [item for item in report.ifs if item.fully_flagged_channels and not item.fully_flagged]
+        if partial and not verbose:
+            ui.label(
+                f"{len(partial)} window(s) have some fully flagged channels: "
+                + ", ".join(f"IF {i.if_number} (spw {i.spw}, {len(i.fully_flagged_channels)} ch)" for i in partial)
+            ).classes(MONO + " text-sm opacity-80")
+        if verbose:
+            rows = [
+                {
+                    "if": item.if_number, "spw": item.spw, "channels": f"{item.first_channel}-{item.last_channel}",
+                    "unflagged": f"{100 * item.unflagged_fraction:.1f}%",
+                    "note": "FULLY FLAGGED" if item.fully_flagged else (
+                        f"{len(item.fully_flagged_channels)} channel(s) fully flagged" if item.fully_flagged_channels else ""
+                    ),
+                }
+                for item in report.ifs
+            ]
+            ui.table(
+                columns=[
+                    {"name": "if", "label": "IF", "field": "if", "align": "right"},
+                    {"name": "spw", "label": "spw", "field": "spw", "align": "right"},
+                    {"name": "channels", "label": "DifMAP channels", "field": "channels", "align": "left"},
+                    {"name": "unflagged", "label": "Unflagged", "field": "unflagged", "align": "right"},
+                    {"name": "note", "label": "", "field": "note", "align": "left"},
+                ],
+                rows=rows, row_key="if",
+            ).props("dense flat bordered").classes("w-full")
+
+
 @ui.page("/")
 def project_page() -> None:
     with frame("Project", "/"):
@@ -123,8 +162,66 @@ def project_page() -> None:
         table_holder = ui.column().classes("w-full")
         combined_holder = ui.column().classes("w-full gap-1")
 
+        with ui.expansion("Flags (which spectral windows are empty)", icon="flag").classes("w-full").props("dense") as flags_panel:
+            ui.label(
+                "Reads the weights of the UV-FITS files: weights at or below zero are flags, exactly what DifMAP "
+                "sees. A window that is fully flagged gives a Stage 2 fit nothing to work on (\"no unflagged "
+                "visibilities\"). IF numbers are DifMAP's (from 1), spw numbers CASA's (from 0). A large visit is "
+                "one sequential read of the file."
+            ).classes("text-caption opacity-70")
+            with ui.row().classes("items-center gap-3"):
+                flags_source = ui.select(
+                    {"calibrated": "Stage 1 calibrated data (cal.uvf)", "raw": "Raw inputs (inputs/*.uvfits)"},
+                    value="calibrated", label="Files",
+                ).props("dense outlined").classes("w-72")
+                flags_epochs = ui.select([], label="Epochs (empty = all)", multiple=True, clearable=True).props(
+                    "dense outlined use-chips"
+                ).classes("w-64")
+                flags_verbose = ui.switch("Every window", value=False)
+                flags_button = ui.button("Check flags", icon="search", on_click=lambda: refresh_flags()).props("no-caps")
+            flags_status = ui.label().classes("text-sm opacity-70")
+            flags_holder = ui.column().classes("w-full gap-2")
+
         with ui.expansion("Environment", icon="health_and_safety").classes("w-full").props("dense") as env_panel:
             env_holder = ui.column().classes("w-full gap-1")
+
+        async def refresh_flags() -> None:
+            from lenspipe.flags import flag_report
+            from lenspipe.stage1 import discover_inputs as discover_raw
+            from lenspipe.stage2 import discover_inputs as discover_calibrated
+
+            cfg = console.config()
+            epochs = set(flags_epochs.value or []) or None
+            try:
+                if flags_source.value == "raw":
+                    paths = discover_raw(console.root, cfg.stage1.input_pattern, epochs)
+                else:
+                    paths = discover_calibrated(
+                        console.root, cfg.stage2.input_pattern, epochs, cfg.stage1.calibration_mode
+                    )
+            except FileNotFoundError as exc:
+                flags_status.set_text(str(exc))
+                return
+            if not paths:
+                flags_status.set_text("No UV-FITS files found for that selection.")
+                return
+            flags_button.disable()
+            flags_holder.clear()
+            dead_total = 0
+            try:
+                for index, path in enumerate(paths, start=1):
+                    flags_status.set_text(f"Reading {path.name} ({index} of {len(paths)}) ...")
+                    report = await run.io_bound(flag_report, path)
+                    dead_total += len(report.fully_flagged_ifs)
+                    with flags_holder:
+                        _flag_card(report, bool(flags_verbose.value))
+            finally:
+                flags_button.enable()
+            flags_status.set_text(
+                f"{len(paths)} file(s) checked; "
+                + (f"{dead_total} fully flagged window(s)" if dead_total else "no fully flagged window")
+            )
+            flags_panel.text = "Flags (which spectral windows are empty)" + (f"  ({dead_total} empty)" if dead_total else "")
 
         async def refresh_environment() -> None:
             from lenspipe.doctor import run_checks
@@ -173,6 +270,7 @@ def project_page() -> None:
                 elif freshness.get("fresh"):
                     ui.badge("all products fresh", color="green-7")
                 ui.label(f"{len(summary['epochs'])} epoch(s)").classes("text-sm opacity-70")
+            flags_epochs.set_options(sorted({row["epoch"] for row in summary["epochs"]}))
             table_holder.clear()
             with table_holder:
                 if not summary["epochs"]:
