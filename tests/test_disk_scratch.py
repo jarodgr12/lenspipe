@@ -55,11 +55,30 @@ def test_no_disk_figure_means_no_disk_cap() -> None:
     assert decision.disk_cap is None and not decision.disk_short
 
 
-def test_free_disk_bytes_walks_up_to_an_existing_directory(tmp_path: Path) -> None:
+def test_free_disk_bytes_walks_up_to_an_existing_directory(tmp_path: Path, monkeypatch) -> None:
+    """A path that does not exist yet is measured on its nearest existing ancestor.
+
+    The disk figure is stubbed: two live reads can differ by a few KB on a busy
+    runner, which made an exact comparison flaky in CI.
+    """
+    import shutil as _shutil
+
+    from lenspipe import project as project_module
+
+    asked: list[Path] = []
+
+    def fake_usage(path):
+        asked.append(Path(path))
+        return _shutil._ntuple_diskusage(total=100 * GIB, used=10 * GIB, free=90 * GIB)
+
+    monkeypatch.setattr(project_module.shutil, "disk_usage", fake_usage)
     missing = tmp_path / "not" / "yet" / "there"
-    assert free_disk_bytes(missing) == free_disk_bytes(tmp_path)
-    assert free_disk_bytes(tmp_path) > 0
+    assert free_disk_bytes(missing) == 90 * GIB
+    assert asked == [tmp_path]  # walked up to the directory that exists
+    assert free_disk_bytes(tmp_path) == 90 * GIB
     assert DISK_RESERVE_BYTES == 5 * GIB
+    monkeypatch.undo()
+    assert (free_disk_bytes(tmp_path) or 0) > 0  # the real call still works
 
 
 # ---------------------------------------------------------------------------

@@ -3,6 +3,15 @@
 Each entry says whether existing products need re-running. The `lenspipe`
 version that made a product is recorded in its metadata JSON.
 
+## 2.3.1 — 2026-10-27
+
+**Re-run needed:** no. No code change.
+
+- Tests: the free-disk check compared two live readings and failed on a
+  busy CI runner when the figure moved by a few KB between them (the
+  v2.3.0 tag run); it now stubs the disk figure. Package behaviour is
+  identical to 2.3.0.
+
 ## 2.3.0 — 2026-10-27
 
 **Re-run needed:** no, unless you set the new option. A `lenspipe.toml`
