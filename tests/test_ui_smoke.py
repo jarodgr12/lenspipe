@@ -162,3 +162,19 @@ def test_switching_project_serves_files_from_the_new_root(tmp_path: Path) -> Non
     assert client.get("/files/%2e%2e/first/stage3/plots/fig.png").status_code == 404  # no escaping the root
     matching = [r for r in app.router.routes if getattr(r, "path", "").startswith("/files")]
     assert len(matching) == 1
+
+
+def test_project_page_flag_card_renders(project: Path, fake_difmap: Path) -> None:
+    """The Project page's Flags panel: a report renders as a card with the empty windows called out."""
+    from nicegui import ui
+
+    from lenspipe.flags import flag_report
+    from lenspipe.ui.pages_project import _flag_card
+
+    report = flag_report(project / "inputs" / "MG0414.A.uvfits")
+    with ui.element("div") as holder:
+        _flag_card(report, verbose=True)
+    labels = [e.text for e in holder.descendants() if hasattr(e, "text")]
+    assert any("MG0414.A.uvfits" in text and "unflagged overall" in text for text in labels)
+    tables = [e for e in holder.descendants() if type(e).__name__ == "Table"]
+    assert tables and len(tables[0].rows) == report.n_if

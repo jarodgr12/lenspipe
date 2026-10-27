@@ -215,7 +215,7 @@ rebuilds the CSV, plots and metadata from an existing `*.stage2.difmap.log`
 without running DifMAP. Logs from sharded runs are concatenated into that
 file, so recovery works on them too.
 
-**Flags.** `lenspipe flags <project>` reads the weights of every calibrated
+**Flags.** The Project page's "Flags" panel, or `lenspipe flags <project>`, reads the weights of every calibrated
 UV-FITS file (or `--raw` for `inputs/`, `--file` for any file) and reports,
 per spectral window, the unflagged fraction and whether the window is
 fully flagged, in both DifMAP (IF from 1) and CASA (spw from 0) numbering.

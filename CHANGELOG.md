@@ -3,6 +3,17 @@
 Each entry says whether existing products need re-running. The `lenspipe`
 version that made a product is recorded in its metadata JSON.
 
+## 2.2.6 — 2026-10-27
+
+**Re-run needed:** no.
+
+- Added: the flag report in the console. The Project page has a "Flags"
+  panel: choose calibrated or raw files and optionally epochs, press
+  "Check flags", and get one card per file with the fully flagged windows
+  in red (IF and spw numbering), the partially flagged ones noted, and an
+  "Every window" switch for the full per-IF table. Same report as
+  `lenspipe flags`.
+
 ## 2.2.5 — 2026-10-27
 
 **Re-run needed:** no.
