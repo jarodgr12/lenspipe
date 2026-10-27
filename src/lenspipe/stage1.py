@@ -266,8 +266,12 @@ def _write_metadata(
             "command_script_sha256": hashlib.sha256(commands.encode("utf-8")).hexdigest(),
             "duration_s": round(duration_s, 3),
             "final_if_selfcal": {
-                "enabled": bool(selected_ranges),
-                "n_ifs": len(selected_ranges),
+                "enabled": stage1.final_if_selfcal.enabled,
+                "n_ifs": stage1.final_if_selfcal.if_count if stage1.final_if_selfcal.enabled else 0,
+                "n_ifs_calibrated": len(selected_ranges),
+                "skipped_ifs": (
+                    stage1.final_if_selfcal.selections()[1] if stage1.final_if_selfcal.enabled else []
+                ),
                 "channels_per_if": stage1.final_if_selfcal.channels_per_if,
                 "edge_channels_excluded_per_side": stage1.final_if_selfcal.edge_channels,
                 "retained_channels_per_if": (
@@ -277,7 +281,7 @@ def _write_metadata(
                 "amplitude_phase_interval_minutes": 3600.0,
                 "phase_only_interval_minutes": 0.5,
                 "modelfit_within_if_loop": False,
-                "channels_spec": stage1.final_if_selfcal.channels,
+                "exclude_channels_spec": stage1.final_if_selfcal.exclude_channels,
                 "selected_ranges_one_based": [
                     {
                         "if_number": s.if_number,

@@ -180,7 +180,7 @@ def _dataset_from_manifest(
             raise ValueError(
                 f"Product tag {product_tag!r} is inconsistent with channel metadata."
             )
-    elif product_tag != product_family:
+    elif product_tag != product_family and not product_tag.startswith(product_family + "_x_"):
         raise ValueError(
             f"Product tag {product_tag!r} is inconsistent with metadata; "
             f"expected {product_family!r}."

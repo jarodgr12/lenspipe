@@ -10,9 +10,21 @@ which accepts any number of ranges.
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 
-__all__ = ["IfSelection", "parse_if_channel_spec", "segments", "select_ranges"]
+__all__ = [
+    "FitSelection",
+    "IfSelection",
+    "excluded_channels_from_spec",
+    "exclusion_tag",
+    "include_spec_to_exclusions",
+    "parse_if_channel_entries",
+    "parse_if_channel_spec",
+    "segments",
+    "select_ranges",
+    "selections_from_exclusions",
+]
 
 
 @dataclass(frozen=True)
@@ -81,14 +93,8 @@ def _channel_list(text: str, upper: int, where: str) -> list[int]:
     return sorted(chosen)
 
 
-def parse_if_channel_spec(
-    spec: str | None, if_count: int, channels_per_if: int, edge_channels: int = 0
-) -> list[IfSelection]:
-    """One selection per IF, in IF order, from ``spec`` plus the edge default."""
-    if if_count < 1 or channels_per_if < 1 or edge_channels < 0:
-        raise ValueError("if_count and channels_per_if must be positive and edge_channels non-negative")
-    if 2 * edge_channels >= channels_per_if:
-        raise ValueError("Twice edge_channels must be smaller than channels_per_if.")
+def parse_if_channel_entries(spec: str | None, if_count: int, channels_per_if: int) -> dict[int, list[int]]:
+    """The include form ``"1:3-62; 2:5-60,62"``: listed IF -> channels (1-based within the IF)."""
     within: dict[int, list[int]] = {}
     for raw in (spec or "").split(";"):
         entry = raw.strip()
@@ -116,6 +122,18 @@ def parse_if_channel_spec(
             if if_number in within:
                 raise ValueError(f"IF {if_number} is given channels more than once")
             within[if_number] = channels
+    return within
+
+
+def parse_if_channel_spec(
+    spec: str | None, if_count: int, channels_per_if: int, edge_channels: int = 0
+) -> list[IfSelection]:
+    """One selection per IF, in IF order, from the include-form ``spec`` plus the edge default."""
+    if if_count < 1 or channels_per_if < 1 or edge_channels < 0:
+        raise ValueError("if_count and channels_per_if must be positive and edge_channels non-negative")
+    if 2 * edge_channels >= channels_per_if:
+        raise ValueError("Twice edge_channels must be smaller than channels_per_if.")
+    within = parse_if_channel_entries(spec, if_count, channels_per_if)
     default = list(range(edge_channels + 1, channels_per_if - edge_channels + 1))
     selections: list[IfSelection] = []
     for if_number in range(1, if_count + 1):
@@ -128,3 +146,132 @@ def parse_if_channel_spec(
 def select_ranges(selections: list[IfSelection]) -> list[tuple[int, int]]:
     """Flat ``(first, last)`` per IF for callers that only need the span."""
     return [(s.first, s.last) for s in selections]
+
+
+def _compact_0based(values: list[int] | tuple[int, ...]) -> str:
+    return ",".join(f"{a}-{b}" if a != b else str(a) for a, b in segments(tuple(sorted(values))))
+
+
+def include_spec_to_exclusions(spec: str | None, if_count: int, channels_per_if: int) -> str | None:
+    """Convert the pre-2.3 include form (``"1:3-62"``, DifMAP numbering) into the exclusion form.
+
+    Each listed IF becomes ``spw<n-1>:<channels not listed, 0-based>``; an IF that
+    keeps every channel produces nothing. Unlisted IFs were covered by the edge
+    default before and still are, so they need no item. Returns None for no items.
+    """
+    within = parse_if_channel_entries(spec, if_count, channels_per_if)
+    items: list[str] = []
+    for if_number in sorted(within):
+        kept = set(within[if_number])
+        dropped = [c - 1 for c in range(1, channels_per_if + 1) if c not in kept]
+        if dropped:
+            items.append(f"spw{if_number - 1}:{_compact_0based(dropped)}")
+    return "; ".join(items) or None
+
+
+def excluded_channels_from_spec(
+    spec: str | None, total_channels: int, channels_per_if: int, option_name: str = "exclude_channels"
+) -> set[int]:
+    """Absolute DifMAP channel numbers (1-based) named by an exclusion spec.
+
+    The spec is the one Stage 3 uses: ``spw<N>:<channels>`` (CASA spectral window
+    from 0, channels from 0 inside it), ``spw<N>`` for a whole window, items
+    separated by ``;``. A plain number or range is an absolute DifMAP channel.
+    Spectral windows are laid out ``channels_per_if`` wide across ``total_channels``.
+    """
+    from lenspipe.stage3.exclusions import parse_exclusion_spec
+
+    parsed = parse_exclusion_spec(spec, option_name)
+    if parsed.empty:
+        return set()
+    if channels_per_if < 1 or total_channels < 1:
+        raise ValueError(f"{option_name}: channels_per_if and total_channels must be positive")
+    n_spw = total_channels // channels_per_if
+    excluded: set[int] = set()
+    for channel in parsed.fit_indices:
+        if not 1 <= channel <= total_channels:
+            raise ValueError(f"{option_name}: channel {channel} is outside 1-{total_channels}")
+        excluded.add(channel)
+    for item in parsed.spw_items:
+        if not 0 <= item.spw < n_spw:
+            raise ValueError(f"{option_name}: {item.text!r}: spw {item.spw} is outside 0-{n_spw - 1} (CASA numbering, from 0)")
+        channels = item.channels if item.channels is not None else tuple(range(channels_per_if))
+        bad = [c for c in channels if c >= channels_per_if]
+        if bad:
+            raise ValueError(
+                f"{option_name}: {item.text!r}: channel(s) {bad} are outside 0-{channels_per_if - 1} of a "
+                f"{channels_per_if}-channel spectral window"
+            )
+        excluded.update(item.spw * channels_per_if + c + 1 for c in channels)
+    return excluded
+
+
+def selections_from_exclusions(
+    spec: str | None, if_count: int, channels_per_if: int, edge_channels: int = 0,
+    option_name: str = "exclude_channels",
+) -> tuple[list[IfSelection], list[int]]:
+    """Per-IF selections after the edge default and the exclusion spec are applied.
+
+    Returns the IFs that still have channels, in IF order, and the IF numbers that
+    were left with none (a whole-window exclusion, or everything excluded).
+    """
+    if if_count < 1 or channels_per_if < 1 or edge_channels < 0:
+        raise ValueError("if_count and channels_per_if must be positive and edge_channels non-negative")
+    if 2 * edge_channels >= channels_per_if:
+        raise ValueError("Twice edge_channels must be smaller than channels_per_if.")
+    total = if_count * channels_per_if
+    excluded = excluded_channels_from_spec(spec, total, channels_per_if, option_name)
+    selections: list[IfSelection] = []
+    skipped: list[int] = []
+    for if_number in range(1, if_count + 1):
+        offset = (if_number - 1) * channels_per_if
+        kept = tuple(
+            offset + c for c in range(edge_channels + 1, channels_per_if - edge_channels + 1)
+            if offset + c not in excluded
+        )
+        if kept:
+            selections.append(IfSelection(if_number, kept))
+        else:
+            skipped.append(if_number)
+    return selections, skipped
+
+
+def exclusion_tag(spec: str | None) -> str:
+    """Filename-safe rendering of an exclusion spec: ``spw3:0-3,60-63; spw7`` -> ``spw3_0-3_60-63_spw7``."""
+    text = re.sub(r"[^0-9a-z-]+", "_", (spec or "").lower()).strip("_")
+    return re.sub(r"_+", "_", text)
+
+
+@dataclass(frozen=True)
+class FitSelection:
+    """One Stage 2 fit: its index and the channel runs DifMAP selects for it."""
+
+    fit_index: int
+    segments: tuple[tuple[int, int], ...]  # absolute 1-based inclusive runs
+
+    @property
+    def first(self) -> int:
+        return self.segments[0][0]
+
+    @property
+    def last(self) -> int:
+        return self.segments[-1][1]
+
+    @property
+    def n_channels(self) -> int:
+        return sum(b - a + 1 for a, b in self.segments)
+
+    @property
+    def channels(self) -> list[int]:
+        return [c for a, b in self.segments for c in range(a, b + 1)]
+
+    @property
+    def contiguous(self) -> bool:
+        return len(self.segments) == 1
+
+    @property
+    def select_arguments(self) -> str:
+        return ",".join(f"{a},{b}" for a, b in self.segments)
+
+    def as_range(self) -> tuple[int, int, int]:
+        return (self.fit_index, self.first, self.last)

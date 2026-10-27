@@ -3,6 +3,30 @@
 Each entry says whether existing products need re-running. The `lenspipe`
 version that made a product is recorded in its metadata JSON.
 
+## 2.3.0 — 2026-10-27
+
+**Re-run needed:** no, unless you set the new option. A `lenspipe.toml`
+with the old `stage1.final_if_selfcal.channels` include form keeps
+working: it is converted to the exclude form when read.
+
+- Added: `stage2.exclude_channels`, per-spectral-window channel exclusions
+  for Stage 2 in either mode, in the syntax Stage 3 already uses:
+  `"spw3:0-3,60-63; spw7"` (CASA spw from 0, channels from 0 inside it;
+  `spw7` the whole window; a plain number a DifMAP channel from 1). IF mode
+  fits each window over its channels minus the symmetric edges and these
+  exclusions, with gaps on one DifMAP `select`; a window left with nothing
+  is not fitted and is listed in the metadata. Channel mode skips the named
+  channels. The product tag gains `_x_<spec>` (`if64_edge3_x_spw7`), the
+  Stage 2 metadata records `channel_exclusion`, and the resume fingerprint
+  includes the spec. CLI `--exclude-channels`; Run page Stage 2 Advanced
+  field with worked examples.
+- Changed: the Stage 1 final-IF channel setting is now what to leave out,
+  `stage1.final_if_selfcal.exclude_channels`, same syntax, instead of the
+  2.1.1 include form (`"1:3-62"`, DifMAP numbering). Old configs are
+  converted on load; CLI flag is `--final-if-exclude-channels`; the Run
+  page field and examples follow. One exclusion syntax now serves Stage 1,
+  Stage 2 and Stage 3.
+
 ## 2.2.6 — 2026-10-27
 
 **Re-run needed:** no.

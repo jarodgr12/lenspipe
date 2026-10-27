@@ -119,34 +119,55 @@ class SelfcalStep(_Model):
         return lines
 
 
+EXCLUDE_CHANNELS_HELP = (
+    "Channels to leave out, on top of edge_channels: items separated by ';', each 'spw<N>:<channels>' "
+    "(CASA spectral window N from 0, channels from 0 inside it, e.g. 'spw3:0-3,60-63'), 'spw<N>' for a "
+    "whole window, or a plain DifMAP channel number/range (from 1). E.g. 'spw3:0-3,60-63; spw7'."
+)
+
+
 class FinalIfSelfcal(_Model):
     enabled: bool = False
     if_count: int = Field(48, ge=1)
     channels_per_if: int = Field(64, ge=1)
     edge_channels: int = Field(0, ge=0)
-    channels: str | None = Field(
+    exclude_channels: str | None = Field(
         None,
-        description=(
-            "Per-IF channel selection, e.g. '1:3-62; 2:5-60,62; 7-12:1-64': entries separated by ';', "
-            "each an IF number or IF range (1-based), a colon, and the channels to use within that IF "
-            "(1-based within the IF, Stage 2 syntax: ranges and single channels separated by ','). "
-            "IFs not listed use edge_channels. Empty: every IF uses edge_channels."
-        ),
+        description=EXCLUDE_CHANNELS_HELP + " An IF left with no channels is skipped by the final-IF self-cal.",
     )
+
+    @model_validator(mode="before")
+    @classmethod
+    def _migrate_include_form(cls, value: Any) -> Any:
+        # 2.1.1 to 2.2.x had `channels`, an include form in DifMAP numbering ("1:3-62").
+        if isinstance(value, dict) and "channels" in value:
+            value = dict(value)
+            text = value.pop("channels")
+            if text and str(text).strip() and not value.get("exclude_channels"):
+                from lenspipe.channels import include_spec_to_exclusions
+
+                value["exclude_channels"] = include_spec_to_exclusions(
+                    str(text), int(value.get("if_count", 48)), int(value.get("channels_per_if", 64))
+                )
+        return value
 
     @model_validator(mode="after")
     def _check_edges(self) -> FinalIfSelfcal:
         if 2 * self.edge_channels >= self.channels_per_if:
             raise ValueError("Twice edge_channels must be smaller than channels_per_if.")
-        if self.channels is not None and not self.channels.strip():
-            object.__setattr__(self, "channels", None)
+        if self.exclude_channels is not None and not self.exclude_channels.strip():
+            object.__setattr__(self, "exclude_channels", None)
         self.selections()  # validates the spec against the layout
         return self
 
-    def selections(self) -> list[IfSelection]:
-        from lenspipe.channels import parse_if_channel_spec
+    def selections(self) -> tuple[list[IfSelection], list[int]]:
+        """The IFs the final-IF pass calibrates (with their channels) and the IFs it skips."""
+        from lenspipe.channels import selections_from_exclusions
 
-        return parse_if_channel_spec(self.channels, self.if_count, self.channels_per_if, self.edge_channels)
+        return selections_from_exclusions(
+            self.exclude_channels, self.if_count, self.channels_per_if, self.edge_channels,
+            option_name="stage1.final_if_selfcal.exclude_channels",
+        )
 
 
 CalibrationMode = Literal["full-band", "per-if"]
@@ -233,7 +254,14 @@ class Stage2Config(_Model):
     channels_per_if: int = Field(64, ge=1)
     exclude_edge_channels: int = Field(0, ge=0)
     channels: str | None = Field(
-        None, description="Channel-mode selection such as '1-10,15'; None means all."
+        None, description="Channel mode only: which channels to fit, e.g. '1-10,15' (DifMAP numbering, from 1); None means all."
+    )
+    exclude_channels: str | None = Field(
+        None,
+        description=(
+            EXCLUDE_CHANNELS_HELP + " In IF mode the excluded channels are left out of each window's fit "
+            "(a window left with nothing is not fitted); in channel mode they are not fitted."
+        ),
     )
     map_pixels: int = Field(1024, ge=64)
     cell_mas: float | None = Field(25.0, description="Cell size in mas; None lets DifMAP choose.")
@@ -572,19 +600,21 @@ calibration_mode = "full-band"      # "full-band": the schedule above on the who
 if_count = 48
 channels_per_if = 64
 edge_channels = 0                   # dropped from each end of every IF before its solve
+# exclude_channels = "spw3:0-3,60-63; spw7"   # more to leave out: CASA spw (from 0) and channels inside it (from 0)
 
 [stage1.final_if_selfcal]           # optional extra pass after the schedule (full-band mode legacy block)
 enabled = false
 if_count = 48
 channels_per_if = 64
 edge_channels = 0                   # default per IF: drop this many channels from each end
-# channels = "1:3-62; 2:5-60,62; 7-12:1-64"   # per-IF override, channels 1-based within each IF
+# exclude_channels = "spw3:0-3,60-63; spw7"   # more to leave out: CASA spw (from 0) and channels inside it (from 0)
 
 [stage2]
 mode = "if"                         # "channel" or "if"
 channels_per_if = 64
 exclude_edge_channels = 0
-# channels = "1-10,15"              # channel mode only
+# channels = "1-10,15"              # channel mode only: which channels to fit (DifMAP numbering, from 1)
+# exclude_channels = "spw3:0-3,60-63; spw7"   # left out of the fits in either mode (CASA spw from 0, channels from 0)
 map_pixels = 1024
 cell_mas = 25.0
 weighting = "uvw 0,-1,false"
