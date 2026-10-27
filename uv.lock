@@ -834,7 +834,7 @@ wheels = [
 
 [[package]]
 name = "lenspipe"
-version = "2.2.6"
+version = "2.3.0"
 source = { editable = "." }
 dependencies = [
     { name = "astropy" },

@@ -47,10 +47,12 @@ def product_options(on_disk: list[str], expected: str | None, standard: list[str
 
 
 def _expected_tag(
-    config: LenspipeConfig, mode: str, channels_per_if: int | None, channels: str | None, edge: int | None
+    config: LenspipeConfig, mode: str, channels_per_if: int | None, channels: str | None, edge: int | None,
+    exclude: str | None = None,
 ) -> str:
     data = config.stage2.model_dump()
     data["mode"] = mode
+    data["exclude_channels"] = exclude or None
     if mode == "channel":
         data["channels"] = channels or None
     else:
@@ -80,6 +82,12 @@ def _size_text(size: float | list[float]) -> str:
     return ",".join(f"{float(v):g}" for v in values)
 
 
+EXCLUSION_EXAMPLES = [
+    ("spw3:0-3,60-63", "channels 0-3 and 60-63 of spectral window 3"),
+    ("spw7", "all of spectral window 7"),
+    ("spw3:0-3,60-63; spw7", "several items, separated by ';'"),
+    ("2817-2880", "a plain number or range is a DifMAP channel (from 1)"),
+]
 EXCLUSION_TOOLTIP = (
     "Items separated by ';'. 'spw3:0-3,60-63' = CASA spectral window 3, channels 0-3 and 60-63 inside it "
     "(both numbered from 0, as in CASA flagging). 'spw7' = the whole window. A plain number or range is a "
@@ -176,14 +184,12 @@ def run_page() -> None:
                             "Final per-IF self-cal", value=config.stage1.final_if_selfcal.enabled
                         )
                         final_if_channels = ui.input(
-                            "Final-IF channels per IF",
-                            value=config.stage1.final_if_selfcal.channels or "",
-                            placeholder=f"empty = edge {config.stage1.final_if_selfcal.edge_channels}; e.g. 1:3-62; 2:5-60,62; 7-12:1-64",
+                            "Final-IF channels to leave out",
+                            value=config.stage1.final_if_selfcal.exclude_channels or "",
+                            placeholder=f"edge {config.stage1.final_if_selfcal.edge_channels} always; e.g. spw3:0-3,60-63; spw7",
                         ).props("dense outlined stack-label").classes("w-[28rem]")
                         final_if_channels.tooltip(
-                            "Which channels each IF's self-cal uses. IF:channels entries separated by ';'; IF and "
-                            "channel numbers are DifMAP's, starting at 1, channels counted within the IF. IFs not "
-                            "listed keep the edge_channels default."
+                            "Channels left out of each IF's self-cal, on top of the edge default. " + EXCLUSION_TOOLTIP
                         )
                         reimage_only = ui.switch("Re-image only (common grid)", value=False)
                         ui.label(
@@ -192,13 +198,8 @@ def run_page() -> None:
                             "self-cal schedule and unflag are set on the Parameters page"
                         ).classes("text-caption opacity-70")
                     final_if_examples = _examples(
-                        "How to write the final-IF channels (DifMAP numbering: IF and channel start at 1, channels within the IF)",
-                        [
-                            ("1:3-62", "IF 1 uses channels 3 to 62"),
-                            ("2:5-60,62", "IF 2 uses 5 to 60 and 62 (a gap is fine)"),
-                            ("7-12:1-64", "IFs 7 to 12 use every channel"),
-                            ("1:3-62; 2:5-60,62; 7-12:1-64", "several IFs, separated by ';'; unlisted IFs keep the edge default"),
-                        ],
+                        "How to write what to leave out (CASA numbering: spw and channel both start at 0)",
+                        EXCLUSION_EXAMPLES,
                     )
 
                 with ui.card().classes("w-full q-pa-md gap-2").props("flat bordered") as stage2_card:
@@ -226,6 +227,16 @@ def run_page() -> None:
                             iterations = ui.number(
                                 "Modelfit iterations", value=config.stage2.modelfit_iterations, min=1, step=1
                             ).props(dense).classes("w-44")
+                        with ui.row().classes("gap-4 items-center"):
+                            s2_exclude = ui.input(
+                                "Channels to leave out", value=config.stage2.exclude_channels or "",
+                                placeholder="spw3:0-3,60-63; spw7",
+                            ).props(dense + " stack-label").classes("w-[28rem]")
+                            s2_exclude.tooltip(
+                                "Left out of the fits in either mode; in IF mode a window left with nothing is not "
+                                "fitted. " + EXCLUSION_TOOLTIP
+                            )
+                        _examples("How to write what to leave out (CASA numbering: spw and channel both start at 0)", EXCLUSION_EXAMPLES)
                         with ui.row().classes("gap-6 items-center"):
                             unflag = ui.switch("Unflag before fitting", value=config.stage2.unflag)
                             keep_models = ui.switch("Keep every fitted model", value=config.stage2.keep_models)
@@ -367,8 +378,8 @@ def run_page() -> None:
                 dry_run=bool(dry_run.value),
                 workers=_int_or_none(workers.value),
                 stage1_final_if_selfcal=_override(bool(final_if.value), config.stage1.final_if_selfcal.enabled),
-                stage1_final_if_channels=_override(
-                    (final_if_channels.value or "").strip(), config.stage1.final_if_selfcal.channels or ""
+                stage1_final_if_exclude=_override(
+                    (final_if_channels.value or "").strip(), config.stage1.final_if_selfcal.exclude_channels or ""
                 ),
                 calibration_mode=_override(calibration_mode.value, config.stage1.calibration_mode),
                 stage1_if_count=_override(_int_or_none(if_count.value), config.stage1.per_if.if_count),
@@ -381,6 +392,7 @@ def run_page() -> None:
                 stage2_shards=(shards.value or "").strip() or None,
                 stage2_channels_per_if=_int_or_none(channels_per_if.value),
                 stage2_channels=(channels.value or "").strip() or None,
+                stage2_exclude_channels=_override((s2_exclude.value or "").strip(), s2.exclude_channels or ""),
                 stage2_exclude_edge_channels=_override(_int_or_none(edge.value), s2.exclude_edge_channels),
                 stage2_modelfit_iterations=_override(_int_or_none(iterations.value), s2.modelfit_iterations),
                 stage2_unflag=_override(bool(unflag.value), s2.unflag),
@@ -448,6 +460,7 @@ def run_page() -> None:
                 expected = _expected_tag(
                     config, mode.value, channels_per_if.value,
                     (channels.value or "").strip() or None, _int_or_none(edge.value),
+                    (s2_exclude.value or "").strip() or None,
                 )
             current_mode = str(calibration_mode.value or config.stage1.calibration_mode)
             if current_mode not in disk_products:  # one scan per calibration mode per page view
@@ -470,7 +483,7 @@ def run_page() -> None:
         for widget in (
             *stage_boxes.values(), epochs, overwrite, dry_run, workers, calibration_mode, if_count,
             s1_channels_per_if, s1_edge, final_if, final_if_channels, reimage_only, mode, channels_per_if,
-            channels, shards, edge, iterations, unflag, keep_models, plots, s2_error_bars,
+            channels, shards, edge, s2_exclude, iterations, unflag, keep_models, plots, s2_error_bars,
             error_source, product, plot_workers, fit_method, reference_frequency, formats,
             exclude_channels, exclude_epoch_channels, annotations, s3_error_bars, point_opacity, error_bar_opacity,
             images_on, image_center, image_size, image_cmap, image_pmax, image_residual_pmax,

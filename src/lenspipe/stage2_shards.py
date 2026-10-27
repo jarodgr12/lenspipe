@@ -68,6 +68,7 @@ def plan_fingerprint(
         "calibrated_uvfits": {"size": stat.st_size, "mtime_ns": stat.st_mtime_ns},
         "stage2_model_sha256": hashlib.sha256(stage2_model.read_bytes()).hexdigest(),
         "mode": config.mode,
+        "exclude_channels": getattr(config, "exclude_channels", None),
         "fit_ranges": fit_ranges,
         "modelfit_iterations": config.modelfit_iterations,
         "unflag": config.unflag,

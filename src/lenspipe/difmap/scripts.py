@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from lenspipe.channels import IfSelection, parse_if_channel_spec
+from lenspipe.channels import IfSelection, selections_from_exclusions
 from lenspipe.config import Stage1Config, Stage2Config
 from lenspipe.difmap.logparse import STAGE1_RMS_MARKER, STAGE2_RMS_MARKER
 
@@ -43,16 +43,22 @@ def if_selfcal_block(
     if_count: int,
     channels_per_if: int,
     edge_channels: int,
-    channels: str | None = None,
+    exclude_channels: str | None = None,
 ) -> tuple[str, list[IfSelection]]:
     """Sequential IF-by-IF self-calibration against the finished spectral model.
 
-    ``channels`` is the per-IF selection spec (see ``lenspipe.channels``); an IF
-    with several runs of channels gets them all on one ``select`` line, which
-    DifMAP accepts as any number of ranges.
+    ``exclude_channels`` is the exclusion spec (``spw3:0-3,60-63; spw7``, see
+    ``lenspipe.channels``); an IF with several runs of channels left gets them all
+    on one ``select`` line, which DifMAP accepts as any number of ranges, and an IF
+    with nothing left is skipped with a comment.
     """
-    selections = parse_if_channel_spec(channels, if_count, channels_per_if, edge_channels)
+    selections, skipped = selections_from_exclusions(
+        exclude_channels, if_count, channels_per_if, edge_channels, option_name="stage1.final_if_selfcal.exclude_channels"
+    )
     blocks: list[str] = []
+    if skipped:
+        blocks.append("! IF(s) skipped (no channels left after exclusions): " + ", ".join(str(n) for n in skipped))
+        blocks.append("")
     for selection in selections:
         blocks.extend(
             [
@@ -125,7 +131,7 @@ def stage1_commands(
             if_count=config.final_if_selfcal.if_count,
             channels_per_if=config.final_if_selfcal.channels_per_if,
             edge_channels=config.final_if_selfcal.edge_channels,
-            channels=config.final_if_selfcal.channels,
+            exclude_channels=config.final_if_selfcal.exclude_channels,
         )
         final_if_section = f"""
 ! Optional final IF-by-IF calibration against the completed spectral model.
@@ -219,8 +225,13 @@ def stage2_commands(
     work_directory: Path,
     mode: str,
     config: Stage2Config,
+    segments: dict[int, tuple[tuple[int, int], ...]] | None = None,
 ) -> str:
-    """One DifMAP command stream fitting every ``(fit_index, first, last)`` range."""
+    """One DifMAP command stream fitting every ``(fit_index, first, last)`` range.
+
+    ``segments`` (fit index -> channel runs) overrides the plain first-last
+    selection for fits whose channels are not contiguous after exclusions.
+    """
     lines = [
         f"observe {calibrated_uvfits}",
         "select i",
@@ -232,9 +243,11 @@ def stage2_commands(
     ]
     for fit_index, first_channel, last_channel in fit_ranges:
         fitted_model = fit_model_path(work_directory, mode, fit_index)
+        runs = segments.get(fit_index) if segments else None
+        selection = ",".join(f"{a},{b}" for a, b in runs) if runs and len(runs) > 1 else f"{first_channel},{last_channel}"
         lines.extend(
             [
-                f"select i,{first_channel},{last_channel}",
+                f"select i,{selection}",
                 f"rmodel {stage2_model}",
                 f"modelfit {config.modelfit_iterations}",
                 "invert",

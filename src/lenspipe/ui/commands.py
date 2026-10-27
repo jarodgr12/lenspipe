@@ -22,7 +22,7 @@ class RunRequest:
     dry_run: bool = False
     workers: int | None = None
     stage1_final_if_selfcal: bool | None = None
-    stage1_final_if_channels: str | None = None  # "" clears the configured spec
+    stage1_final_if_exclude: str | None = None  # "" clears the configured spec
     calibration_mode: str | None = None  # applies to every stage in the chain
     stage1_if_count: int | None = None
     stage1_channels_per_if: int | None = None
@@ -32,6 +32,7 @@ class RunRequest:
     stage2_shards: str | None = None
     stage2_channels_per_if: int | None = None
     stage2_channels: str | None = None
+    stage2_exclude_channels: str | None = None  # "" clears the configured spec
     stage2_exclude_edge_channels: int | None = None
     stage2_modelfit_iterations: int | None = None
     stage2_unflag: bool | None = None
@@ -98,8 +99,8 @@ def build_steps(request: RunRequest) -> tuple[list[ChainStep], list[str]]:
     if 1 in request.stages:
         argv = ["stage1", root, *epochs]
         argv += _toggle(request.stage1_final_if_selfcal, "--final-if-selfcal", "--no-final-if-selfcal")
-        if request.stage1_final_if_channels is not None:
-            argv += ["--final-if-channels", request.stage1_final_if_channels]
+        if request.stage1_final_if_exclude is not None:
+            argv += ["--final-if-exclude-channels", request.stage1_final_if_exclude]
         argv += mode_flag
         argv += _number(request.stage1_if_count, "--if-count")
         argv += _number(request.stage1_channels_per_if, "--channels-per-if")
@@ -123,6 +124,8 @@ def build_steps(request: RunRequest) -> tuple[list[ChainStep], list[str]]:
             argv += _number(request.stage2_exclude_edge_channels, "--exclude-edge-channels")
         if request.stage2_mode == "channel" and request.stage2_channels:
             argv += ["--channels", request.stage2_channels]
+        if request.stage2_exclude_channels is not None:
+            argv += ["--exclude-channels", request.stage2_exclude_channels]
         argv += _number(request.stage2_modelfit_iterations, "--modelfit-iterations")
         argv += _toggle(request.stage2_unflag, "--unflag", "--no-unflag")
         argv += _toggle(request.stage2_keep_models, "--keep-models", "--no-keep-models")

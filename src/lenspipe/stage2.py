@@ -15,11 +15,12 @@ import re
 import shutil
 import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
 from lenspipe import __version__
+from lenspipe.channels import FitSelection, excluded_channels_from_spec, exclusion_tag, segments
 from lenspipe.config import LenspipeConfig, Stage2Config
 from lenspipe.difmap import (
     STAGE2_RMS_MARKER,
@@ -146,13 +147,18 @@ class Stage2Result:
 
 
 def product_tag(config: Stage2Config) -> str:
-    """Filename-safe label for the extraction configuration."""
+    """Filename-safe label for the extraction configuration.
+
+    ``channel``, ``channel_<selection>``, or ``if<N>_edge<E>``, each followed by
+    ``_x_<spec>`` when ``exclude_channels`` is set (e.g. ``if64_edge3_x_spw7``).
+    """
+    suffix = f"_x_{exclusion_tag(config.exclude_channels)}" if config.exclude_channels else ""
     if config.mode == "channel":
         if config.channels is None:
-            return "channel"
+            return "channel" + suffix
         selection = re.sub(r"[^0-9,-]+", "", config.channels).replace(",", "_")
-        return f"channel_{selection or 'selected'}"
-    return f"if{config.channels_per_if}_edge{config.exclude_edge_channels}"
+        return f"channel_{selection or 'selected'}" + suffix
+    return f"if{config.channels_per_if}_edge{config.exclude_edge_channels}" + suffix
 
 
 def make_paths(
@@ -234,16 +240,33 @@ def parse_channel_spec(spec: str | None, total_channels: int) -> list[int]:
     return sorted(selected)
 
 
-def make_fit_ranges(
+def make_fits(
     total_channels: int,
     mode: str,
     channels_per_if: int,
     channel_spec: str | None,
     exclude_edge_channels: int = 0,
-) -> list[tuple[int, int, int]]:
-    """Return ``(fit_index, first_channel, last_channel)`` tuples."""
+    exclude_spec: str | None = None,
+    spw_channels: int | None = None,
+) -> tuple[list[FitSelection], list[int]]:
+    """The fits to run and, in IF mode, the IFs left with no channels.
+
+    Channel mode: one fit per channel of ``channel_spec`` (all when None) minus
+    the channels named by ``exclude_spec``. IF mode: one fit per IF over its
+    channels minus the symmetric edges and the excluded channels; an IF with
+    nothing left is skipped and reported. ``spw_channels`` is the width of a
+    spectral window for resolving ``spw<N>`` items; it defaults to
+    ``channels_per_if`` (in channel mode pass the width read from the UV-FITS
+    header, since ``channels_per_if`` is not otherwise used there).
+    """
+    excluded = excluded_channels_from_spec(
+        exclude_spec, total_channels, spw_channels or channels_per_if, "stage2.exclude_channels"
+    )
     if mode == "channel":
-        return [(c, c, c) for c in parse_channel_spec(channel_spec, total_channels)]
+        kept = [c for c in parse_channel_spec(channel_spec, total_channels) if c not in excluded]
+        if not kept:
+            raise ValueError("stage2.exclude_channels leaves no channel to fit.")
+        return [FitSelection(c, ((c, c),)) for c in kept], []
     if channel_spec is not None:
         raise ValueError("channels is only valid with mode 'channel'.")
     if channels_per_if < 1:
@@ -253,7 +276,8 @@ def make_fit_ranges(
     if 2 * exclude_edge_channels >= channels_per_if:
         raise ValueError("Twice exclude_edge_channels must be smaller than channels_per_if.")
 
-    ranges: list[tuple[int, int, int]] = []
+    fits: list[FitSelection] = []
+    skipped: list[int] = []
     if_number = 1
     for if_first in range(1, total_channels + 1, channels_per_if):
         if_last = min(if_first + channels_per_if - 1, total_channels)
@@ -262,9 +286,33 @@ def make_fit_ranges(
                 f"Final IF contains {if_last - if_first + 1} channels rather than "
                 f"{channels_per_if}; refusing to apply symmetric edge exclusion."
             )
-        ranges.append((if_number, if_first + exclude_edge_channels, if_last - exclude_edge_channels))
+        kept = tuple(
+            c for c in range(if_first + exclude_edge_channels, if_last - exclude_edge_channels + 1) if c not in excluded
+        )
+        if kept:
+            fits.append(FitSelection(if_number, tuple(segments(kept))))
+        else:
+            skipped.append(if_number)
         if_number += 1
-    return ranges
+    if not fits:
+        raise ValueError("stage2.exclude_channels leaves no IF to fit.")
+    return fits, skipped
+
+
+def make_fit_ranges(
+    total_channels: int,
+    mode: str,
+    channels_per_if: int,
+    channel_spec: str | None,
+    exclude_edge_channels: int = 0,
+    exclude_spec: str | None = None,
+    spw_channels: int | None = None,
+) -> list[tuple[int, int, int]]:
+    """Return ``(fit_index, first_channel, last_channel)`` tuples (the span of each fit)."""
+    fits, _ = make_fits(
+        total_channels, mode, channels_per_if, channel_spec, exclude_edge_channels, exclude_spec, spw_channels
+    )
+    return [fit.as_range() for fit in fits]
 
 
 def plan_shards(
@@ -377,6 +425,7 @@ def build_rows(
     rms_by_fit: dict[int, float],
     measurements_by_fit: dict[int, list[tuple[float, float]]],
     fluxes_by_fit: dict[int, list[float] | str] | None,
+    segments: dict[int, tuple[tuple[int, int], ...]] | None = None,
 ) -> list[dict[str, object]]:
     """Assemble spectrum rows.
 
@@ -392,9 +441,13 @@ def build_rows(
 
     rows: list[dict[str, object]] = []
     for fit_index, first_channel, last_channel in fit_ranges:
-        selected = frequencies[first_channel - 1 : last_channel]
+        runs = segments.get(fit_index) if segments else None
+        if runs and len(runs) > 1:
+            selected = [frequencies[c - 1] for a, b in runs for c in range(a, b + 1)]
+        else:
+            selected = frequencies[first_channel - 1 : last_channel]
         frequency_hz = sum(selected) / len(selected)
-        n_averaged = last_channel - first_channel + 1
+        n_averaged = len(selected)
         base: dict[str, object] = {
             "source": paths.source,
             "epoch": paths.epoch,
@@ -501,6 +554,7 @@ def _write_metadata(
     peak_rss_bytes: int | None = None,
     input_bytes: int | None = None,
     spw_layout: dict[str, int] | None = None,
+    fit_selection: dict[str, Any] | None = None,
 ) -> None:
     stage2 = config.stage2
     provenance = {
@@ -526,6 +580,7 @@ def _write_metadata(
             ),
             "total_channels": total_channels,
             "spectral_windows": spw_layout,  # {"n_spw", "channels_per_spw"} from the UV-FITS header
+            "channel_exclusion": fit_selection,  # stage2.exclude_channels, skipped IFs, non-contiguous fits
             "n_fits": fit_count,
             "calibration_mode": paths.calibration_mode,
             "stage1_directory": _project_relative(paths.stage1_model.parent, paths.project_root),
@@ -606,6 +661,19 @@ class _Prepared:
     row_labels: list[str]
     grouped_labels: list[str]
     spw_layout: dict[str, int] | None = None
+    segments: dict[int, tuple[tuple[int, int], ...]] = field(default_factory=dict)
+    skipped_ifs: list[int] = field(default_factory=list)
+    exclude_spec: str | None = None
+
+    def selection_record(self) -> dict[str, Any]:
+        """What was left out, for the metadata."""
+        return {
+            "exclude_channels": self.exclude_spec,
+            "skipped_ifs": list(self.skipped_ifs),
+            "non_contiguous_fits": {
+                str(index): [list(run) for run in runs] for index, runs in self.segments.items() if len(runs) > 1
+            },
+        }
 
     @property
     def output_labels(self) -> list[str]:
@@ -628,19 +696,28 @@ def _prepare(paths: Stage2Paths, config: Stage2Config, reporter: Reporter) -> _P
     except Exception as exc:  # noqa: BLE001 - header quirks should not stop the fit
         reporter.warn(f"could not determine observation MJD: {exc}")
         observation_mjd = None
-    fit_ranges = make_fit_ranges(
-        total_channels=len(frequencies),
-        mode=config.mode,
-        channels_per_if=config.channels_per_if,
-        channel_spec=config.channels,
-        exclude_edge_channels=config.exclude_edge_channels if config.mode == "if" else 0,
-    )
-    row_labels, grouped_labels = _labels(hierarchy)
     try:
         spw_layout = get_uvfits_spw_layout(paths.calibrated_uvfits)
     except Exception as exc:  # noqa: BLE001 - informational only
         reporter.warn(f"could not read the spectral-window layout: {exc}")
         spw_layout = None
+    fits, skipped_ifs = make_fits(
+        total_channels=len(frequencies),
+        mode=config.mode,
+        channels_per_if=config.channels_per_if,
+        channel_spec=config.channels,
+        exclude_edge_channels=config.exclude_edge_channels if config.mode == "if" else 0,
+        exclude_spec=config.exclude_channels,
+        # Channel mode has no window width of its own; spw items follow the file's layout.
+        spw_channels=(spw_layout or {}).get("channels_per_spw") if config.mode == "channel" else None,
+    )
+    fit_ranges = [fit.as_range() for fit in fits]
+    if skipped_ifs:
+        reporter.warn(
+            f"[stage2 {paths.product_prefix}] IF(s) {skipped_ifs} have no channels left after "
+            "stage2.exclude_channels and are not fitted"
+        )
+    row_labels, grouped_labels = _labels(hierarchy)
     return _Prepared(
         hierarchy=hierarchy,
         stage1_metadata=stage1_metadata,
@@ -651,6 +728,9 @@ def _prepare(paths: Stage2Paths, config: Stage2Config, reporter: Reporter) -> _P
         row_labels=row_labels,
         grouped_labels=grouped_labels,
         spw_layout=spw_layout,
+        segments={fit.fit_index: fit.segments for fit in fits},
+        skipped_ifs=skipped_ifs,
+        exclude_spec=config.exclude_channels,
     )
 
 
@@ -758,6 +838,7 @@ def run_epoch(
             calibrated_uvfits=paths.calibrated_uvfits,
             stage2_model=paths.stage2_model,
             fit_ranges=prepared.fit_ranges,
+            segments=prepared.segments,
             work_directory=paths.output_directory / "_dry_run_models",
             mode=mode,
             config=stage2,
@@ -841,6 +922,7 @@ def run_epoch(
             calibrated_uvfits=paths.calibrated_uvfits,
             stage2_model=paths.stage2_model,
             fit_ranges=block,
+            segments=prepared.segments,
             work_directory=work_dir,
             mode=mode,
             config=stage2,
@@ -980,6 +1062,7 @@ def run_epoch(
     try:
         rows = build_rows(
             paths=paths, mode=mode, fit_ranges=prepared.fit_ranges,
+            segments=prepared.segments,
             frequencies=prepared.frequencies, channel_width_hz=prepared.channel_width_hz,
             observation_mjd=prepared.observation_mjd, hierarchy=prepared.hierarchy,
             rms_by_fit=rms_by_fit, measurements_by_fit=measurements, fluxes_by_fit=fluxes_by_fit,
@@ -1012,7 +1095,7 @@ def run_epoch(
         stage1_metadata=prepared.stage1_metadata, shards=len(blocks), difmap_info=difmap_info,
         command_sha256=command_sha, duration_s=duration_s, recovered=False,
         shard_decision=decision.to_dict(), resumed=resumed,
-        peak_rss_bytes=peak_rss_bytes, input_bytes=input_bytes, spw_layout=prepared.spw_layout,
+        peak_rss_bytes=peak_rss_bytes, input_bytes=input_bytes, spw_layout=prepared.spw_layout, fit_selection=prepared.selection_record(),
     )
     _write_manifest(paths, retained_models_directory)
     shutil.rmtree(work_dir, ignore_errors=True)
@@ -1063,6 +1146,7 @@ def _recover(
     try:
         rows = build_rows(
             paths=paths, mode=config.stage2.mode, fit_ranges=prepared.fit_ranges,
+            segments=prepared.segments,
             frequencies=prepared.frequencies, channel_width_hz=prepared.channel_width_hz,
             observation_mjd=prepared.observation_mjd, hierarchy=prepared.hierarchy,
             rms_by_fit=rms_by_fit, measurements_by_fit=measurements, fluxes_by_fit=None,
@@ -1077,7 +1161,7 @@ def _recover(
         fit_count=len(prepared.fit_ranges), observation_mjd=prepared.observation_mjd,
         hierarchy=prepared.hierarchy, stage1_metadata=prepared.stage1_metadata, shards=0,
         difmap_info=None, command_sha256=None, duration_s=None, recovered=True,
-        spw_layout=prepared.spw_layout,
+        spw_layout=prepared.spw_layout, fit_selection=prepared.selection_record(),
     )
     _write_manifest(paths, None)
     return Stage2Result(

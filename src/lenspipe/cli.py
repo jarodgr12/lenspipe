@@ -294,9 +294,12 @@ def stage1(
     final_if_selfcal: Annotated[
         bool | None, typer.Option("--final-if-selfcal/--no-final-if-selfcal")
     ] = None,
-    final_if_channels: Annotated[
+    final_if_exclude_channels: Annotated[
         str | None,
-        typer.Option("--final-if-channels", help="Final-IF pass: per-IF channels, e.g. '1:3-62; 2:5-60,62'. '' clears."),
+        typer.Option(
+            "--final-if-exclude-channels",
+            help="Final-IF pass: channels to leave out, e.g. 'spw3:0-3,60-63; spw7' (CASA numbering). '' clears.",
+        ),
     ] = None,
     calibration_mode: CalibrationModeOpt = None,
     if_count: Annotated[int | None, typer.Option("--if-count", help="per-if mode: number of IFs.")] = None,
@@ -310,12 +313,12 @@ def stage1(
     root, cfg = _load(project, config)
     if difmap:
         cfg = cfg.with_overrides(project={"difmap": {**cfg.project.difmap.model_dump(), "executable": difmap}})
-    if final_if_selfcal is not None or final_if_channels is not None:
+    if final_if_selfcal is not None or final_if_exclude_channels is not None:
         final = cfg.stage1.final_if_selfcal.model_dump()
         if final_if_selfcal is not None:
             final["enabled"] = final_if_selfcal
-        if final_if_channels is not None:
-            final["channels"] = final_if_channels.strip() or None
+        if final_if_exclude_channels is not None:
+            final["exclude_channels"] = final_if_exclude_channels.strip() or None
         cfg = cfg.with_overrides(stage1={"final_if_selfcal": final})
     cfg = _with_calibration_mode(cfg, calibration_mode)
     per_if = {"if_count": if_count, "channels_per_if": channels_per_if, "edge_channels": edge_channels}
@@ -344,6 +347,10 @@ def stage2(
     channels_per_if: Annotated[int | None, typer.Option("--channels-per-if")] = None,
     exclude_edge_channels: Annotated[int | None, typer.Option("--exclude-edge-channels")] = None,
     channels: Annotated[str | None, typer.Option("--channels", help="e.g. '1-10,15' (channel mode).")] = None,
+    exclude_channels: Annotated[
+        str | None,
+        typer.Option("--exclude-channels", help="Channels to leave out, e.g. 'spw3:0-3,60-63; spw7' (CASA numbering). '' clears."),
+    ] = None,
     shards: Annotated[str | None, typer.Option("--shards", help="DifMAP processes per epoch or 'auto'.")] = None,
     modelfit_iterations: Annotated[int | None, typer.Option("--modelfit-iterations")] = None,
     unflag: Annotated[bool | None, typer.Option("--unflag/--no-unflag", help="Run 'unflag *' before the fits.")] = None,
@@ -368,6 +375,7 @@ def stage2(
         "channels_per_if": channels_per_if,
         "exclude_edge_channels": exclude_edge_channels,
         "channels": channels,
+        "exclude_channels": (exclude_channels.strip() or "__clear__") if exclude_channels is not None else None,
         "modelfit_iterations": modelfit_iterations,
         "unflag": unflag,
         "keep_models": keep_models,
@@ -380,8 +388,15 @@ def stage2(
         overrides["channels"] = None
     if mode == "if":
         overrides["channels"] = None
+    clear_exclusions = overrides.get("exclude_channels") == "__clear__"
+    if clear_exclusions:
+        overrides["exclude_channels"] = None
     try:
         cfg = cfg.with_overrides(stage2=overrides)
+        if clear_exclusions:
+            data = cfg.stage2.model_dump()
+            data["exclude_channels"] = None
+            cfg = cfg.model_copy(update={"stage2": type(cfg.stage2).model_validate(data)})
         if mode == "if":
             data = cfg.stage2.model_dump()
             data["channels"] = None
