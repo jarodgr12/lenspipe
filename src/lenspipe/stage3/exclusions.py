@@ -35,7 +35,9 @@ __all__ = [
 ]
 
 DEFAULT_CHANNELS_PER_SPW = 64
-_SPW_ITEM = re.compile(r"^spw\s*(?P<spw>\d+)\s*(?::\s*(?P<channels>.*))?$", re.IGNORECASE)
+_SPW_ITEM = re.compile(
+    r"^spw\s*(?P<spw>\d+)\s*(?:-\s*(?P<spw_last>\d+))?\s*(?::\s*(?P<channels>.*))?$", re.IGNORECASE
+)
 
 
 @dataclass(frozen=True)
@@ -50,14 +52,24 @@ class SpwLayout:
 
 @dataclass(frozen=True)
 class SpwItem:
-    spw: int  # CASA numbering, 0-based
+    spw: int  # CASA numbering, 0-based; first window of a range
     channels: tuple[int, ...] | None  # 0-based within the window; None = whole window
     text: str  # as written
+    spw_last: int | None = None  # last window of a range ``spw<a>-<b>``; None = single window
+
+    @property
+    def spws(self) -> tuple[int, ...]:
+        """Every window the item covers."""
+        return tuple(range(self.spw, (self.spw_last if self.spw_last is not None else self.spw) + 1))
+
+    @property
+    def window_text(self) -> str:
+        return f"spw {self.spw}" if self.spw_last is None else f"spw {self.spw}-{self.spw_last}"
 
     def describe(self) -> str:
         if self.channels is None:
-            return f"spw {self.spw} (whole window)"
-        return f"spw {self.spw} ch {_compact(self.channels)}"
+            return f"{self.window_text} (whole window{'s' if self.spw_last is not None else ''})"
+        return f"{self.window_text} ch {_compact(self.channels)}"
 
 
 @dataclass(frozen=True)
@@ -139,18 +151,22 @@ def parse_exclusion_spec(spec: str | None, option_name: str = "stage3.exclude_ch
         match = _SPW_ITEM.match(piece)
         if match is not None:
             spw = int(match.group("spw"))
+            spw_last = int(match.group("spw_last")) if match.group("spw_last") is not None else None
+            if spw_last is not None and spw_last < spw:
+                raise ValueError(f"{option_name}: {piece!r}: window range runs backwards (spw{spw}-{spw_last})")
             channel_text = (match.group("channels") or "").strip()
             if channel_text in ("", "*", "all"):
-                items.append(SpwItem(spw, None, piece))
+                items.append(SpwItem(spw, None, piece, spw_last))
                 continue
             channels = _int_list(channel_text, f"{option_name} ({piece!r})", minimum=0)
             if not channels:
                 raise ValueError(f"{option_name}: {piece!r} names no channels")
-            items.append(SpwItem(spw, tuple(channels), piece))
+            items.append(SpwItem(spw, tuple(channels), piece, spw_last))
             continue
         if piece.lower().startswith("spw"):
             raise ValueError(
-                f"{option_name}: {piece!r} is not a spectral-window item; write spw<N>, spw<N>:* or spw<N>:<channels>"
+                f"{option_name}: {piece!r} is not a spectral-window item; write spw<N>, spw<A>-<B>, spw<N>:* or "
+                "spw<N>:<channels> (also spw<A>-<B>:<channels> for the same channels in several windows)"
             )
         plain = _int_list(piece, option_name, minimum=1)
         if not plain:
@@ -208,27 +224,28 @@ def resolve_exclusions(spec: ExclusionSpec, layout: SpwLayout | None, where: str
         raise ValueError(f"{prefix}spectral-window exclusions need the Stage 2 metadata to resolve")
     for item in spec.spw_items:
         assert layout is not None
-        if layout.n_spw is not None and not 0 <= item.spw < layout.n_spw:
-            raise ValueError(
-                f"{prefix}{item.text!r}: spw {item.spw} is outside 0-{layout.n_spw - 1} (CASA numbering, from 0)"
-            )
-        if layout.mode == "if":
-            if item.channels is not None:
+        for spw in item.spws:
+            if layout.n_spw is not None and not 0 <= spw < layout.n_spw:
                 raise ValueError(
-                    f"{prefix}{item.text!r}: this is an IF product (one fit per spectral window), so channels "
-                    f"inside spw {item.spw} cannot be excluded separately; write 'spw{item.spw}' to drop the "
-                    "whole window, or exclude channels on a channel product"
+                    f"{prefix}{item.text!r}: spw {spw} is outside 0-{layout.n_spw - 1} (CASA numbering, from 0)"
                 )
-            indices.add(item.spw + 1)
-            continue
-        channels = item.channels if item.channels is not None else tuple(range(layout.channels_per_spw))
-        bad = [c for c in channels if c >= layout.channels_per_spw]
-        if bad:
-            raise ValueError(
-                f"{prefix}{item.text!r}: channel(s) {bad} are outside 0-{layout.channels_per_spw - 1} of a "
-                f"{layout.channels_per_spw}-channel spectral window"
-            )
-        indices.update(item.spw * layout.channels_per_spw + c + 1 for c in channels)
+            if layout.mode == "if":
+                if item.channels is not None:
+                    raise ValueError(
+                        f"{prefix}{item.text!r}: this is an IF product (one fit per spectral window), so channels "
+                        f"inside spw {spw} cannot be excluded separately; write 'spw{spw}' to drop the "
+                        "whole window, or exclude channels on a channel product"
+                    )
+                indices.add(spw + 1)
+                continue
+            channels = item.channels if item.channels is not None else tuple(range(layout.channels_per_spw))
+            bad = [c for c in channels if c >= layout.channels_per_spw]
+            if bad:
+                raise ValueError(
+                    f"{prefix}{item.text!r}: channel(s) {bad} are outside 0-{layout.channels_per_spw - 1} of a "
+                    f"{layout.channels_per_spw}-channel spectral window"
+                )
+            indices.update(spw * layout.channels_per_spw + c + 1 for c in channels)
     return sorted(indices)
 
 

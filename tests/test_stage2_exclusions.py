@@ -112,3 +112,9 @@ def test_cli_and_run_page_pass_the_exclusions(tmp_path: Path) -> None:
     assert steps[0].argv[steps[0].argv.index("--exclude-channels") + 1] == ""  # clears a configured spec
     steps, _ = build_steps(RunRequest(root=tmp_path, stages=[2], stage2_mode="if"))
     assert "--exclude-channels" not in steps[0].argv
+
+
+def test_stage2_exclusions_accept_window_ranges() -> None:
+    fits, skipped = make_fits(16, "if", 4, None, 0, "spw0-2:3; spw3")
+    assert skipped == [4] and [f.segments for f in fits] == [((1, 3),), ((5, 7),), ((9, 11),)]
+    assert product_tag(Stage2Config(mode="if", channels_per_if=4, exclude_channels="spw0-2:3; spw3")) == "if4_edge0_x_spw0-2_3_spw3"

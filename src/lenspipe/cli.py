@@ -298,7 +298,7 @@ def stage1(
         str | None,
         typer.Option(
             "--final-if-exclude-channels",
-            help="Final-IF pass: channels to leave out, e.g. 'spw3:0-3,60-63; spw7' (CASA numbering). '' clears.",
+            help="Final-IF pass: channels to leave out, e.g. 'spw0-47:0-7; spw7' (CASA numbering; spw ranges allowed). '' clears.",
         ),
     ] = None,
     calibration_mode: CalibrationModeOpt = None,
@@ -349,7 +349,7 @@ def stage2(
     channels: Annotated[str | None, typer.Option("--channels", help="e.g. '1-10,15' (channel mode).")] = None,
     exclude_channels: Annotated[
         str | None,
-        typer.Option("--exclude-channels", help="Channels to leave out, e.g. 'spw3:0-3,60-63; spw7' (CASA numbering). '' clears."),
+        typer.Option("--exclude-channels", help="Channels to leave out, e.g. 'spw0-47:0-7; spw7' (CASA numbering; spw ranges allowed). '' clears."),
     ] = None,
     shards: Annotated[str | None, typer.Option("--shards", help="DifMAP processes per epoch or 'auto'.")] = None,
     modelfit_iterations: Annotated[int | None, typer.Option("--modelfit-iterations")] = None,

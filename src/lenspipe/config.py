@@ -121,8 +121,9 @@ class SelfcalStep(_Model):
 
 EXCLUDE_CHANNELS_HELP = (
     "Channels to leave out, on top of edge_channels: items separated by ';', each 'spw<N>:<channels>' "
-    "(CASA spectral window N from 0, channels from 0 inside it, e.g. 'spw3:0-3,60-63'), 'spw<N>' for a "
-    "whole window, or a plain DifMAP channel number/range (from 1). E.g. 'spw3:0-3,60-63; spw7'."
+    "(CASA spectral window N from 0, channels from 0 inside it, e.g. 'spw3:0-3,60-63'), 'spw<A>-<B>:<channels>' "
+    "for the same channels in a run of windows (e.g. 'spw0-47:0-7'), 'spw<N>' or 'spw<A>-<B>' for whole windows, "
+    "or a plain DifMAP channel number/range (from 1). E.g. 'spw0-47:0-7; spw3:60-63; spw7'."
 )
 
 
@@ -438,8 +439,9 @@ class Stage3Config(_Model):
         None,
         description=(
             "Channels excluded from every epoch. Items separated by ';': 'spw<N>:<channels>' with the "
-            "CASA spectral window N (from 0) and channels 0-based inside it ('spw3:0-3,60-63'), 'spw<N>' "
-            "for a whole window, or plain Stage 2 fit indices (1-based, '1-4,61-64'). "
+            "CASA spectral window N (from 0) and channels 0-based inside it ('spw3:0-3,60-63'), "
+            "'spw<A>-<B>:<channels>' for a run of windows ('spw0-47:0-7'), 'spw<N>' or 'spw<A>-<B>' "
+            "for whole windows, or plain Stage 2 fit indices (1-based, '1-4,61-64'). "
             "E.g. 'spw3:0-3,60-63; spw7; 1-4'. On an IF product only whole windows can be excluded."
         ),
     )
