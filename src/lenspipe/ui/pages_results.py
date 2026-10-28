@@ -236,6 +236,18 @@ def results_page(epoch: str | None = None, stage: int = 2, product: str | None =
                                     ui.label(png.name).classes("font-mono text-xs truncate flex-grow")
                                     if pdf is not None:
                                         ui.link("PDF", console.file_url(pdf), new_tab=True).classes("text-xs")
+                if reports:
+                    ui.label(f"{len(reports)} fit report(s): parameters, errors and covariance matrices").classes("text-subtitle2")
+                for report in reports:
+                    relative = report.relative_to(target.directory).as_posix()
+                    with ui.expansion(relative, icon="description").classes("w-full").props("dense") as report_panel:
+                        with ui.row().classes("w-full justify-end"):
+                            ui.link("open file", console.file_url(report), new_tab=True).classes("text-xs")
+                        ui.code(report.read_text(encoding="utf-8", errors="replace"), language="text").classes(
+                            "w-full text-xs"
+                        )
+                    if relative.endswith(".fits.txt") or relative.endswith("combined_fits.txt"):
+                        report_panel.open()
                 if csvs:
                     ui.label(f"{len(csvs)} table(s); open a panel to load it").classes("text-subtitle2")
                 for csv in csvs:
