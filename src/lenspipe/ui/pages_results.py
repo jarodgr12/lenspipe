@@ -39,6 +39,11 @@ class Target:
         )
         return [p for p in candidates if self.prefix is None or p.name.startswith(self.prefix)]
 
+    def reports(self) -> list[Path]:
+        """Plain-text fit reports (parameters, errors, covariance matrix)."""
+        candidates = sorted(self.directory.glob("fits/*.txt")) + sorted(self.directory.glob("tables/*.txt"))
+        return [p for p in candidates if self.prefix is None or p.name.startswith(self.prefix)]
+
 
 def split_epoch_key(epoch_key: str) -> tuple[str, str, str]:
     """``'<mode>/<source>.<epoch>'`` -> ("epoch", mode, prefix); ``'combined:<mode>:<source>'`` -> ("combined", mode, source).
@@ -109,13 +114,13 @@ def _epoch_options(summary: dict[str, Any]) -> dict[str, str]:
     return options
 
 
-def _scan(target: Target, root: Path) -> tuple[list[tuple[Path, Path, Path | None]], list[Path]]:
-    """Filesystem work for one target, run in a worker thread: figures with thumbnails, and tables."""
+def _scan(target: Target, root: Path) -> tuple[list[tuple[Path, Path, Path | None]], list[Path], list[Path]]:
+    """Filesystem work for one target, run in a worker thread: figures with thumbnails, tables, text reports."""
     figures = []
     for png in target.pngs():
         pdf = png.with_suffix(".pdf")
         figures.append((png, thumbnail_for(root, png), pdf if pdf.is_file() else None))
-    return figures, target.csvs()
+    return figures, target.csvs(), target.reports()
 
 
 def _read_table(csv: Path) -> tuple[pd.DataFrame, int]:
@@ -195,7 +200,7 @@ def results_page(epoch: str | None = None, stage: int = 2, product: str | None =
             target = resolve_target(console.root, epoch.value, int(stage.value or 2), str(product.value))
             path_label.set_text(str(target.directory))
             status.set_text("Reading directory...")
-            figures, csvs = await run.io_bound(_scan, target, console.root)
+            figures, csvs, reports = await run.io_bound(_scan, target, console.root)
             interactive: dict[str, dict[str, Any]] = {}
             interactive_notes: list[str] = []
             interactive_error: str | None = None
@@ -231,6 +236,18 @@ def results_page(epoch: str | None = None, stage: int = 2, product: str | None =
                                     ui.label(png.name).classes("font-mono text-xs truncate flex-grow")
                                     if pdf is not None:
                                         ui.link("PDF", console.file_url(pdf), new_tab=True).classes("text-xs")
+                if reports:
+                    ui.label(f"{len(reports)} fit report(s): parameters, errors and covariance matrices").classes("text-subtitle2")
+                for report in reports:
+                    relative = report.relative_to(target.directory).as_posix()
+                    with ui.expansion(relative, icon="description").classes("w-full").props("dense") as report_panel:
+                        with ui.row().classes("w-full justify-end"):
+                            ui.link("open file", console.file_url(report), new_tab=True).classes("text-xs")
+                        ui.code(report.read_text(encoding="utf-8", errors="replace"), language="text").classes(
+                            "w-full text-xs"
+                        )
+                    if relative.endswith(".fits.txt") or relative.endswith("combined_fits.txt"):
+                        report_panel.open()
                 if csvs:
                     ui.label(f"{len(csvs)} table(s); open a panel to load it").classes("text-subtitle2")
                 for csv in csvs:

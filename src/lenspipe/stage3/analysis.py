@@ -108,6 +108,7 @@ from lenspipe.stage3.exclusions import (
     resolve_exclusions,
     spw_layout_from_metadata,
 )
+from lenspipe.stage3.fit_report import write_fit_report
 from lenspipe.stage3.fitting import (
     calculate_ratio,
     fit_power_law,
@@ -1359,6 +1360,15 @@ def write_epoch_products(
 
         write_csv(fits_dir / f"{dataset.prefix}.powerlaw_fits.csv", powerlaw_rows)
         write_json(fits_dir / f"{dataset.prefix}.powerlaw_fits.json", powerlaw_rows)
+        write_fit_report(
+            fits_dir / f"{dataset.prefix}.fits.txt",
+            f"{dataset.prefix}  ({dataset.product_tag}, {dataset.calibration_mode})  MJD {analysis.mjd:.4f}",
+            powerlaw_rows, ratio_rows,
+            notes=[
+                f"Error source for the per-channel points: {analysis.error_source}.",
+                f"Reference group for ratios: {analysis.reference_group}.  Points fitted: {len(analysis.frequency_ghz)}.",
+            ],
+        )
 
         if ratio_rows:
             write_csv(
@@ -2088,6 +2098,16 @@ def write_combined_products(
         if combined_fit_rows:
             write_csv(tables_dir / f"{stem}.combined_fits.csv", combined_fit_rows)
             write_json(tables_dir / f"{stem}.combined_fits.json", combined_fit_payload)
+            write_fit_report(
+                tables_dir / f"{stem}.combined_fits.txt",
+                f"{stem}  all-visit average spectrum  ({len(analyses)} visit(s))",
+                list(combined_fit_payload.get("average_spectrum", {}).values()),
+                notes=[
+                    "Each point is the inverse-variance weighted mean over visits of that channel's flux; its error is "
+                    "1/sqrt(sum 1/sigma_i^2). The power law is then fitted to those points.",
+                    "Flux-ratio averages are constant fits (see the combined_fits table); their covariance is a scalar.",
+                ],
+            )
 
         created = datetime.now(UTC).isoformat()
         write_json(

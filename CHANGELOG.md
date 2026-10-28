@@ -3,6 +3,38 @@
 Each entry says whether existing products need re-running. The `lenspipe`
 version that made a product is recorded in its metadata JSON.
 
+## 2.3.4 — 2026-10-28
+
+**Re-run needed:** Stage 3, to write the reports.
+
+- Added: plain-text fit reports. Each visit gets
+  `fits/<prefix>.fits.txt` and each combined product
+  `tables/<stem>.combined_fits.txt`, one block per fit: S_ref and alpha
+  (or R_ref and delta_alpha) with their 1-sigma errors, the full 2x2
+  covariance matrix with its parameter order and units, the correlation,
+  chi^2, degrees of freedom and reduced chi^2, and for emcee fits the
+  asymmetric errors and sampler settings. The report states how the
+  errors are derived (absolute per-point uncertainties, not rescaled by
+  the reduced chi^2). The matrix is also kept as `covariance_matrix` in
+  the fit JSON. The Results page shows the reports as text panels beside
+  the tables, open by default.
+
+## 2.3.3 — 2026-10-28
+
+**Re-run needed:** Stage 3, to redraw the map figures. Nothing numerical
+changes.
+
+- Fixed: the restoring beam on the clean and residual map figures was
+  drawn at the wrong position angle (reported by Di Wen on 0712.S, BPA
+  -58.9 deg). Two errors: BPA was multiplied by 3600 along with the beam
+  axes, which because 3600 is a multiple of 360 left most beams at 0 deg
+  and the rest at ten times the fractional part; and the remaining angle
+  had the wrong sign, since matplotlib rotates anti-clockwise in data
+  coordinates and the RA axis is reversed, mirroring the beam about
+  north. The ellipse now follows BPA north through east, east to the
+  left, and a test pins the orientation. The FITS headers and DifMAP logs
+  were always right; only the drawing was wrong.
+
 ## 2.3.2 — 2026-10-28
 
 **Re-run needed:** no.

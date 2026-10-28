@@ -41,6 +41,7 @@ class PowerLawFit:
     prior_log_sref_max: float | None = None
     prior_alpha_min: float | None = None
     prior_alpha_max: float | None = None
+    covariance_matrix: list[list[float]] | None = None  # 2x2 over (S_ref, alpha); emcee: sample covariance
 
     def as_dict(self) -> dict:
         return asdict(self)
@@ -67,6 +68,7 @@ class RatioFit:
     constant_chi_square: float
     constant_reduced_chi_square: float
     fit_status: str
+    covariance_matrix: list[list[float]] | None = None  # 2x2 over (R_ref, delta_alpha)
 
     def as_dict(self) -> dict:
         return asdict(self)
@@ -133,6 +135,7 @@ def fit_power_law(label, frequency_ghz, flux_jy, uncertainty_jy,
         correlation_sref_alpha=_correlation(pcov), chi_square=chi_square,
         reduced_chi_square=(chi_square / dof if dof > 0 else float("nan")),
         degrees_of_freedom=dof, n_points=len(nu), fit_status="ok",
+        covariance_matrix=np.asarray(pcov, dtype=float).tolist(),
     )
 
 
@@ -238,6 +241,7 @@ def fit_power_law_emcee(
         n_posterior_samples=len(flat), prior_log_sref_min=log_s_min,
         prior_log_sref_max=log_s_max, prior_alpha_min=alpha_min,
         prior_alpha_max=alpha_max,
+        covariance_matrix=np.asarray(covariance, dtype=float).tolist(),
     )
     posterior = {
         "log_s_ref_jy": flat[:, 0],
@@ -312,4 +316,5 @@ def fit_ratio_power_law(numerator, denominator, frequency_ghz, ratio, ratio_erro
         weighted_mean_error=weighted_mean_error, constant_chi_square=constant_chi_square,
         constant_reduced_chi_square=(constant_chi_square / constant_dof if constant_dof > 0 else float("nan")),
         fit_status="ok",
+        covariance_matrix=np.asarray(pcov, dtype=float).tolist(),
     )
