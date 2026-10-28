@@ -84,13 +84,15 @@ def _size_text(size: float | list[float]) -> str:
 
 EXCLUSION_EXAMPLES = [
     ("spw3:0-3,60-63", "channels 0-3 and 60-63 of spectral window 3"),
-    ("spw7", "all of spectral window 7"),
-    ("spw3:0-3,60-63; spw7", "several items, separated by ';'"),
+    ("spw0-47:0-7", "channels 0-7 of every window from spw 0 to spw 47 (48 windows are spw0 to spw47)"),
+    ("spw7", "all of spectral window 7; spw7-9 for three whole windows"),
+    ("spw0-47:0-7; spw3:60-63; spw7", "several items, separated by ';'"),
     ("2817-2880", "a plain number or range is a DifMAP channel (from 1)"),
 ]
 EXCLUSION_TOOLTIP = (
     "Items separated by ';'. 'spw3:0-3,60-63' = CASA spectral window 3, channels 0-3 and 60-63 inside it "
-    "(both numbered from 0, as in CASA flagging). 'spw7' = the whole window. A plain number or range is a "
+    "(both numbered from 0, as in CASA flagging). 'spw0-47:0-7' = the same channels in windows 0 to 47. "
+    "'spw7' = the whole window, 'spw7-9' = three whole windows. A plain number or range is a "
     "Stage 2 fit index (from 1). On an IF product only whole windows can be excluded."
 )
 

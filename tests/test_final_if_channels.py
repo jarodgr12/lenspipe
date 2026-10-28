@@ -115,3 +115,13 @@ def test_cli_and_run_page_pass_the_spec(tmp_path: Path) -> None:
     assert steps[0].argv[-3:] == ["--final-if-selfcal", "--final-if-exclude-channels", "spw0:1; spw3"]
     steps, _ = build_steps(RunRequest(root=tmp_path, stages=[1], stage1_final_if_exclude=""))
     assert steps[0].argv[-2:] == ["--final-if-exclude-channels", ""]
+
+
+def test_stage1_exclusions_accept_window_ranges() -> None:
+    # The user's case, corrected for CASA numbering: 48 windows are spw0-47, drop channels 0-7 of each.
+    kept, skipped = selections_from_exclusions("spw0-47:0-7", if_count=48, channels_per_if=64)
+    assert skipped == [] and all(s.first == (s.if_number - 1) * 64 + 9 for s in kept)
+    final = FinalIfSelfcal(enabled=True, if_count=48, channels_per_if=64, exclude_channels="spw0-47:0-7")
+    assert len(final.selections()[0]) == 48
+    with pytest.raises(ValueError, match=r"spw 48 is outside 0-47 .*48 windows are spw0 to spw47"):
+        FinalIfSelfcal(if_count=48, channels_per_if=64, exclude_channels="spw1-48:1-8")

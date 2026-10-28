@@ -3,6 +3,17 @@
 Each entry says whether existing products need re-running. The `lenspipe`
 version that made a product is recorded in its metadata JSON.
 
+## 2.3.2 — 2026-10-28
+
+**Re-run needed:** no.
+
+- Added: spectral-window ranges in the exclusion syntax, everywhere it is
+  used (Stage 1 final-IF, Stage 2, Stage 3): `spw0-47:0-7` leaves out
+  channels 0-7 of every window from 0 to 47, `spw7-9` three whole windows.
+  Reported by a user whose `spw1-48:1-8` was refused; note that 48 windows
+  are spw0 to spw47 in CASA numbering, and the error now says so. The
+  worked examples under the fields show the range form.
+
 ## 2.3.1 — 2026-10-27
 
 **Re-run needed:** no. No code change.

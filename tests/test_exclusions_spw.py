@@ -168,3 +168,19 @@ def test_stage3_dry_run_writes_nothing(project: Path, fake_difmap: Path) -> None
     result = CliRunner().invoke(app, ["stage3", str(project), "--dry-run", "--exclude-channels", "spw0"])
     assert result.exit_code == 0, result.output
     assert not (project / "stage3").exists()
+
+
+def test_spw_ranges_cover_every_window_in_the_run() -> None:
+    from lenspipe.stage3.exclusions import SpwLayout, parse_exclusion_spec, resolve_exclusions
+
+    spec = parse_exclusion_spec("spw1-3:0-1; spw5-6")
+    assert [(i.spw, i.spw_last, i.spws) for i in spec.spw_items] == [(1, 3, (1, 2, 3)), (5, 6, (5, 6))]
+    assert [i.describe() for i in spec.spw_items] == ["spw 1-3 ch 0-1", "spw 5-6 (whole windows)"]
+    channel_layout = SpwLayout(channels_per_spw=4, n_spw=8, mode="channel", source="test")
+    assert resolve_exclusions(spec, channel_layout) == [5, 6, 9, 10, 13, 14, 21, 22, 23, 24, 25, 26, 27, 28]
+    if_layout = SpwLayout(channels_per_spw=4, n_spw=8, mode="if", source="test")
+    assert resolve_exclusions(parse_exclusion_spec("spw5-6"), if_layout) == [6, 7]
+    with pytest.raises(ValueError, match="runs backwards"):
+        parse_exclusion_spec("spw3-1")
+    with pytest.raises(ValueError, match="outside 0-7"):
+        resolve_exclusions(parse_exclusion_spec("spw6-8"), channel_layout)

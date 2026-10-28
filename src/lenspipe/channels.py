@@ -193,8 +193,6 @@ def excluded_channels_from_spec(
             raise ValueError(f"{option_name}: channel {channel} is outside 1-{total_channels}")
         excluded.add(channel)
     for item in parsed.spw_items:
-        if not 0 <= item.spw < n_spw:
-            raise ValueError(f"{option_name}: {item.text!r}: spw {item.spw} is outside 0-{n_spw - 1} (CASA numbering, from 0)")
         channels = item.channels if item.channels is not None else tuple(range(channels_per_if))
         bad = [c for c in channels if c >= channels_per_if]
         if bad:
@@ -202,7 +200,13 @@ def excluded_channels_from_spec(
                 f"{option_name}: {item.text!r}: channel(s) {bad} are outside 0-{channels_per_if - 1} of a "
                 f"{channels_per_if}-channel spectral window"
             )
-        excluded.update(item.spw * channels_per_if + c + 1 for c in channels)
+        for spw in item.spws:
+            if not 0 <= spw < n_spw:
+                raise ValueError(
+                    f"{option_name}: {item.text!r}: spw {spw} is outside 0-{n_spw - 1} (CASA numbering, from 0; "
+                    f"{n_spw} windows are spw0 to spw{n_spw - 1})"
+                )
+            excluded.update(spw * channels_per_if + c + 1 for c in channels)
     return excluded
 
 
