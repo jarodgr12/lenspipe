@@ -219,17 +219,19 @@ def draw_map(
     ax.set_ylabel(r"$\Delta$Dec [arcsec]" if label_y else " ")
     ax.tick_params(labelsize=8, direction="in", top=True, right=True)
     if image.beam is not None:
-        bmaj, bmin, bpa = (value * 3600.0 for value in image.beam)
+        bmaj_deg, bmin_deg, bpa = image.beam
+        bmaj, bmin = bmaj_deg * 3600.0, bmin_deg * 3600.0  # axes to arcsec; BPA is already degrees
         width_arcsec = abs(left - right)
         height_arcsec = abs(top - bottom)
         # Lower-left corner of the panel: the left edge carries the larger (eastern) offset.
         x0 = max(left, right) - 0.1 * width_arcsec - bmaj / 2.0
         y0 = bottom + 0.1 * height_arcsec + bmaj / 2.0
-        # The x axis runs east to the left (decreasing to the right), so an ellipse
-        # drawn in data units already has north up and east left; BPA is from north
-        # through east, i.e. counter-clockwise from the vertical on this axis.
+        # BPA is measured from north through east. Matplotlib rotates anti-clockwise in
+        # *data* coordinates; because the x axis is reversed (east to the left), that is
+        # clockwise on the page, so the sign has to flip or the beam is mirrored about
+        # the north-south line (reported on 0712.S, BPA -58.9 deg: drawn NE-SW, true NW-SE).
         ax.add_patch(
-            Ellipse((x0, y0), width=bmin, height=bmaj, angle=bpa, facecolor="none", edgecolor="white", linewidth=1.2)
+            Ellipse((x0, y0), width=bmin, height=bmaj, angle=-bpa, facecolor="none", edgecolor="white", linewidth=1.2)
         )
     bar = ax.figure.colorbar(shown, ax=ax, pad=0.02, fraction=0.046)
     bar.set_label(image.bunit)

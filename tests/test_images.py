@@ -285,3 +285,36 @@ def test_map_panels_use_offset_axes_in_arcsec_with_shared_limits(staged: Path, f
         assert left > right  # east (positive RA offset) on the left
         assert abs((left - right) - 1.0) < 0.05 and abs((top - bottom) - 1.0) < 0.05  # 1 arcsec cutout
     assert "RA [arcsec]" in panels[0].get_xlabel() and "Dec [arcsec]" in panels[0].get_ylabel()
+
+
+def test_beam_ellipse_major_axis_points_north_through_east() -> None:
+    """BPA is from north through east. With east to the left, the ellipse's major axis must
+    lean towards the *left* of the panel for a positive BPA (towards +x in data units).
+    A real 0712.S map (BPA -58.9 deg) was drawn mirrored about north before 2.3.3."""
+    import matplotlib
+
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    import numpy as np
+    from astropy.wcs import WCS
+    from matplotlib.patches import Ellipse
+
+    from lenspipe.stage3.images import ImageSettings, MapImage, draw_map
+
+    wcs = WCS(naxis=2)
+    wcs.wcs.ctype = ["RA---SIN", "DEC--SIN"]
+    wcs.wcs.crpix = [20, 20]
+    wcs.wcs.crval = [109.0, 47.1]
+    wcs.wcs.cdelt = [-0.05 / 3600, 0.05 / 3600]  # 50 mas pixels, east to the left
+    image = MapImage(data=np.zeros((40, 40)), wcs=wcs, beam=(0.8 / 3600, 0.2 / 3600, 45.0), bunit="JY/BEAM", center_pixel=None)
+    fig, ax = plt.subplots()
+    draw_map(ax, image, ImageSettings(), "t", "clean")
+    ellipse = next(p for p in ax.patches if isinstance(p, Ellipse))
+    # Point on the major axis, half a major axis from the centre, in data coordinates.
+    cx, cy = ellipse.center
+    theta = np.deg2rad(ellipse.angle)
+    tip = (cx - np.sin(theta) * ellipse.height / 2, cy + np.cos(theta) * ellipse.height / 2)  # ellipse "height" is along +y when angle=0
+    dx, dy = tip[0] - cx, tip[1] - cy
+    # North through east: north is +y, east is +x in data units (x reversed on screen). BPA 45 -> tip at +x, +y.
+    assert dx > 0 and dy > 0, (ellipse.angle, dx, dy)
+    plt.close(fig)

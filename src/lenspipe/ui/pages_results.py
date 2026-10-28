@@ -39,6 +39,11 @@ class Target:
         )
         return [p for p in candidates if self.prefix is None or p.name.startswith(self.prefix)]
 
+    def reports(self) -> list[Path]:
+        """Plain-text fit reports (parameters, errors, covariance matrix)."""
+        candidates = sorted(self.directory.glob("fits/*.txt")) + sorted(self.directory.glob("tables/*.txt"))
+        return [p for p in candidates if self.prefix is None or p.name.startswith(self.prefix)]
+
 
 def split_epoch_key(epoch_key: str) -> tuple[str, str, str]:
     """``'<mode>/<source>.<epoch>'`` -> ("epoch", mode, prefix); ``'combined:<mode>:<source>'`` -> ("combined", mode, source).
@@ -109,13 +114,13 @@ def _epoch_options(summary: dict[str, Any]) -> dict[str, str]:
     return options
 
 
-def _scan(target: Target, root: Path) -> tuple[list[tuple[Path, Path, Path | None]], list[Path]]:
-    """Filesystem work for one target, run in a worker thread: figures with thumbnails, and tables."""
+def _scan(target: Target, root: Path) -> tuple[list[tuple[Path, Path, Path | None]], list[Path], list[Path]]:
+    """Filesystem work for one target, run in a worker thread: figures with thumbnails, tables, text reports."""
     figures = []
     for png in target.pngs():
         pdf = png.with_suffix(".pdf")
         figures.append((png, thumbnail_for(root, png), pdf if pdf.is_file() else None))
-    return figures, target.csvs()
+    return figures, target.csvs(), target.reports()
 
 
 def _read_table(csv: Path) -> tuple[pd.DataFrame, int]:
@@ -195,7 +200,7 @@ def results_page(epoch: str | None = None, stage: int = 2, product: str | None =
             target = resolve_target(console.root, epoch.value, int(stage.value or 2), str(product.value))
             path_label.set_text(str(target.directory))
             status.set_text("Reading directory...")
-            figures, csvs = await run.io_bound(_scan, target, console.root)
+            figures, csvs, reports = await run.io_bound(_scan, target, console.root)
             interactive: dict[str, dict[str, Any]] = {}
             interactive_notes: list[str] = []
             interactive_error: str | None = None
