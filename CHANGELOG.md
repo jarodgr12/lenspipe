@@ -3,6 +3,20 @@
 Each entry says whether existing products need re-running. The `lenspipe`
 version that made a product is recorded in its metadata JSON.
 
+## 2.3.5 — 2026-10-29
+
+**Re-run needed:** no, unless you set the new option.
+
+- Added: `stage1.per_if.exclude_channels`, the same per-window exclusion
+  syntax the final-IF pass, Stage 2 and Stage 3 use (`"spw0-47:0-7;
+  spw7"`), now for the per-IF calibration mode. Each IF's self-cal and
+  per-IF fit select the IF's channels minus the edges and these
+  exclusions, gaps on one DifMAP `select`; an IF left with nothing is
+  skipped (no `ifNNN.gmod` for it) and listed in the metadata. The final
+  full-band fit is unchanged and still uses every channel. CLI
+  `--per-if-exclude-channels`; Run page field beside the per-IF layout
+  with the worked examples.
+
 ## 2.3.4 — 2026-10-28
 
 **Re-run needed:** Stage 3, to write the reports.

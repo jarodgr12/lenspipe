@@ -182,23 +182,37 @@ class PerIfConfig(_Model):
     edge_channels: int = Field(
         0, ge=0, description="Channels dropped from each end of every IF before its self-cal and fit."
     )
+    exclude_channels: str | None = Field(
+        None,
+        description=EXCLUDE_CHANNELS_HELP + " An IF left with no channels is skipped by the per-IF calibration "
+        "(no per-IF model for it); the final full-band fit still uses every channel.",
+    )
 
     @model_validator(mode="after")
     def _check_edges(self) -> PerIfConfig:
         if 2 * self.edge_channels >= self.channels_per_if:
             raise ValueError("Twice edge_channels must be smaller than channels_per_if.")
+        if self.exclude_channels is not None and not self.exclude_channels.strip():
+            object.__setattr__(self, "exclude_channels", None)
+        self.selections()  # validates the spec against the layout
         return self
 
     @property
     def total_channels(self) -> int:
         return self.if_count * self.channels_per_if
 
+    def selections(self) -> tuple[list[IfSelection], list[int]]:
+        """IFs the per-IF calibration runs on (with their channels) and the IFs it skips."""
+        from lenspipe.channels import selections_from_exclusions
+
+        return selections_from_exclusions(
+            self.exclude_channels, self.if_count, self.channels_per_if, self.edge_channels,
+            option_name="stage1.per_if.exclude_channels",
+        )
+
     def channel_ranges(self) -> list[tuple[int, int]]:
-        """1-based inclusive DifMAP channel range of each IF's inner channels."""
-        return [
-            ((n - 1) * self.channels_per_if + self.edge_channels + 1, n * self.channels_per_if - self.edge_channels)
-            for n in range(1, self.if_count + 1)
-        ]
+        """1-based inclusive DifMAP span of each calibrated IF's selection (edges and exclusions applied)."""
+        return [(s.first, s.last) for s in self.selections()[0]]
 
 
 def _legacy_selfcal_schedule() -> list[SelfcalStep]:
@@ -602,7 +616,7 @@ calibration_mode = "full-band"      # "full-band": the schedule above on the who
 if_count = 48
 channels_per_if = 64
 edge_channels = 0                   # dropped from each end of every IF before its solve
-# exclude_channels = "spw3:0-3,60-63; spw7"   # more to leave out: CASA spw (from 0) and channels inside it (from 0)
+# exclude_channels = "spw0-47:0-7; spw7"   # more to leave out per IF: CASA spw (from 0) and channels inside it (from 0)
 
 [stage1.final_if_selfcal]           # optional extra pass after the schedule (full-band mode legacy block)
 enabled = false
