@@ -91,14 +91,17 @@ def per_if_schedule_block(
     layout = config.per_if
     if len(per_if_models) != layout.if_count:
         raise ValueError(f"expected {layout.if_count} per-IF model paths, got {len(per_if_models)}")
+    selections, skipped = layout.selections()
     lines: list[str] = []
-    for if_number, (first, last) in enumerate(layout.channel_ranges(), start=1):
-        lines.append(f"! IF {if_number}: channels {first}-{last}")
-        lines.append(f"select i,{first},{last}")
+    if skipped:
+        lines.append("! IF(s) skipped (no channels left after exclusions): " + ", ".join(str(n) for n in skipped))
+    for selection in selections:
+        lines.append(f"! IF {selection.if_number}: channels {selection.label}")
+        lines.append(f"select i,{selection.select_arguments}")
         lines.append(f"rmodel {fixed_index_model}")
         for step in config.selfcal:
             lines.extend(step.difmap_commands(per_if=True))
-        lines.append(f"wmodel {per_if_models[if_number - 1]}")
+        lines.append(f"wmodel {per_if_models[selection.if_number - 1]}")
     lines.append("! Full band: fit the final model to the per-IF calibrated data (no further self-cal).")
     lines.append(f"select i,1,{layout.total_channels}")
     lines.append(f"rmodel {starting_model}")

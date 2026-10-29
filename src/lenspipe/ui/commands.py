@@ -27,6 +27,7 @@ class RunRequest:
     stage1_if_count: int | None = None
     stage1_channels_per_if: int | None = None
     stage1_edge_channels: int | None = None
+    stage1_per_if_exclude: str | None = None  # "" clears the configured spec
     stage1_reimage_only: bool = False
     stage2_mode: str | None = None
     stage2_shards: str | None = None
@@ -105,6 +106,8 @@ def build_steps(request: RunRequest) -> tuple[list[ChainStep], list[str]]:
         argv += _number(request.stage1_if_count, "--if-count")
         argv += _number(request.stage1_channels_per_if, "--channels-per-if")
         argv += _number(request.stage1_edge_channels, "--edge-channels")
+        if request.stage1_per_if_exclude is not None:
+            argv += ["--per-if-exclude-channels", request.stage1_per_if_exclude]
         if request.stage1_reimage_only:
             argv.append("--reimage-only")
         if request.workers:

@@ -168,7 +168,8 @@ def test_modes_coexist_and_flat_layout_is_migrated(project: Path, fake_difmap: P
     meta = json.loads((d / "MG0414.A.stage1.metadata.json").read_text())
     assert meta["calibration_mode"] == "per-if"
     assert meta["per_if"]["selected_ranges_one_based"] == [
-        {"if_number": 1, "first_channel": 1, "last_channel": 4}, {"if_number": 2, "first_channel": 5, "last_channel": 8},
+        {"if_number": 1, "first_channel": 1, "last_channel": 4, "channels": [[1, 4]], "n_channels": 4},
+        {"if_number": 2, "first_channel": 5, "last_channel": 8, "channels": [[5, 8]], "n_channels": 4},
     ]
     assert meta["per_if"]["per_if_models"] == ["MG0414.A.if001.gmod", "MG0414.A.if002.gmod"]
     assert layout.modes_present(1) == ["full-band", "per-if"]
@@ -183,3 +184,41 @@ def test_dry_run_prints_both_passes(project: Path, fake_difmap: Path) -> None:
     text = stream.getvalue()
     assert "mapsize 1024\n" in text and "mapsize 1024,0.1" in text and "finest native cell" in text
     assert not (project / "stage1").exists()
+
+
+def test_per_if_mode_honours_exclude_channels_and_skips_empty_ifs(project: Path, fake_difmap: Path) -> None:
+    from lenspipe.ui.commands import RunRequest, build_steps
+
+    cfg = Stage1Config.model_validate({
+        "calibration_mode": "per-if",
+        "per_if": {"if_count": 3, "channels_per_if": 4, "edge_channels": 0, "exclude_channels": "spw1:1; spw2"},
+    })
+    kept, skipped = cfg.per_if.selections()
+    assert [s.if_number for s in kept] == [1, 2] and skipped == [3]
+    text, _ = stage1_commands(
+        uvfits=Path("/i/x.uvfits"), starting_model=Path("/i/x.gmod"), residual_image=Path("/o/nr.fits"),
+        clean_image=Path("/o/nc.fits"), calibrated_uvfits=Path("/o/x.cal.uvf"), final_model=Path("/o/x.gmod"),
+        config=cfg, fixed_index_model=Path("/o/x.fixed.gmod"),
+        per_if_models=[Path("/o/x.if001.gmod"), Path("/o/x.if002.gmod"), Path("/o/x.if003.gmod")],
+    )
+    assert "! IF(s) skipped (no channels left after exclusions): 3" in text
+    assert "! IF 2: channels 5 7-8\nselect i,5,5,7,8\n" in text and "wmodel /o/x.if002.gmod" in text
+    assert "wmodel /o/x.if003.gmod" not in text
+    assert "select i,1,12\nrmodel /i/x.gmod\n" in text  # final full-band fit untouched
+    with pytest.raises(ValueError, match="outside 0-2"):
+        Stage1Config.model_validate({"per_if": {"if_count": 3, "channels_per_if": 4, "exclude_channels": "spw3"}})
+
+    quiet = Reporter(stream=io.StringIO())
+    run_cfg = _cfg(fake_difmap, calibration_mode="per-if",
+                   per_if={"if_count": 2, "channels_per_if": 4, "edge_channels": 0, "exclude_channels": "spw0:1; spw1"})
+    results = run_stage1(project, run_cfg, reporter=quiet, workers=1, epochs={"A"})
+    assert all(r.ok for r in results), [r.message for r in results]
+    d = Layout.at(project).stage_dir(1, "per-if") / "MG0414.A"
+    assert (d / "MG0414.A.if001.gmod").is_file() and not (d / "MG0414.A.if002.gmod").exists()
+    meta = json.loads((d / "MG0414.A.stage1.metadata.json").read_text())["per_if"]
+    assert meta["exclude_channels_spec"] == "spw0:1; spw1" and meta["skipped_ifs"] == [2]
+    assert meta["selected_ranges_one_based"] == [
+        {"if_number": 1, "first_channel": 1, "last_channel": 4, "channels": [[1, 1], [3, 4]], "n_channels": 3}
+    ]
+    steps, _ = build_steps(RunRequest(root=project, stages=[1], calibration_mode="per-if", stage1_per_if_exclude="spw0-47:0-7"))
+    assert steps[0].argv[-2:] == ["--per-if-exclude-channels", "spw0-47:0-7"]

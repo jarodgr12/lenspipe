@@ -204,9 +204,14 @@ def _write_metadata(
             "channels_per_if": layout.channels_per_if,
             "edge_channels": layout.edge_channels,
             "total_channels": layout.total_channels,
+            "exclude_channels_spec": layout.exclude_channels,
+            "skipped_ifs": layout.selections()[1],
             "selected_ranges_one_based": [
-                {"if_number": index, "first_channel": first, "last_channel": last}
-                for index, (first, last) in enumerate(layout.channel_ranges(), start=1)
+                {
+                    "if_number": s.if_number, "first_channel": s.first, "last_channel": s.last,
+                    "channels": [list(run) for run in s.segments], "n_channels": len(s.channels),
+                }
+                for s in layout.selections()[0]
             ],
             "amplitude_calibration": "gscale",
             "spectral_index_fixed_at": 0,
@@ -437,9 +442,10 @@ def run_epoch(
             paths, False, "failed", f"DifMAP returned status {result.returncode}; see {paths.log_file}"
         )
 
+    calibrated_ifs = {s.if_number for s in config.stage1.per_if.selections()[0]} if per_if else set()
     required = (
         paths.calibrated_uvfits, paths.final_model, paths.native_clean_image, paths.native_residual_image,
-        *(paths.per_if_models if per_if else ()),
+        *(m for n, m in enumerate(paths.per_if_models, start=1) if n in calibrated_ifs),
     )
     missing = [path for path in required if not path.exists()]
     if missing:
@@ -462,7 +468,8 @@ def run_epoch(
     try:
         label_fitted_model(paths.final_model, hierarchy)
         for model in paths.per_if_models if per_if else ():
-            label_fitted_model(model, hierarchy)
+            if model.is_file():
+                label_fitted_model(model, hierarchy)
         native_geometry = image_geometry(paths.native_clean_image)
         _write_metadata(
             paths,

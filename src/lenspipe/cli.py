@@ -305,6 +305,10 @@ def stage1(
     if_count: Annotated[int | None, typer.Option("--if-count", help="per-if mode: number of IFs.")] = None,
     channels_per_if: Annotated[int | None, typer.Option("--channels-per-if", help="per-if mode: channels per IF.")] = None,
     edge_channels: Annotated[int | None, typer.Option("--edge-channels", help="per-if mode: channels dropped from each end of every IF.")] = None,
+    per_if_exclude_channels: Annotated[
+        str | None,
+        typer.Option("--per-if-exclude-channels", help="per-if mode: channels to leave out, e.g. 'spw0-47:0-7; spw7' (CASA numbering). '' clears."),
+    ] = None,
     reimage_only: Annotated[bool, typer.Option("--reimage-only", help="Skip calibration; redo the common-grid maps.")] = False,
 ) -> None:
     """Self-calibrate, model-fit and image each epoch (inputs/ -> stage1/<mode>/)."""
@@ -322,10 +326,13 @@ def stage1(
         cfg = cfg.with_overrides(stage1={"final_if_selfcal": final})
     cfg = _with_calibration_mode(cfg, calibration_mode)
     per_if = {"if_count": if_count, "channels_per_if": channels_per_if, "edge_channels": edge_channels}
-    if any(v is not None for v in per_if.values()):
-        cfg = cfg.with_overrides(
-            stage1={"per_if": {**cfg.stage1.per_if.model_dump(), **{k: v for k, v in per_if.items() if v is not None}}}
-        )
+    if per_if_exclude_channels is not None:
+        per_if["exclude_channels"] = per_if_exclude_channels.strip() or None
+    if any(v is not None for v in per_if.values()) or per_if_exclude_channels is not None:
+        merged = {**cfg.stage1.per_if.model_dump(), **{k: v for k, v in per_if.items() if v is not None}}
+        if per_if_exclude_channels is not None and not per_if_exclude_channels.strip():
+            merged["exclude_channels"] = None
+        cfg = cfg.with_overrides(stage1={"per_if": merged})
     try:
         results = run_stage1(
             root, cfg, epochs=set(epoch) if epoch else None, overwrite=overwrite,

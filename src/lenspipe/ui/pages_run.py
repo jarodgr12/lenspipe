@@ -178,9 +178,20 @@ def run_page() -> None:
                         s1_edge = ui.number(
                             "Edge channels", value=config.stage1.per_if.edge_channels, min=0, step=1
                         ).props("dense outlined").classes("w-32")
+                        s1_exclude = ui.input(
+                            "Per-IF channels to leave out", value=config.stage1.per_if.exclude_channels or "",
+                            placeholder="spw0-47:0-7; spw7",
+                        ).props("dense outlined stack-label").classes("w-[26rem]")
+                        s1_exclude.tooltip(
+                            "Channels left out of each IF's self-cal and per-IF fit in per-IF mode, on top of the "
+                            "edge default. " + EXCLUSION_TOOLTIP
+                        )
                         ui.label(
                             "Stage 2 and 3 read the same mode's tree; results live under stage1/<mode>/"
                         ).classes("text-caption opacity-70")
+                    per_if_examples = _examples(
+                        "How to write what to leave out (CASA numbering: spw and channel both start at 0)", EXCLUSION_EXAMPLES
+                    )
                     with ui.row().classes("gap-4 items-center"):
                         final_if = ui.switch(
                             "Final per-IF self-cal", value=config.stage1.final_if_selfcal.enabled
@@ -389,6 +400,7 @@ def run_page() -> None:
                     _int_or_none(s1_channels_per_if.value), config.stage1.per_if.channels_per_if
                 ),
                 stage1_edge_channels=_override(_int_or_none(s1_edge.value), config.stage1.per_if.edge_channels),
+                stage1_per_if_exclude=_override((s1_exclude.value or "").strip(), config.stage1.per_if.exclude_channels or ""),
                 stage1_reimage_only=bool(reimage_only.value),
                 stage2_mode=mode_value,
                 stage2_shards=(shards.value or "").strip() or None,
@@ -448,7 +460,7 @@ def run_page() -> None:
             point_opacity_label.set_text(f"Point opacity {float(point_opacity.value):.2f}")
             bar_opacity_label.set_text(f"Error-bar opacity {float(error_bar_opacity.value):.2f}")
             stage1_card.set_visibility(stage_boxes[1].value)
-            for widget in (if_count, s1_channels_per_if, s1_edge):
+            for widget in (if_count, s1_channels_per_if, s1_edge, s1_exclude, per_if_examples):
                 widget.set_visibility(calibration_mode.value == "per-if")
             final_if_channels.set_visibility(bool(final_if.value))
             final_if_examples.set_visibility(bool(final_if.value))
@@ -484,7 +496,7 @@ def run_page() -> None:
 
         for widget in (
             *stage_boxes.values(), epochs, overwrite, dry_run, workers, calibration_mode, if_count,
-            s1_channels_per_if, s1_edge, final_if, final_if_channels, reimage_only, mode, channels_per_if,
+            s1_channels_per_if, s1_edge, s1_exclude, final_if, final_if_channels, reimage_only, mode, channels_per_if,
             channels, shards, edge, s2_exclude, iterations, unflag, keep_models, plots, s2_error_bars,
             error_source, product, plot_workers, fit_method, reference_frequency, formats,
             exclude_channels, exclude_epoch_channels, annotations, s3_error_bars, point_opacity, error_bar_opacity,
