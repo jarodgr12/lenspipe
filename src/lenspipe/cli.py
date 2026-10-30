@@ -396,6 +396,10 @@ def stage1(
         typer.Option("--per-if-exclude-channels", help="per-if mode: channels to leave out, e.g. 'spw0-47:0-7; spw7' (CASA numbering). '' clears."),
     ] = None,
     reimage_only: Annotated[bool, typer.Option("--reimage-only", help="Skip calibration; redo the common-grid maps.")] = False,
+    reimage: Annotated[
+        bool | None,
+        typer.Option("--reimage/--no-reimage", help="Run (or skip) the second, common-grid imaging pass after calibration (default: stage1.reimage)."),
+    ] = None,
     run: RunOpt = None,
 ) -> None:
     """Self-calibrate, model-fit and image each epoch (inputs/ -> stage1/<mode>/)."""
@@ -412,6 +416,8 @@ def stage1(
             final["exclude_channels"] = final_if_exclude_channels.strip() or None
         cfg = cfg.with_overrides(stage1={"final_if_selfcal": final})
     cfg = _with_calibration_mode(cfg, calibration_mode)
+    if reimage is not None:
+        cfg = cfg.with_overrides(stage1={"reimage": reimage})
     per_if = {"if_count": if_count, "channels_per_if": channels_per_if, "edge_channels": edge_channels}
     if per_if_exclude_channels is not None:
         per_if["exclude_channels"] = per_if_exclude_channels.strip() or None

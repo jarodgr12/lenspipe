@@ -241,6 +241,12 @@ def run_page(run: str | None = None) -> None:
                         final_if_channels.tooltip(
                             "Channels left out of each IF's self-cal, on top of the edge default. " + EXCLUSION_TOOLTIP
                         )
+                        reimage = ui.switch("Common-grid imaging pass", value=config.stage1.reimage)
+                        reimage.tooltip(
+                            "After calibration, image every calibrated epoch again on one shared cell so the maps "
+                            "line up across epochs (*.cln.fits). Off keeps only the native maps from the "
+                            "calibration pass; Stage 3 map figures then use those."
+                        )
                         reimage_only = ui.switch("Re-image only (common grid)", value=False)
                         ui.label(
                             f"{config.stage1.final_if_selfcal.if_count} IFs x "
@@ -440,6 +446,7 @@ def run_page(run: str | None = None) -> None:
                 stage1_edge_channels=_override(_int_or_none(s1_edge.value), config.stage1.per_if.edge_channels),
                 stage1_per_if_exclude=_override((s1_exclude.value or "").strip(), config.stage1.per_if.exclude_channels or ""),
                 stage1_reimage_only=bool(reimage_only.value),
+                stage1_reimage=_override(bool(reimage.value), config.stage1.reimage),
                 stage2_mode=mode_value,
                 stage2_shards=(shards.value or "").strip() or None,
                 stage2_channels_per_if=_int_or_none(channels_per_if.value),
@@ -601,7 +608,7 @@ def run_page(run: str | None = None) -> None:
 
         for widget in (
             *stage_boxes.values(), epochs, overwrite, dry_run, workers, calibration_mode, if_count,
-            s1_channels_per_if, s1_edge, s1_exclude, final_if, final_if_channels, reimage_only, mode, channels_per_if,
+            s1_channels_per_if, s1_edge, s1_exclude, final_if, final_if_channels, reimage, reimage_only, mode, channels_per_if,
             channels, shards, edge, s2_exclude, iterations, unflag, keep_models, plots, s2_error_bars,
             error_source, product, plot_workers, fit_method, reference_frequency, formats,
             exclude_channels, exclude_epoch_channels, annotations, s3_error_bars, point_opacity, error_bar_opacity,

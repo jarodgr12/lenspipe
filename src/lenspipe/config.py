@@ -228,6 +228,15 @@ def _legacy_selfcal_schedule() -> list[SelfcalStep]:
 class Stage1Config(_Model):
     map_pixels: int = Field(1024, ge=64)
     cell_mas: float | None = Field(None, description="Cell size in mas; None lets DifMAP choose.")
+    reimage: bool = Field(
+        True,
+        description=(
+            "Run the second imaging pass after calibration: every calibrated epoch of the mode is imaged "
+            "again on one common cell (cell_mas, or the finest native cell), giving *.cln.fits / *.resid.fits. "
+            "Off keeps only the native maps from the calibration pass (*.native.cln.fits); Stage 3 map "
+            "figures then use those. '--reimage-only' runs the pass regardless."
+        ),
+    )
     weighting: str = Field("uvw 0,-1,false", description="DifMAP uvw command (natural weighting).")
     unflag: bool = Field(True, description="Run 'unflag *' after observe.")
     selfcal: list[SelfcalStep] = Field(default_factory=_legacy_selfcal_schedule)
@@ -611,6 +620,7 @@ calibration_mode = "full-band"      # "full-band": the schedule above on the who
                                     # "per-if": the schedule per IF (amplitude steps become gscale,
                                     # spectral index fixed at 0), then one full-band fit; see [stage1.per_if]
 # cell_mas = 0.1                    # common imaging cell for the second pass; default = finest native cell
+reimage = true                      # false: skip the second (common-grid) imaging pass; keep the native maps only
 
 [stage1.per_if]                     # channel layout used by calibration_mode = "per-if"
 if_count = 48

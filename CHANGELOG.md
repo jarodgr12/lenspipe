@@ -3,6 +3,17 @@
 Each entry says whether existing products need re-running. The `lenspipe`
 version that made a product is recorded in its metadata JSON.
 
+## 2.4.1 — 2026-10-30
+
+**Re-run needed:** no.
+
+- Added: `stage1.reimage` (default true). Set it false to skip Stage 1's
+  second, common-grid imaging pass: each epoch keeps the native maps from
+  its calibration pass, Stage 3 map figures fall back to those, and the
+  metadata simply has no common-grid entries. CLI `--reimage/--no-reimage`
+  on `stage1`; Run page switch "Common-grid imaging pass". `--reimage-only`
+  still runs the pass on request.
+
 ## 2.4.0 — 2026-10-30
 
 **Re-run needed:** no.

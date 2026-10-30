@@ -781,6 +781,8 @@ def run_stage1(
             result = run_epoch(paths, config, overwrite=overwrite, dry_run=True, reporter=reporter)
             _report(reporter, result)
             results.append(result)
+            if not config.stage1.reimage and not reimage_only:
+                continue
             example = reimage_epoch(paths, config, config.stage1.cell_mas or 0.1, reporter=reporter, dry_run=True)
             example.message = (
                 "common-grid imaging commands (cell shown is "
@@ -817,6 +819,12 @@ def run_stage1(
             return results
         if any(r.status == "failed" for r in results):
             reporter.warn("[stage1] calibration incomplete; common-grid imaging not started")
+            return results
+        if not config.stage1.reimage:
+            reporter.log(
+                "[stage1] common-grid imaging pass off (stage1.reimage = false); the native maps "
+                "(*.native.cln.fits, *.native.resid.fits) are the final maps"
+            )
             return results
 
     just_calibrated = {r.paths.prefix for r in results if r.status == "completed"}

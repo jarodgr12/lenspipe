@@ -30,6 +30,7 @@ class RunRequest:
     stage1_edge_channels: int | None = None
     stage1_per_if_exclude: str | None = None  # "" clears the configured spec
     stage1_reimage_only: bool = False
+    stage1_reimage: bool | None = None  # the second, common-grid imaging pass
     stage2_mode: str | None = None
     stage2_shards: str | None = None
     stage2_channels_per_if: int | None = None
@@ -113,6 +114,7 @@ def build_steps(request: RunRequest) -> tuple[list[ChainStep], list[str]]:
             argv += ["--per-if-exclude-channels", request.stage1_per_if_exclude]
         if request.stage1_reimage_only:
             argv.append("--reimage-only")
+        argv += _toggle(request.stage1_reimage, "--reimage", "--no-reimage")
         if request.workers:
             argv += ["--workers", str(request.workers)]
         if request.overwrite:
