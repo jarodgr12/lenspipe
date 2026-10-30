@@ -197,9 +197,9 @@ A run is a named parameter set with its own outputs: `runs/<label>/` inside
 the project, holding a copy of `lenspipe.toml` frozen when the run is created,
 an `inputs` link to the project's inputs, and its own `stage1/`, `stage2/` and
 `stage3/` trees laid out exactly like the project's. That is what makes an
-overnight queue safe: set the Parameters page up, type a label in the Run
-page's "Run label" field and submit; change the parameters, type another
-label, submit again. Each job reads its run's frozen file, not whatever
+overnight queue safe: set the Parameters page up, type a name into the Run
+page's "Run label" box and submit; change the parameters, type another
+name, submit again. An "Existing runs" picker beside the box reopens a run. Each job reads its run's frozen file, not whatever
 `lenspipe.toml` says when it finally starts, and writes under its own label,
 so the morning's results can be compared instead of overwritten. The Run page
 shows whether an existing run's frozen parameters still match the Parameters

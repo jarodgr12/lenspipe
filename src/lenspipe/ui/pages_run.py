@@ -154,20 +154,21 @@ def run_page(run: str | None = None) -> None:
             with ui.column().classes("gap-3 flex-1 min-w-0"):
                 with ui.card().classes("w-full q-pa-md gap-2").props("flat bordered"):
                     ui.label("Run (a separate parameter set with its own outputs)").classes("text-subtitle2")
-                    run_options = {"": "project itself", **{label: label for label in existing_runs}}
-                    if requested_run and requested_run not in run_options:
-                        run_options[requested_run] = requested_run
                     with ui.row().classes("gap-4 items-center"):
-                        run_label = ui.select(
-                            run_options, label="Run label", value=requested_run, with_input=True,
-                            new_value_mode="add-unique",
-                        ).props("dense outlined").classes("w-72")
+                        run_label = ui.input(
+                            "Run label (type a name, e.g. A)", value=requested_run, placeholder="empty = the project itself",
+                        ).props("dense outlined clearable stack-label").classes("w-80")
                         run_label.tooltip(
-                            "Type a new label to start a run, or pick an existing one. A run is runs/<label>/ inside "
-                            "the project: lenspipe.toml is copied into it when it is created (so later edits on the "
+                            "Type a name for a new run, or pick one on the right. A run is runs/<label>/ inside the "
+                            "project: lenspipe.toml is copied into it when it is created (so later edits on the "
                             "Parameters page do not touch queued jobs) and its stage1/, stage2/ and stage3/ are its own. "
                             "Queue one job per label to compare parameter sets overnight."
                         )
+                        existing_select = ui.select(
+                            {"": "project itself", **{label: label for label in existing_runs}},
+                            label="Existing runs", value=requested_run if requested_run in existing_runs else "",
+                        ).props("dense outlined").classes("w-56")
+                        existing_select.set_visibility(bool(existing_runs))
                         run_note = ui.label().classes("text-caption opacity-70")
                     with ui.expansion(
                         "The run's frozen parameters differ from the Parameters page", icon="difference"
@@ -584,17 +585,25 @@ def run_page(run: str | None = None) -> None:
             notes_label.set_text("  ".join(notes))
             submit_button.set_enabled(bool(steps) and run_state()[1] is None)
 
-        def on_run_change() -> None:
-            # Another run means another baseline config for every field, so the page reloads for it;
-            # a label that is not a run yet keeps the project's config and just updates the notes.
+        def on_run_settled() -> None:
+            # Called when the label is confirmed (Enter, leaving the box, or the picker). Another
+            # *existing* run means another baseline config for every field, so the page reloads
+            # for it; a label that is not a run yet keeps the project's config and just updates the notes.
             label, problem = run_state()
             if problem:
                 refresh_preview()
                 return
-            if (label or "") != requested_run:
-                ui.navigate.to(f"/run?run={label}" if label else "/run")
+            target = label if label in existing_runs else ""
+            if target != (requested_run if requested_run in existing_runs else ""):
+                ui.navigate.to(f"/run?run={target}" if target else (f"/run?run={label}" if label else "/run"))
             else:
                 refresh_preview()
+
+        def on_pick_existing() -> None:
+            label = existing_select.value or ""
+            run_label.set_value(label)
+            if label != requested_run:
+                ui.navigate.to(f"/run?run={label}" if label else "/run")
 
         async def refreeze() -> None:
             from lenspipe.runs import refreeze_run
@@ -616,7 +625,10 @@ def run_page(run: str | None = None) -> None:
             image_reference_epoch,
         ):
             widget.on_value_change(refresh_preview)
-        run_label.on_value_change(on_run_change)
+        run_label.on_value_change(refresh_preview)  # live note and preview while typing
+        run_label.on("keydown.enter", on_run_settled)
+        run_label.on("blur", on_run_settled)
+        existing_select.on_value_change(on_pick_existing)
         refresh_preview()
 
         async def submit() -> None:
