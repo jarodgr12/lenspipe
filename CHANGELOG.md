@@ -3,6 +3,24 @@
 Each entry says whether existing products need re-running. The `lenspipe`
 version that made a product is recorded in its metadata JSON.
 
+## 2.4.2 — 2026-10-30
+
+**Re-run needed:** no.
+
+- Added: updating from the console. The Project page has a "Version" card
+  that checks the repository for a newer release (highest `vX.Y.Z` tag,
+  read with `git ls-remote`, no token needed), an "Update" button that
+  runs `lenspipe update` as a job, and a "Restart console" button that
+  starts the console again on the installed version; the page reloads by
+  itself. `lenspipe update --check` now also prints the newest release.
+  Module `lenspipe/updates.py`.
+- Added: a parameter record per job. At submit the console copies the
+  config the job is queued against (the project's `lenspipe.toml`, or the
+  run's frozen one) into the job folder; when the stage starts it writes
+  `effective_config.toml`, the complete parameters it uses after every
+  command-line override. The Jobs page shows the set under each job
+  ("Parameters this job used").
+
 ## 2.4.1 — 2026-10-30
 
 **Re-run needed:** no.
