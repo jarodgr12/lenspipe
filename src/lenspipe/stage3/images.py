@@ -240,9 +240,18 @@ def draw_map(
 def stage1_images_for(
     project_root: Path, source: str, epoch: str, calibration_mode: str = "full-band"
 ) -> tuple[Path, Path]:
-    """Paths of the Stage 1 common-grid clean and residual maps for one epoch (they may not exist)."""
+    """Paths of the Stage 1 clean and residual maps for one epoch (they may not exist).
+
+    The common-grid maps when the second imaging pass wrote them; otherwise
+    (``stage1.reimage = false``) the native maps from the calibration pass.
+    """
     directory = Path(project_root) / "stage1" / calibration_mode / f"{source}.{epoch}"
-    return directory / f"{source}.{epoch}.cln.fits", directory / f"{source}.{epoch}.resid.fits"
+    clean, residual = directory / f"{source}.{epoch}.cln.fits", directory / f"{source}.{epoch}.resid.fits"
+    if not clean.is_file() and not residual.is_file():
+        native = directory / f"{source}.{epoch}.native.cln.fits", directory / f"{source}.{epoch}.native.resid.fits"
+        if native[0].is_file() or native[1].is_file():
+            return native
+    return clean, residual
 
 
 def _beam_of(path: Path) -> tuple[float, float, float] | None:
