@@ -17,6 +17,7 @@ class RunRequest:
 
     root: Path
     stages: list[int]
+    run: str | None = None  # work in <root>/runs/<label>/ (frozen parameters, own outputs)
     epochs: list[str] = field(default_factory=list)
     overwrite: bool = False
     dry_run: bool = False
@@ -94,8 +95,10 @@ def build_steps(request: RunRequest) -> tuple[list[ChainStep], list[str]]:
     steps: list[ChainStep] = []
     notes: list[str] = []
     epochs = _epoch_flags(request.epochs)
-    suffix = " " + ",".join(request.epochs) if request.epochs else ""
+    suffix = (f" [{request.run}]" if request.run else "") + (" " + ",".join(request.epochs) if request.epochs else "")
     mode_flag = ["--calibration-mode", request.calibration_mode] if request.calibration_mode else []
+    if request.run:
+        epochs = ["--run", request.run, *epochs]
 
     if 1 in request.stages:
         argv = ["stage1", root, *epochs]

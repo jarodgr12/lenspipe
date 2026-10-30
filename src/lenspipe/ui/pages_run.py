@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 
-from nicegui import run, ui
+from nicegui import run as background
+from nicegui import ui
 
-from lenspipe.config import LenspipeConfig
+from lenspipe.config import LenspipeConfig, load_config
 from lenspipe.stage2 import product_tag
 from lenspipe.stage3.io import available_stage2_products
 from lenspipe.ui.commands import RunRequest, build_steps, calibrate_step, command_line
@@ -16,10 +18,10 @@ from lenspipe.ui.state import console
 FIGURE_FORMATS = ["pdf", "png", "svg"]
 
 
-def _stage2_products(calibration_mode: str) -> list[str]:
-    """Product tags present on disk under ``stage2/<calibration_mode>/``."""
+def _stage2_products(calibration_mode: str, root: Path | None = None) -> list[str]:
+    """Product tags present on disk under ``stage2/<calibration_mode>/`` of the project or a run."""
     try:
-        products = available_stage2_products(console.root, None, calibration_mode)
+        products = available_stage2_products(root or console.root, None, calibration_mode)
     except Exception:  # noqa: BLE001 - "no products yet" is a normal state here
         return []
     return sorted({tag for tags in products.values() for tag in tags})
@@ -127,10 +129,17 @@ def _epoch_exclusions(text: str) -> list[str]:
 
 
 @ui.page("/run")
-def run_page() -> None:
+def run_page(run: str | None = None) -> None:
+    """``?run=<label>`` composes jobs for that run: its frozen config is the page's baseline."""
+    from lenspipe.runs import create_run, validate_label
+
     with frame("Run", "/run"):
+        requested_run = (run or "").strip()
+        existing_runs = {item.label: item for item in console.runs()}
+        current_run = existing_runs.get(requested_run)
+        config_root = current_run.root if current_run else console.root
         try:
-            config = console.config()
+            config = load_config(config_root)
         except Exception as exc:  # noqa: BLE001
             ui.label(f"Config could not be loaded; using defaults. {exc}").classes("text-negative")
             config = LenspipeConfig()
@@ -143,6 +152,36 @@ def run_page() -> None:
 
         with ui.row().classes("w-full no-wrap gap-6 items-start"):
             with ui.column().classes("gap-3 flex-1 min-w-0"):
+                with ui.card().classes("w-full q-pa-md gap-2").props("flat bordered"):
+                    ui.label("Run (a separate parameter set with its own outputs)").classes("text-subtitle2")
+                    run_options = {"": "project itself", **{label: label for label in existing_runs}}
+                    if requested_run and requested_run not in run_options:
+                        run_options[requested_run] = requested_run
+                    with ui.row().classes("gap-4 items-center"):
+                        run_label = ui.select(
+                            run_options, label="Run label", value=requested_run, with_input=True,
+                            new_value_mode="add-unique",
+                        ).props("dense outlined").classes("w-72")
+                        run_label.tooltip(
+                            "Type a new label to start a run, or pick an existing one. A run is runs/<label>/ inside "
+                            "the project: lenspipe.toml is copied into it when it is created (so later edits on the "
+                            "Parameters page do not touch queued jobs) and its stage1/, stage2/ and stage3/ are its own. "
+                            "Queue one job per label to compare parameter sets overnight."
+                        )
+                        run_note = ui.label().classes("text-caption opacity-70")
+                    with ui.expansion(
+                        "The run's frozen parameters differ from the Parameters page", icon="difference"
+                    ).classes("w-full").props("dense") as run_diff_panel:
+                        run_diff_code = ui.code("", language="diff").classes("w-full text-xs")
+                        ui.label(
+                            "Jobs for this run use the frozen file on the left. The Parameters page edits the "
+                            "project's file; to carry those edits into this run, replace its frozen copy:"
+                        ).classes("text-caption opacity-70")
+                        ui.button(
+                            "Replace the run's frozen parameters with the current ones", icon="sync",
+                            on_click=lambda: refreeze(),
+                        ).props("outline no-caps dense")
+
                 with ui.card().classes("w-full q-pa-md gap-2").props("flat bordered"):
                     ui.label("Stages").classes("text-subtitle2")
                     with ui.row().classes("gap-6"):
@@ -186,9 +225,7 @@ def run_page() -> None:
                             "Channels left out of each IF's self-cal and per-IF fit in per-IF mode, on top of the "
                             "edge default. " + EXCLUSION_TOOLTIP
                         )
-                        ui.label(
-                            "Stage 2 and 3 read the same mode's tree; results live under stage1/<mode>/"
-                        ).classes("text-caption opacity-70")
+                        tree_note = ui.label().classes("text-caption opacity-70")
                     per_if_examples = _examples(
                         "How to write what to leave out (CASA numbering: spw and channel both start at 0)", EXCLUSION_EXAMPLES
                     )
@@ -386,6 +423,7 @@ def run_page() -> None:
             return RunRequest(
                 root=console.root,
                 stages=stages,
+                run=(run_label.value or "").strip() or None,
                 epochs=list(epochs.value or []),
                 overwrite=bool(overwrite.value),
                 dry_run=bool(dry_run.value),
@@ -453,10 +491,55 @@ def run_page() -> None:
             )
 
         disk_products: dict[str, list[str]] = {
-            config.stage1.calibration_mode: _stage2_products(config.stage1.calibration_mode)
+            config.stage1.calibration_mode: _stage2_products(config.stage1.calibration_mode, config_root)
         }
 
+        def run_state() -> tuple[str | None, str | None]:
+            """(label, problem): the chosen run label and why it cannot be used, if it cannot."""
+            label = (run_label.value or "").strip()
+            if not label:
+                return None, None
+            try:
+                return validate_label(label), None
+            except ValueError as exc:
+                return label, str(exc)
+
+        def describe_run() -> None:
+            label, problem = run_state()
+            run_diff_panel.set_visibility(False)
+            if problem:
+                run_note.set_text(problem)
+                run_note.classes(add="text-negative", remove="opacity-70")
+                tree_note.set_text("")
+                return
+            run_note.classes(remove="text-negative", add="opacity-70")
+            if label is None:
+                run_note.set_text(
+                    "Outputs go to the project's own stage1/, stage2/ and stage3/; each job reads lenspipe.toml "
+                    "when it starts."
+                )
+                tree_note.set_text("Stage 2 and 3 read the same mode's tree; results live under stage1/<mode>/")
+                return
+            tree_note.set_text(f"Stage 2 and 3 read the same mode's tree; results live under runs/{label}/stage1/<mode>/")
+            item = existing_runs.get(label)
+            if item is None:
+                run_note.set_text(
+                    f"New run: on submit runs/{label}/ is created with the parameters on the Parameters page "
+                    "frozen into it; its outputs stay separate from the project's."
+                )
+                return
+            created = (item.created_utc or "")[:16].replace("T", " ")
+            diff = item.config_diff()
+            run_note.set_text(
+                f"Existing run runs/{label}/ (created {created or 'unknown'}); jobs use its frozen parameters"
+                + (", which differ from the Parameters page (see below)." if diff else ", identical to the Parameters page.")
+            )
+            if diff:
+                run_diff_code.set_content(diff)
+                run_diff_panel.set_visibility(True)
+
         def refresh_preview() -> None:
+            describe_run()
             point_opacity_label.set_text(f"Point opacity {float(point_opacity.value):.2f}")
             bar_opacity_label.set_text(f"Error-bar opacity {float(error_bar_opacity.value):.2f}")
             stage1_card.set_visibility(stage_boxes[1].value)
@@ -478,7 +561,7 @@ def run_page() -> None:
                 )
             current_mode = str(calibration_mode.value or config.stage1.calibration_mode)
             if current_mode not in disk_products:  # one scan per calibration mode per page view
-                disk_products[current_mode] = _stage2_products(current_mode)
+                disk_products[current_mode] = _stage2_products(current_mode, config_root)
             options = product_options(disk_products[current_mode], expected, _standard_tags(config))
             typed = product.value if product.value and product.value not in options else None
             if typed:
@@ -492,7 +575,29 @@ def run_page() -> None:
                 "\n\n".join(command_line(step.argv) for step in steps) or "(nothing selected)"
             )
             notes_label.set_text("  ".join(notes))
-            submit_button.set_enabled(bool(steps))
+            submit_button.set_enabled(bool(steps) and run_state()[1] is None)
+
+        def on_run_change() -> None:
+            # Another run means another baseline config for every field, so the page reloads for it;
+            # a label that is not a run yet keeps the project's config and just updates the notes.
+            label, problem = run_state()
+            if problem:
+                refresh_preview()
+                return
+            if (label or "") != requested_run:
+                ui.navigate.to(f"/run?run={label}" if label else "/run")
+            else:
+                refresh_preview()
+
+        async def refreeze() -> None:
+            from lenspipe.runs import refreeze_run
+
+            label, problem = run_state()
+            if not label or problem:
+                return
+            await background.io_bound(refreeze_run, console.root, label)
+            ui.notify(f"runs/{label}/lenspipe.toml now matches the project's", type="positive")
+            ui.navigate.to(f"/run?run={label}")
 
         for widget in (
             *stage_boxes.values(), epochs, overwrite, dry_run, workers, calibration_mode, if_count,
@@ -504,18 +609,33 @@ def run_page() -> None:
             image_reference_epoch,
         ):
             widget.on_value_change(refresh_preview)
+        run_label.on_value_change(on_run_change)
         refresh_preview()
 
         async def submit() -> None:
+            label, problem = run_state()
+            if problem:
+                ui.notify(problem, type="negative")
+                return
+            if label:
+                # Create the run now, so the parameters frozen into it are the ones on screen at submit,
+                # not whatever lenspipe.toml says when the queued job finally starts.
+                try:
+                    _, created = await background.io_bound(create_run, console.root, label)
+                except (ValueError, FileNotFoundError) as exc:
+                    ui.notify(str(exc), type="negative")
+                    return
+                if created:
+                    ui.notify(f"Created run runs/{label}/ with the current parameters frozen", type="positive")
             steps, _ = build_steps(request())
             if not steps:
                 return
-            first = await run.io_bound(console.submit_chain, steps)
+            first = await background.io_bound(console.submit_chain, steps)
             if first is not None:
                 ui.navigate.to(f"/jobs?job={first.id}")
 
         async def submit_casa() -> None:
             step = calibrate_step(console.root, (casa_steps.value or "").strip() or None, bool(casa_list.value))
-            first = await run.io_bound(console.submit_chain, [step])
+            first = await background.io_bound(console.submit_chain, [step])
             if first is not None:
                 ui.navigate.to(f"/jobs?job={first.id}")

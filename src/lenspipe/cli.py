@@ -52,6 +52,16 @@ def _with_calibration_mode(cfg: LenspipeConfig, mode: str | None) -> LenspipeCon
 EpochOpt = Annotated[
     list[str] | None, typer.Option("--epoch", "-e", help="Process only this epoch; repeatable.")
 ]
+RunOpt = Annotated[
+    str | None,
+    typer.Option(
+        "--run",
+        help=(
+            "Work in <project>/runs/<label>/: its own frozen lenspipe.toml (copied from the project when the "
+            "run is first created) and its own stage trees, sharing the project's inputs/."
+        ),
+    ),
+]
 
 
 def _version_callback(value: bool) -> None:
@@ -82,12 +92,32 @@ def _project_root(project: Path) -> Path:
     return root
 
 
-def _load(project: Path, config_path: Path | None) -> tuple[Path, LenspipeConfig]:
+def _run_root(project_root: Path, label: str) -> Path:
+    """``<project>/runs/<label>``, created with the project's config frozen now when it does not exist."""
+    from lenspipe.runs import create_run
+
+    try:
+        run, created = create_run(project_root, label)
+    except (ValueError, FileNotFoundError) as exc:
+        typer.echo(f"ERROR: {exc}", err=True)
+        raise typer.Exit(code=2) from exc
+    if created:
+        typer.echo(
+            f"Created run {run.label}: {run.root} (parameters frozen from {project_root / CONFIG_FILENAME})", err=True
+        )
+    else:
+        typer.echo(f"Using run {run.label}: {run.root}", err=True)
+    return run.root
+
+
+def _load(project: Path, config_path: Path | None, run: str | None = None) -> tuple[Path, LenspipeConfig]:
     import tomllib
 
     from pydantic import ValidationError
 
     root = _project_root(project)
+    if run:
+        root = _run_root(root, run)
     try:
         return root, load_config(root, config_path)
     except tomllib.TOMLDecodeError as exc:
@@ -277,6 +307,62 @@ def inventory_cmd(
             f"combined  {item.get('calibration_mode') or '-'}  {item['source']}.{item['product']}  "
             f"visits={item['n_visits']}  {item['path']}"
         )
+    for item in summary["runs"]:
+        typer.echo(
+            f"run  {item['label']:<20} stage1={item['stage1']} stage2={item['stage2']} stage3={item['stage3']} "
+            f"combined={item['combined']}  parameters {'differ from' if item['config_differs'] else 'same as'} "
+            f"the project's  {item['root']}"
+        )
+
+
+@app.command()
+def runs(
+    project: ProjectArg = Path("."),
+    create: Annotated[str | None, typer.Option("--create", help="Create a run with the project's current parameters frozen into it.")] = None,
+    diff: Annotated[str | None, typer.Option("--diff", help="Show how the project's current parameters differ from this run's frozen ones.")] = None,
+    refreeze: Annotated[str | None, typer.Option("--refreeze", help="Replace this run's frozen parameters with the project's current ones.")] = None,
+    as_json: Annotated[bool, typer.Option("--json", help="Machine-readable output.")] = False,
+) -> None:
+    """List, create or inspect runs: named parameter sets with their own output trees under runs/<label>/."""
+    from lenspipe.runs import create_run, get_run, list_runs, refreeze_run
+
+    root = _project_root(project)
+    try:
+        if create:
+            run, created = create_run(root, create)
+            typer.echo(f"{'Created' if created else 'Already exists:'} run {run.label}: {run.root}")
+        if refreeze:
+            run = refreeze_run(root, refreeze)
+            typer.echo(f"Run {run.label} now carries the project's current parameters.")
+        if diff:
+            run = get_run(root, diff)
+            if run is None:
+                typer.echo(f"ERROR: run {diff!r} does not exist under {root}", err=True)
+                raise typer.Exit(code=1)
+            text = run.config_diff()
+            typer.echo(text.rstrip("\n") if text else f"Run {run.label} has the same parameters as the project.")
+    except (ValueError, FileNotFoundError) as exc:
+        typer.echo(f"ERROR: {exc}", err=True)
+        raise typer.Exit(code=2) from exc
+    if create or refreeze or diff:
+        return
+    found = list_runs(root)
+    if as_json:
+        typer.echo(json.dumps([run.to_dict() for run in found], indent=2))
+        return
+    if not found:
+        typer.echo(
+            f"No runs under {root / 'runs'}. Create one with 'lenspipe runs {root} --create <label>' or with "
+            "'--run <label>' on a stage command."
+        )
+        return
+    for run in found:
+        counts = run.to_dict()
+        typer.echo(
+            f"{run.label:<20} created {run.created_utc or '-':<32} stage1={counts['stage1']} stage2={counts['stage2']} "
+            f"stage3={counts['stage3']} combined={counts['combined']}  parameters "
+            f"{'differ from' if run.config_differs else 'same as'} the project's"
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -310,11 +396,12 @@ def stage1(
         typer.Option("--per-if-exclude-channels", help="per-if mode: channels to leave out, e.g. 'spw0-47:0-7; spw7' (CASA numbering). '' clears."),
     ] = None,
     reimage_only: Annotated[bool, typer.Option("--reimage-only", help="Skip calibration; redo the common-grid maps.")] = False,
+    run: RunOpt = None,
 ) -> None:
     """Self-calibrate, model-fit and image each epoch (inputs/ -> stage1/<mode>/)."""
     from lenspipe.stage1 import run_stage1
 
-    root, cfg = _load(project, config)
+    root, cfg = _load(project, config, run)
     if difmap:
         cfg = cfg.with_overrides(project={"difmap": {**cfg.project.difmap.model_dump(), "executable": difmap}})
     if final_if_selfcal is not None or final_if_exclude_channels is not None:
@@ -371,11 +458,12 @@ def stage2(
     dry_run: Annotated[bool, typer.Option("--dry-run")] = False,
     workers: Annotated[int | None, typer.Option("--workers", help="Epochs in parallel.")] = None,
     difmap: Annotated[str | None, typer.Option("--difmap")] = None,
+    run: RunOpt = None,
 ) -> None:
     """Fit the frozen model per channel or per IF (stage1/<mode>/ -> stage2/<mode>/)."""
     from lenspipe.stage2 import run_stage2
 
-    root, cfg = _load(project, config)
+    root, cfg = _load(project, config, run)
     cfg = _with_calibration_mode(cfg, calibration_mode)
     overrides = {
         "mode": mode,
@@ -455,12 +543,13 @@ def stage3(
     list_products: Annotated[bool, typer.Option("--list-products", help="List Stage 2 products and exit.")] = False,
     calibration_mode: CalibrationModeOpt = None,
     dry_run: Annotated[bool, typer.Option("--dry-run", help="Report what would be analysed and written; write nothing.")] = False,
+    run: RunOpt = None,
 ) -> None:
     """Fit spectra and flux ratios, write per-visit and combined plots (stage2/<mode>/ -> stage3/<mode>/)."""
     from lenspipe.stage3 import run_stage3
     from lenspipe.stage3.io import available_stage2_products
 
-    root, cfg = _load(project, config)
+    root, cfg = _load(project, config, run)
     cfg = _with_calibration_mode(cfg, calibration_mode)
     if list_products:
         try:
@@ -523,13 +612,14 @@ def run(
     stages: Annotated[str, typer.Option("--stages", help="Comma-separated subset of 1,2,3.")] = "1,2,3",
     epoch: EpochOpt = None,
     overwrite: Annotated[bool, typer.Option("--overwrite")] = False,
+    run: RunOpt = None,
 ) -> None:
     """Run stages in order with the project configuration; stops at the first failing stage."""
     from lenspipe.stage1 import run_stage1
     from lenspipe.stage2 import product_tag, run_stage2
     from lenspipe.stage3 import run_stage3
 
-    root, cfg = _load(project, config)
+    root, cfg = _load(project, config, run)
     wanted = [int(s) for s in stages.split(",") if s.strip()]
     epochs = set(epoch) if epoch else None
     reporter = default_reporter()

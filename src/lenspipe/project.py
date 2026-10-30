@@ -488,13 +488,17 @@ def inventory(root: Path) -> dict[str, Any]:
         if not any(k == key for k, _ in epochs):
             entry(known["source"], known["epoch"], None)
 
+    from lenspipe.runs import is_run_root, list_runs
+
     order = {mode: index for index, mode in enumerate(CALIBRATION_MODES)}
     rows = [epochs[key] for key in sorted(epochs, key=lambda k: (k[0], order.get(k[1] or "", -1)))]
     summary = {
         "root": str(layout.root),
         "config_present": layout.config_path.is_file(),
+        "is_run": is_run_root(layout.root),
         "epochs": rows,
         "combined": combined,
+        "runs": [run.to_dict() for run in list_runs(layout.root)],
         "freshness": {},
     }
     _attach_freshness(summary, layout.root)

@@ -117,6 +117,24 @@ class Console:
     def inventory(self) -> dict[str, Any]:
         return inventory(self.root)
 
+    def runs(self) -> list:
+        """The project's runs (named parameter sets under ``runs/``), by label."""
+        from lenspipe.runs import list_runs
+
+        return list_runs(self.root)
+
+    def run_root(self, label: str | None) -> Path | None:
+        """The root of an existing run, or None when ``label`` is empty or names no run yet."""
+        from lenspipe.runs import get_run
+
+        if not label:
+            return None
+        try:
+            run = get_run(self.root, label)
+        except ValueError:
+            return None
+        return run.root if run else None
+
     # -- recent roots -------------------------------------------------------
 
     @staticmethod

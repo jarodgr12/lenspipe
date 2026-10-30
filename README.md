@@ -185,6 +185,31 @@ also shows interactive versions of the spectra, flux ratios and combined
 series; hovering a point gives its fit index (DifMAP numbering, from 1) and
 its spectral window and channel (CASA numbering, both from 0).
 
+### Runs: several parameter sets side by side
+
+A run is a named parameter set with its own outputs: `runs/<label>/` inside
+the project, holding a copy of `lenspipe.toml` frozen when the run is created,
+an `inputs` link to the project's inputs, and its own `stage1/`, `stage2/` and
+`stage3/` trees laid out exactly like the project's. That is what makes an
+overnight queue safe: set the Parameters page up, type a label in the Run
+page's "Run label" field and submit; change the parameters, type another
+label, submit again. Each job reads its run's frozen file, not whatever
+`lenspipe.toml` says when it finally starts, and writes under its own label,
+so the morning's results can be compared instead of overwritten. The Run page
+shows whether an existing run's frozen parameters still match the Parameters
+page (with the diff) and can replace the frozen copy on request; the Project
+page lists every run with its product counts; the Results page has a "Run"
+select. Without a label, jobs behave as before: the project's own trees, and
+`lenspipe.toml` read at job start.
+
+From a shell: `--run <label>` on `stage1`, `stage2`, `stage3` and `run`
+creates the run on first use and works inside it; `lenspipe runs <project>`
+lists runs, `--create <label>` freezes the current parameters into a new one,
+`--diff <label>` shows how the project's parameters have drifted from a run's,
+`--refreeze <label>` replaces the frozen copy. A run root is an ordinary
+project root, so `lenspipe stage2 <project>/runs/<label>` and
+`lenspipe compare` between two runs work too. Runs cannot be nested.
+
 Stop the console with `lenspipe stop <project>` (or `lenspipe stop --port 8080`),
 which works even if the terminal that started it has gone. Running jobs are
 left alone unless you add `--with-jobs`; `lenspipe stop --list` shows what is
@@ -269,6 +294,7 @@ src/lenspipe/
   difmap/        command builders, streaming subprocess runner, log parser
   stage1.py  stage2.py  stage2_quicklook.py
   stage3/        io, fitting, combined, plotting, analysis (run_stage3)
+  runs.py        runs: frozen parameter sets with their own output trees (runs/<label>/)
   jobs.py        job records and runner used by the CLI and the console
   cli.py         typer command line
   ui/            NiceGUI console
