@@ -3,6 +3,15 @@
 Each entry says whether existing products need re-running. The `lenspipe`
 version that made a product is recorded in its metadata JSON.
 
+## 2.4.3 — 2026-10-30
+
+**Re-run needed:** no.
+
+- Changed: the Run page's run label is a plain text box ("Run label: type a
+  name, e.g. A") with a separate "Existing runs" picker beside it. The
+  2.4.0 control was a dropdown that only accepted a new name typed into it
+  followed by Enter, which was not discoverable.
+
 ## 2.4.2 — 2026-10-30
 
 **Re-run needed:** no.
