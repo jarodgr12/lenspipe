@@ -131,6 +131,26 @@ def _load(project: Path, config_path: Path | None, run: str | None = None) -> tu
         raise typer.Exit(code=1) from exc
 
 
+def _record_effective_config(cfg: LenspipeConfig) -> None:
+    """Inside a console job, write the complete parameters this command uses into the job folder."""
+    from lenspipe.progress import JOB_DIR_ENV
+
+    job_dir = os.environ.get(JOB_DIR_ENV)
+    if not job_dir:
+        return
+    import tomli_w
+
+    try:
+        Path(job_dir).mkdir(parents=True, exist_ok=True)
+        (Path(job_dir) / "effective_config.toml").write_text(
+            "# Parameters used by this job, after every command-line override.\n"
+            + tomli_w.dumps(cfg.model_dump(mode="json", exclude_none=True)),
+            encoding="utf-8",
+        )
+    except OSError:
+        pass
+
+
 def _exit_for(results: list, *, dry_run: bool = False) -> int:
     failed = [r for r in results if not r.ok and r.status not in {"dry_run"}]
     if dry_run:
@@ -426,6 +446,7 @@ def stage1(
         if per_if_exclude_channels is not None and not per_if_exclude_channels.strip():
             merged["exclude_channels"] = None
         cfg = cfg.with_overrides(stage1={"per_if": merged})
+    _record_effective_config(cfg)
     try:
         results = run_stage1(
             root, cfg, epochs=set(epoch) if epoch else None, overwrite=overwrite,
@@ -507,6 +528,7 @@ def stage2(
     except ValueError as exc:
         typer.echo(f"ERROR: {exc}", err=True)
         raise typer.Exit(code=1) from exc
+    _record_effective_config(cfg)
     try:
         results = run_stage2(
             root, cfg, epochs=set(epoch) if epoch else None, overwrite=overwrite, dry_run=dry_run,
@@ -600,6 +622,7 @@ def stage3(
                 "use_tex": use_tex,
             }
         )
+        _record_effective_config(cfg)
         summary = run_stage3(
             root, cfg, epochs=set(epoch) if epoch else None,
             products=set(product) if product else None, overwrite=overwrite,
@@ -629,6 +652,7 @@ def run(
     wanted = [int(s) for s in stages.split(",") if s.strip()]
     epochs = set(epoch) if epoch else None
     reporter = default_reporter()
+    _record_effective_config(cfg)
     try:
         if 1 in wanted:
             results = run_stage1(root, cfg, epochs=epochs, overwrite=overwrite, reporter=reporter)
@@ -657,24 +681,29 @@ def update(
     check_only: Annotated[bool, typer.Option("--check", help="Show the installation source without changing anything.")] = False,
 ) -> None:
     """Reinstall lenspipe from where it was installed from (a refreshed checkout or a git remote), then run doctor."""
-    uv = shutil.which("uv") or str(Path.home() / ".local" / "bin" / "uv")
-    if not Path(uv).is_file():
+    from lenspipe.updates import check_for_update, uv_executable
+
+    uv = uv_executable()
+    if uv is None:
         typer.echo("ERROR: uv is not installed; run scripts/install.sh instead.", err=True)
         raise typer.Exit(code=1)
-    listing = subprocess.run([uv, "tool", "list", "--show-paths"], text=True, capture_output=True, check=False)
-    installed = [line for line in listing.stdout.splitlines() if line.startswith("lenspipe ")]
-    if not installed:
+    status = check_for_update()
+    if status.source is None:
         typer.echo(
             "lenspipe is not installed as a uv tool (you are probably running a development checkout "
             "with 'uv run'). Pull or unzip the new version and run 'uv sync' instead.",
             err=True,
         )
         raise typer.Exit(code=1)
-    typer.echo(f"Installed: {installed[0].strip()}")
+    typer.echo(f"Installed: {status.source}")
     typer.echo(f"Current version: {__version__}")
+    typer.echo(
+        f"Newest release: {status.latest}" + (" (update available)" if status.update_available else " (up to date)")
+        if status.latest else "Newest release: could not be checked (offline, or git missing)"
+    )
     if check_only:
         return
-    upgrade = subprocess.run([uv, "tool", "upgrade", "--reinstall", "lenspipe"], check=False)
+    upgrade = subprocess.run([str(uv), "tool", "upgrade", "--reinstall", "lenspipe"], check=False)
     if upgrade.returncode != 0:
         typer.echo("ERROR: uv tool upgrade failed; see the output above.", err=True)
         raise typer.Exit(code=upgrade.returncode)

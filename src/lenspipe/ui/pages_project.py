@@ -7,9 +7,13 @@ from typing import Any
 
 from nicegui import run, ui
 
+from lenspipe import __version__
 from lenspipe.config import CONFIG_FILENAME, default_toml
+from lenspipe.project import utc_now
 from lenspipe.ui.layout import MONO, frame
 from lenspipe.ui.state import console
+
+_started_utc = utc_now()  # update jobs created after this need a restart to take effect
 
 COLUMNS = [
     {"name": "epoch", "label": "Epoch", "field": "epoch", "align": "left"},
@@ -158,6 +162,28 @@ def project_page() -> None:
                 ).props("dense outlined options-dense").classes("w-full font-mono")
             root_status = ui.label().classes("text-sm")
 
+        with ui.card().classes("w-full q-pa-md gap-2").props("flat bordered"):
+            with ui.row().classes("w-full items-center gap-3 no-wrap"):
+                ui.label("Version").classes("text-subtitle2")
+                version_label = ui.label(f"lenspipe {__version__}; checking for a newer release...").classes("text-sm")
+                version_badge = ui.badge("", color="amber-8")
+                version_badge.set_visibility(False)
+                ui.space()
+                ui.button("Check again", icon="refresh", on_click=lambda: refresh_version()).props("outline no-caps dense")
+                update_button = ui.button("Update", icon="system_update_alt", on_click=lambda: update_now()).props("no-caps dense")
+                update_button.tooltip(
+                    "Runs 'lenspipe update' as a job: reinstalls lenspipe from where it was installed from. "
+                    "The console keeps running the old version until it is restarted."
+                )
+                restart_button = ui.button("Restart console", icon="restart_alt", on_click=lambda: restart_now()).props(
+                    "outline no-caps dense"
+                )
+                restart_button.tooltip(
+                    "Starts this console again with the installed version; the page reloads by itself. "
+                    "Running jobs are separate processes and keep going."
+                )
+            version_note = ui.label().classes("text-caption opacity-70")
+
         header = ui.row().classes("w-full items-center gap-3")
         table_holder = ui.column().classes("w-full")
         combined_holder = ui.column().classes("w-full gap-1")
@@ -239,6 +265,40 @@ def project_page() -> None:
                 + (f"{dead_total} fully flagged window(s)" if dead_total else "no fully flagged window")
             )
             flags_panel.text = "Flags (which spectral windows are empty)" + (f"  ({dead_total} empty)" if dead_total else "")
+
+        async def refresh_version() -> None:
+            from lenspipe.updates import check_for_update
+
+            version_label.set_text(f"lenspipe {__version__}; checking for a newer release...")
+            status = await run.io_bound(check_for_update)
+            version_label.set_text(status.summary())
+            version_badge.set_text(f"{status.latest} available" if status.update_available else "up to date")
+            version_badge.props(f"color={'amber-8' if status.update_available else 'green-7'}")
+            version_badge.set_visibility(status.latest is not None)
+            update_button.set_enabled(status.can_update)
+            finished = [j for j in console.jobs() if j.stage == "update" and j.status == "completed"]
+            version_note.set_text(
+                "An update job has finished: restart the console to load the new version."
+                if finished and finished[0].created_utc > _started_utc
+                else "Update reinstalls lenspipe from the repository (what 'lenspipe update' does), then restart the console."
+            )
+
+        async def update_now() -> None:
+            from lenspipe.ui.state import ChainStep
+
+            first = await run.io_bound(console.submit_chain, [ChainStep(["update"], "Update lenspipe", "update")])
+            if first is not None:
+                ui.navigate.to(f"/jobs?job={first.id}")
+
+        async def restart_now() -> None:
+            import asyncio
+
+            from lenspipe.updates import restart_console
+
+            ui.notify("Restarting the console; this page reloads in a few seconds", type="info")
+            ui.run_javascript("setTimeout(() => location.reload(), 6000)")
+            await asyncio.sleep(0.5)
+            await run.io_bound(restart_console)
 
         async def refresh_environment() -> None:
             from lenspipe.doctor import run_checks
@@ -395,4 +455,5 @@ def project_page() -> None:
         ui.timer(0.0, refresh, once=True)
         ui.timer(0.05, refresh_runs, once=True)
         ui.timer(0.1, refresh_environment, once=True)
+        ui.timer(0.2, refresh_version, once=True)
         ui.timer(5.0, auto_refresh)

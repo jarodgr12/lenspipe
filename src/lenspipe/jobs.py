@@ -70,6 +70,29 @@ class JobRecord:
         return Layout.at(self.project_root).jobs / self.id
 
     @property
+    def queued_config_path(self) -> Path:
+        """Copy of the config file the job was queued against (taken at submit)."""
+        return self.directory / "lenspipe.toml"
+
+    @property
+    def effective_config_path(self) -> Path:
+        """The complete parameters the stage used, after every command-line override (written at start)."""
+        return self.directory / "effective_config.toml"
+
+    def parameters(self) -> tuple[str, str] | None:
+        """``(description, toml_text)`` of this job's parameters: the effective set once the
+        job has started, else the config it was queued with; None for jobs without either."""
+        for path, label in (
+            (self.effective_config_path, "Parameters this job used (after every command-line override)"),
+            (self.queued_config_path, "Config the job was queued with (overrides on the command line apply on top)"),
+        ):
+            try:
+                return label, path.read_text(encoding="utf-8")
+            except OSError:
+                continue
+        return None
+
+    @property
     def log_path(self) -> Path:
         return self.directory / "log.txt"
 
@@ -122,6 +145,37 @@ class JobRecord:
         return "\n".join(text.splitlines()[-lines:])
 
 
+STAGE_COMMANDS = {"stage1", "stage2", "stage3", "run"}
+
+
+def config_for_argv(root: Path, argv: list[str]) -> Path | None:
+    """The config file a stage job will read: ``--config``, else the run's frozen file for
+    ``--run <label>``, else the project's ``lenspipe.toml``. None for other commands."""
+    if not argv or argv[0] not in STAGE_COMMANDS:
+        return None
+    project = root
+    if len(argv) > 1 and not argv[1].startswith("-"):
+        candidate = Path(argv[1]).expanduser()
+        if candidate.is_dir():
+            project = candidate.resolve()
+    run_label: str | None = None
+    for index, item in enumerate(argv[1:], start=1):
+        if item == "--config" and index + 1 < len(argv):
+            return Path(argv[index + 1]).expanduser()
+        if item == "--run" and index + 1 < len(argv):
+            run_label = argv[index + 1]
+    from lenspipe.config import CONFIG_FILENAME
+
+    if run_label:
+        from lenspipe.runs import run_root
+
+        try:
+            return run_root(project, run_label) / CONFIG_FILENAME
+        except ValueError:
+            return None
+    return project / CONFIG_FILENAME
+
+
 def _quote(argument: str) -> str:
     if not argument or any(ch.isspace() for ch in argument) or '"' in argument:
         return json.dumps(argument)
@@ -172,6 +226,17 @@ class JobManager:
                 created_utc=_now(),
                 extra=dict(extra),
             )
+            source = config_for_argv(self.layout.root, argv)
+            if source is not None:
+                record.extra["config_source"] = str(source)
+                record.directory.mkdir(parents=True, exist_ok=True)
+                try:
+                    text = source.read_text(encoding="utf-8")
+                except OSError:
+                    from lenspipe.config import default_toml
+
+                    text = "# No lenspipe.toml at " + str(source) + "; the defaults below apply.\n" + default_toml()
+                record.queued_config_path.write_text(text, encoding="utf-8")
             record.save()
             self.pump()
             return self.get(job_id) or record

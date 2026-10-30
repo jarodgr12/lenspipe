@@ -61,7 +61,12 @@ lenspipe update
 
 That reinstalls from the source the tool was installed from, so an install
 from the repository picks up the current `master`, and runs `doctor`.
-`lenspipe update --check` shows the source without changing anything.
+`lenspipe update --check` shows the source and the newest release without
+changing anything. The console does the same from the Project page: a
+"Version" card says whether a newer release exists, "Update" runs the update
+as a job, and "Restart console" starts the console again on the new version
+(a running console keeps the old code until it is restarted; jobs are
+separate processes and keep going).
 `CHANGELOG.md` states for every release whether existing products need to be
 re-run; the version that produced a product is recorded in its metadata.
 
@@ -218,7 +223,10 @@ running.
 
 Every console action is a job: a subprocess running `python -m lenspipe ...`
 with its record under `<project>/.jobs/<id>/` (`job.json`, `log.txt`,
-`progress.json`, `result.json`). `lenspipe jobs <project>` lists them from a
+`progress.json`, `result.json`, plus `lenspipe.toml`, a copy of the config
+the job was queued against, and `effective_config.toml`, the complete
+parameters the stage used after every command-line override, written when
+the job starts). The Jobs page shows that parameter set under each job. `lenspipe jobs <project>` lists them from a
 shell. When DifMAP lives on another machine, run the console there and reach
 it through an SSH port forward:
 

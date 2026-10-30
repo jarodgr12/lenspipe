@@ -107,6 +107,14 @@ def jobs_page(job: str | None = None) -> None:
                 ui.label(f"log: {record.log_path}").classes("font-mono text-xs opacity-60 break-all")
                 if record.error:
                     ui.label(record.error).classes("text-negative text-sm font-mono")
+                parameters = record.parameters()
+                if parameters is not None:
+                    label, text = parameters
+                    with ui.expansion(label, icon="tune").classes("w-full").props("dense"):
+                        source = record.extra.get("config_source")
+                        if source:
+                            ui.label(f"queued against {source}").classes(MONO + " text-xs opacity-60")
+                        ui.code(text, language="toml").classes("w-full text-xs")
                 selected["progress_box"] = ui.column().classes("w-full gap-1")
                 ui.label("Log tail").classes("text-caption opacity-60")
                 selected["log_box"] = ui.log(max_lines=400).classes(
