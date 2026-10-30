@@ -3,6 +3,27 @@
 Each entry says whether existing products need re-running. The `lenspipe`
 version that made a product is recorded in its metadata JSON.
 
+## 2.4.0 — 2026-10-30
+
+**Re-run needed:** no.
+
+- Added: runs, for queuing jobs with different parameters. A run is
+  `runs/<label>/` inside the project: `lenspipe.toml` copied into it when
+  it is created, the project's `inputs/` linked, and its own `stage1/`,
+  `stage2/` and `stage3/` trees. Jobs for a run read its frozen config and
+  write under its label, so queuing "parameters A, label A; parameters B,
+  label B" overnight gives two result sets instead of one overwritten by
+  the other, and editing the Parameters page after queuing no longer
+  changes jobs that have not started. Run page: "Run label" field (new
+  label or an existing run), a note saying where outputs go, a diff when
+  an existing run's frozen parameters no longer match the Parameters page
+  and a button to replace them; job titles carry the label. Project page:
+  a "Runs" panel listing each run with product counts and the diff, plus
+  "create now". Results page: a "Run" select. CLI: `--run <label>` on
+  `stage1`, `stage2`, `stage3` and `run`; `lenspipe runs` with `--create`,
+  `--diff`, `--refreeze`, `--json`; `lenspipe inventory` lists runs.
+  Without a label nothing changes.
+
 ## 2.3.5 — 2026-10-29
 
 **Re-run needed:** no, unless you set the new option.

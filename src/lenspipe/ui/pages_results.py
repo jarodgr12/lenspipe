@@ -13,7 +13,8 @@ from pathlib import Path
 from typing import Any
 
 import pandas as pd
-from nicegui import run, ui
+from nicegui import run as background
+from nicegui import ui
 
 from lenspipe.ui.layout import MONO, frame
 from lenspipe.ui.state import console
@@ -158,12 +159,22 @@ def _interactive_bundle(directory: Path) -> tuple[dict[str, dict[str, Any]], lis
 
 
 @ui.page("/results")
-def results_page(epoch: str | None = None, stage: int = 2, product: str | None = None) -> None:
-    """Browse products. Query parameters preselect a view, e.g. ``/results?epoch=MG0414.A&stage=3``."""
+def results_page(
+    epoch: str | None = None, stage: int = 2, product: str | None = None, run: str | None = None
+) -> None:
+    """Browse products. Query parameters preselect a view, e.g. ``/results?epoch=MG0414.A&stage=3``;
+    ``run=<label>`` browses that run's trees (``runs/<label>/``) instead of the project's."""
     requested = {"epoch": epoch, "stage": 3 if int(stage) == 3 else 2, "product": product}
+    requested_run = (run or "").strip()
+    root = console.run_root(requested_run) or console.root
     with frame("Results", "/results"):
         state: dict[str, Any] = {"summary": None}
         with ui.row().classes("w-full items-center gap-4"):
+            run_options = {"": "project itself", **{item.label: item.label for item in console.runs()}}
+            run_select = ui.select(
+                run_options, label="Run", value=requested_run if requested_run in run_options else "",
+            ).props("dense outlined").classes("w-48")
+            run_select.tooltip("A run keeps its own stage2/ and stage3/ under runs/<label>/")
             epoch = ui.select({}, label="Epoch").props("dense outlined").classes("w-64")
             stage = ui.select({2: "Stage 2", 3: "Stage 3"}, label="Stage", value=requested["stage"]).props(
                 "dense outlined"
@@ -197,16 +208,16 @@ def results_page(epoch: str | None = None, stage: int = 2, product: str | None =
                     ui.label("No Stage 2 or Stage 3 products yet.").classes("opacity-70")
                 path_label.set_text("")
                 return
-            target = resolve_target(console.root, epoch.value, int(stage.value or 2), str(product.value))
+            target = resolve_target(root, epoch.value, int(stage.value or 2), str(product.value))
             path_label.set_text(str(target.directory))
             status.set_text("Reading directory...")
-            figures, csvs, reports = await run.io_bound(_scan, target, console.root)
+            figures, csvs, reports = await background.io_bound(_scan, target, console.root)
             interactive: dict[str, dict[str, Any]] = {}
             interactive_notes: list[str] = []
             interactive_error: str | None = None
             if int(stage.value or 2) == 3:
                 try:
-                    interactive, interactive_notes = await run.io_bound(_interactive_bundle, target.directory)
+                    interactive, interactive_notes = await background.io_bound(_interactive_bundle, target.directory)
                 except Exception as exc:  # noqa: BLE001 - static figures still show
                     interactive_error = f"{type(exc).__name__}: {exc}"
             if my_render != state["render"]:
@@ -262,7 +273,7 @@ def results_page(epoch: str | None = None, stage: int = 2, product: str | None =
                         with holder:
                             spinner = ui.spinner(size="sm")
                         try:
-                            head, total = await run.io_bound(_read_table, csv)
+                            head, total = await background.io_bound(_read_table, csv)
                         except Exception as exc:  # noqa: BLE001 - shown inline
                             spinner.delete()
                             with holder:
@@ -284,8 +295,15 @@ def results_page(epoch: str | None = None, stage: int = 2, product: str | None =
             sync_products()
             await render()
 
+        def on_run_change() -> None:
+            label = run_select.value or ""
+            if label != requested_run:
+                ui.navigate.to(f"/results?run={label}" if label else "/results")
+
         async def load() -> None:
-            state["summary"] = await run.io_bound(console.inventory)
+            from lenspipe.project import inventory
+
+            state["summary"] = await background.io_bound(inventory, root)
             options = _epoch_options(state["summary"])
             epoch.set_options(options)
             wanted_epoch = requested["epoch"]
@@ -302,6 +320,7 @@ def results_page(epoch: str | None = None, stage: int = 2, product: str | None =
                 product.set_value(requested["product"])
             await render()
 
+        run_select.on_value_change(on_run_change)
         epoch.on_value_change(on_context_change)
         stage.on_value_change(on_context_change)
         product.on_value_change(render)

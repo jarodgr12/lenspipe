@@ -162,6 +162,23 @@ def project_page() -> None:
         table_holder = ui.column().classes("w-full")
         combined_holder = ui.column().classes("w-full gap-1")
 
+        with ui.expansion("Runs (separate parameter sets with their own outputs)", icon="account_tree").classes(
+            "w-full"
+        ).props("dense") as runs_panel:
+            ui.label(
+                "A run is runs/<label>/ inside the project: a copy of lenspipe.toml frozen when the run is created, "
+                "the project's inputs/ shared, and its own stage1/, stage2/ and stage3/. Queue one job per label "
+                "from the Run page to compare parameter sets; the Parameters page never changes a run once it exists."
+            ).classes("text-caption opacity-70")
+            with ui.row().classes("items-center gap-3"):
+                new_run_label = ui.input("New run label", placeholder="e.g. sched-A").props("dense outlined").classes("w-64")
+                ui.button("Create with the current parameters", icon="add", on_click=lambda: create_run_now()).props(
+                    "outline no-caps dense"
+                )
+                ui.label("(creates the run now without queuing a job)").classes("text-caption opacity-70")
+            runs_status = ui.label().classes("text-sm")
+            runs_holder = ui.column().classes("w-full gap-2")
+
         with ui.expansion("Flags (which spectral windows are empty)", icon="flag").classes("w-full").props("dense") as flags_panel:
             ui.label(
                 "Reads the weights of the UV-FITS files: weights at or below zero are flags, exactly what DifMAP "
@@ -242,10 +259,67 @@ def project_page() -> None:
             if failing:
                 env_panel.open()
 
+        def _runs_with_diffs() -> list[tuple[Any, str]]:
+            return [(item, item.config_diff()) for item in console.runs()]
+
+        async def refresh_runs() -> None:
+            found = await run.io_bound(_runs_with_diffs)
+            runs_panel.text = "Runs (separate parameter sets with their own outputs)" + (f"  ({len(found)})" if found else "")
+            runs_holder.clear()
+            with runs_holder:
+                if not found:
+                    ui.label("No runs yet.").classes("text-caption opacity-70")
+                for item, diff in found:
+                    counts = item.to_dict()
+                    with ui.card().classes("w-full q-pa-sm gap-1").props("flat bordered"):
+                        with ui.row().classes("w-full items-center gap-3 no-wrap"):
+                            ui.label(item.label).classes("text-subtitle2 font-mono")
+                            created = (item.created_utc or "")[:16].replace("T", " ")
+                            ui.label(f"created {created or 'unknown'}").classes("text-caption opacity-70")
+                            for name in ("stage1", "stage2", "stage3", "combined"):
+                                ui.badge(f"{name} {counts[name]}", color="green-7" if counts[name] else "grey-6").props(
+                                    "" if counts[name] else "outline"
+                                )
+                            if diff:
+                                ui.badge("parameters differ from the project's", color="amber-8")
+                            else:
+                                ui.badge("parameters same as the project's", color="blue-grey-6").props("outline")
+                            ui.space()
+                            ui.link("Run page", f"/run?run={item.label}").classes("text-sm")
+                            ui.link("Results", f"/results?run={item.label}").classes("text-sm")
+                        ui.label(str(item.root)).classes(MONO + " text-xs opacity-60")
+                        if diff:
+                            with ui.expansion("How the project's parameters differ from this run's frozen copy").classes(
+                                "w-full"
+                            ).props("dense"):
+                                ui.code(diff, language="diff").classes("w-full text-xs")
+
+        async def create_run_now() -> None:
+            from lenspipe.runs import create_run
+
+            label = (new_run_label.value or "").strip()
+            if not label:
+                runs_status.set_text("Type a label first.")
+                return
+            try:
+                item, created = await run.io_bound(create_run, console.root, label)
+            except (ValueError, FileNotFoundError) as exc:
+                runs_status.set_text(str(exc))
+                runs_status.classes(add="text-negative")
+                return
+            runs_status.classes(remove="text-negative")
+            runs_status.set_text(
+                f"{'Created' if created else 'Already exists:'} {item.root} (lenspipe.toml frozen from the project)"
+            )
+            new_run_label.set_value("")
+            await refresh_runs()
+
         async def refresh() -> None:
             summary = await run.io_bound(console.inventory)
             header.clear()
             with header:
+                if summary.get("is_run"):
+                    ui.badge("this project is a run; its parent is one level up", color="amber-8")
                 if summary["config_present"]:
                     ui.badge(CONFIG_FILENAME, color="green-7")
                     error = console.config_error()
@@ -319,5 +393,6 @@ def project_page() -> None:
                 await refresh()
 
         ui.timer(0.0, refresh, once=True)
+        ui.timer(0.05, refresh_runs, once=True)
         ui.timer(0.1, refresh_environment, once=True)
         ui.timer(5.0, auto_refresh)
