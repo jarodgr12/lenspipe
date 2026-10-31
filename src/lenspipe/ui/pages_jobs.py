@@ -29,12 +29,14 @@ def jobs_page(job: str | None = None) -> None:
                 job_list = ui.column().classes("w-full gap-1")
             detail = ui.column().classes("flex-grow gap-2 min-w-0")
 
-        def render_notices() -> None:
+        def render_notices(queue_line: str | None = None) -> None:
             notices.clear()
             pending = console.pending_chain_titles()
-            if not pending and not console.notices:
+            if not pending and not console.notices and not queue_line:
                 return
             with notices:
+                if queue_line:
+                    ui.label("Queue: " + queue_line).classes("text-caption text-amber-9")
                 if pending:
                     ui.label("Waiting for the previous stage: " + ", ".join(pending)).classes(
                         "text-caption text-amber-9"
@@ -185,19 +187,20 @@ def jobs_page(job: str | None = None) -> None:
             ui.notify(f"Resuming as {new.id}", type="positive")
             await select(new.id)
 
-        def _read_state() -> list[JobRecord]:
+        def _read_state() -> tuple[list[JobRecord], str | None]:
             console.tick()
-            return console.jobs(LIST_LIMIT)
+            queue_line = console.manager.queue_status() if console.manager else None
+            return console.jobs(LIST_LIMIT), queue_line
 
         async def poll() -> None:
             # Every file read runs in a worker thread: while DifMAP saturates the machine,
             # blocking the event loop here is what makes the browser report "Connection lost".
-            records = await run.io_bound(_read_state)
-            signature = tuple((r.id, r.status) for r in records) + (selected["id"],)
+            records, queue_line = await run.io_bound(_read_state)
+            signature = tuple((r.id, r.status) for r in records) + (selected["id"], queue_line)
             if signature != list_signature["value"]:
                 list_signature["value"] = signature
                 render_list(records)
-                render_notices()
+                render_notices(queue_line)
             current = next((r for r in records if r.id == selected["id"]), None)
             if current is None and selected["id"] is None and records:
                 selected["id"] = records[0].id

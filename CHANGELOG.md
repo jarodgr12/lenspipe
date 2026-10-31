@@ -3,6 +3,20 @@
 Each entry says whether existing products need re-running. The `lenspipe`
 version that made a product is recorded in its metadata JSON.
 
+## 2.4.7 — 2026-10-31
+
+**Re-run needed:** no.
+
+- Fixed: a queue that never advanced. A job killed outside the console (a
+  machine reboot, the OOM killer, a stray kill) stays marked running; if
+  the operating system later hands its pid to an unrelated process, the
+  console believed the job was still alive and, with one job at a time,
+  nothing queued behind it ever started. A running record now counts as
+  alive only when that pid is a lenspipe process. Cancel also no longer
+  signals a pid that is not ours.
+- Added: the Jobs page says what the queue is doing: what runs now, how
+  many are queued, which is next and what it waits for.
+
 ## 2.4.6 — 2026-10-31
 
 **Re-run needed:** no.
