@@ -101,3 +101,34 @@ def test_finished_jobs_are_read_from_disk_only_once(project: Path, monkeypatch) 
     queued = manager.submit(["--version"], title="again", stage="other")
     manager.wait(queued.id, timeout_s=60)
     assert queued.id in loads  # active jobs are re-read until they finish
+
+
+def test_running_record_whose_pid_now_belongs_to_another_process_is_failed_not_stuck(project: Path, monkeypatch) -> None:
+    """A job killed outside the console leaves status=running; if its pid is reused by an
+    unrelated process the queue must not wait on it for ever."""
+    from lenspipe.jobs import JobManager, JobRecord
+
+    manager = JobManager(project)
+    stale = JobRecord(
+        id="20260101T000000-stage2", title="stale", stage="stage2", argv=["stage2"], project_root=str(project),
+        created_utc="2026-01-01T00:00:00+00:00", status="running", pid=424242, started_utc="2026-01-01T00:00:01+00:00",
+    )
+    stale.save()
+    monkeypatch.setattr("lenspipe.jobs._pid_alive", lambda pid: True)  # some process has that pid
+    monkeypatch.setattr("lenspipe.console_registry._command_line", lambda pid: "/usr/bin/firefox --profile x")
+    queued = manager.submit(["--version"], title="next", stage="other")
+    assert manager.get(stale.id).status == "failed" and "killed" in manager.get(stale.id).error
+    manager.wait(queued.id, timeout_s=60)
+    assert manager.get(queued.id).status == "completed"
+    assert manager.queue_status() is None
+
+    # And a pid that really is a lenspipe job keeps the record running and the queue waiting.
+    stale2 = JobRecord(
+        id="20260101T000002-stage2", title="busy", stage="stage2", argv=["stage2"], project_root=str(project),
+        created_utc="2026-01-01T00:00:02+00:00", status="running", pid=424243, started_utc="2026-01-01T00:00:03+00:00",
+    )
+    stale2.save()
+    monkeypatch.setattr("lenspipe.console_registry._command_line", lambda pid: "python -m lenspipe stage2 /p")
+    waiting = manager.submit(["--version"], title="held", stage="other")
+    assert manager.get(stale2.id).status == "running" and manager.get(waiting.id).status == "queued"
+    assert "running now: busy" in manager.queue_status() and "next: held" in manager.queue_status()

@@ -203,6 +203,17 @@ def _pid_alive(pid: int | None) -> bool:
     return True
 
 
+def _is_lenspipe_job(pid: int | None) -> bool:
+    """True when ``pid`` is alive *and* is a lenspipe job, not an unrelated process that
+    was handed the same pid after the job died (which would block the queue for ever)."""
+    if not _pid_alive(pid):
+        return False
+    from lenspipe.console_registry import _command_line
+
+    command = _command_line(int(pid)) or ""
+    return "lenspipe" in command
+
+
 class JobManager:
     """Submit, watch and cancel jobs for one project. Safe to use from several threads."""
 
@@ -290,8 +301,10 @@ class JobManager:
                         record.finished_utc = _now()
                         record.save()
                         continue
-                    if dependency.status != "completed":
+                    if dependency.status == "running":
                         break  # keep the queue in order: nothing behind a waiting stage jumps ahead
+                    if dependency.status != "completed":
+                        continue  # a queued dependency is out of order; let the rest of the queue move
                 self._start(record)
                 running_count += 1
 
@@ -359,11 +372,11 @@ class JobManager:
             result = self._read_result(record)
             if result is not None:
                 returncode = int(result.get("returncode", 1))
-            elif _pid_alive(record.pid):
+            elif _is_lenspipe_job(record.pid):
                 return
             else:
                 returncode = -1
-                record.error = "process ended without writing a result (console restarted?)"
+                record.error = "process ended without writing a result (console restarted, or the job was killed)"
         record.returncode = returncode
         record.finished_utc = _now()
         if record.status != "cancelled":
@@ -395,7 +408,7 @@ class JobManager:
             record.save()
             pid = record.pid
             process = self._processes.get(job_id)
-            if pid:
+            if pid and (process is not None or _is_lenspipe_job(pid)):
                 _signal_group(pid, signal.SIGTERM)
                 if process is not None:
                     try:
@@ -420,6 +433,31 @@ class JobManager:
             return record
 
     # -- queries ------------------------------------------------------------
+
+    def queue_status(self) -> str | None:
+        """One line saying what the queue is doing, for the Jobs page; None when idle."""
+        records = self.list()
+        running = [r for r in records if r.status == "running"]
+        queued = sorted((r for r in records if r.status == "queued"), key=lambda r: r.created_utc)
+        if not running and not queued:
+            return None
+        parts: list[str] = []
+        if running:
+            parts.append("running now: " + ", ".join(f"{r.title} ({r.id})" for r in running))
+        if queued:
+            head = queued[0]
+            if running:
+                parts.append(f"{len(queued)} queued behind it, next: {head.title}")
+            elif head.depends_on:
+                dependency = self.get(head.depends_on)
+                parts.append(
+                    f"{len(queued)} queued; next is {head.title}, waiting for "
+                    f"{dependency.title if dependency else head.depends_on} "
+                    f"({dependency.status if dependency else 'missing'})"
+                )
+            else:
+                parts.append(f"{len(queued)} queued; next is {head.title}, starting")
+        return "; ".join(parts)
 
     def get(self, job_id: str) -> JobRecord | None:
         return JobRecord.load(self.layout.jobs / job_id)
