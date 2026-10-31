@@ -3,6 +3,15 @@
 Each entry says whether existing products need re-running. The `lenspipe`
 version that made a product is recorded in its metadata JSON.
 
+## 2.4.4 — 2026-10-31
+
+**Re-run needed:** no.
+
+- Changed: the Run page's epoch picker is a row of checkboxes, one per
+  epoch, with "All" and "None" buttons (none ticked = every epoch), in
+  place of the multi-select dropdown. When the project has no epochs the
+  row says so and names the inputs directory.
+
 ## 2.4.3 — 2026-10-30
 
 **Re-run needed:** no.
