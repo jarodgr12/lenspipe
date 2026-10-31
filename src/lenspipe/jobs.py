@@ -211,6 +211,10 @@ class JobManager:
         self.max_concurrent = max(1, max_concurrent)
         self._processes: dict[str, subprocess.Popen] = {}
         self._lock = threading.RLock()
+        # Finished records never change on disk, so they are read once. Without this every
+        # console tick re-read every job.json, and a project with months of jobs slowed down
+        # with each one (worst on network home directories).
+        self._finished: dict[str, JobRecord] = {}
         self.layout.jobs.mkdir(parents=True, exist_ok=True)
 
     # -- creation -----------------------------------------------------------
@@ -421,14 +425,21 @@ class JobManager:
         return JobRecord.load(self.layout.jobs / job_id)
 
     def list(self, limit: int | None = None) -> list[JobRecord]:
+        """Jobs newest first. Only queued and running jobs are read from disk again."""
         records: list[JobRecord] = []
         if not self.layout.jobs.is_dir():
             return records
         for directory in sorted(self.layout.jobs.iterdir(), reverse=True):
             if not directory.is_dir():
                 continue
+            cached = self._finished.get(directory.name)
+            if cached is not None:
+                records.append(cached)
+                continue
             record = JobRecord.load(directory)
             if record is not None:
+                if record.is_terminal:
+                    self._finished[record.id] = record
                 records.append(record)
         return records[:limit] if limit else records
 

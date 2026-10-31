@@ -3,6 +3,17 @@
 Each entry says whether existing products need re-running. The `lenspipe`
 version that made a product is recorded in its metadata JSON.
 
+## 2.4.6 — 2026-10-31
+
+**Re-run needed:** no.
+
+- Fixed: the console slowed down as a project's job history grew. Every
+  2-second tick, Jobs page poll and Project page refresh re-read every
+  `job.json` under `.jobs/`; finished records are now read once and kept
+  in memory, so only queued and running jobs touch the disk. The
+  newest-release check on the Project page is kept for an hour instead
+  of asking GitHub on every page open ("Check again" still asks).
+
 ## 2.4.5 — 2026-10-31
 
 **Re-run needed:** no.

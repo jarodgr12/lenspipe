@@ -41,7 +41,7 @@ def test_update_status_summary_and_flags() -> None:
 
 
 def test_check_for_update_reads_git_and_uv(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr("lenspipe.updates.latest_release", lambda repo=None: "99.0.0")
+    monkeypatch.setattr("lenspipe.updates.latest_release", lambda repo=None, refresh=False: "99.0.0")
     monkeypatch.setattr("lenspipe.updates.install_source", lambda: None)
     status = check_for_update()
     assert status.installed == __version__ and status.latest == "99.0.0" and status.update_available

@@ -169,7 +169,7 @@ def project_page() -> None:
                 version_badge = ui.badge("", color="amber-8")
                 version_badge.set_visibility(False)
                 ui.space()
-                ui.button("Check again", icon="refresh", on_click=lambda: refresh_version()).props("outline no-caps dense")
+                ui.button("Check again", icon="refresh", on_click=lambda: refresh_version(True)).props("outline no-caps dense")
                 update_button = ui.button("Update", icon="system_update_alt", on_click=lambda: update_now()).props("no-caps dense")
                 update_button.tooltip(
                     "Runs 'lenspipe update' as a job: reinstalls lenspipe from where it was installed from. "
@@ -266,11 +266,11 @@ def project_page() -> None:
             )
             flags_panel.text = "Flags (which spectral windows are empty)" + (f"  ({dead_total} empty)" if dead_total else "")
 
-        async def refresh_version() -> None:
+        async def refresh_version(force: bool = False) -> None:
             from lenspipe.updates import check_for_update
 
             version_label.set_text(f"lenspipe {__version__}; checking for a newer release...")
-            status = await run.io_bound(check_for_update)
+            status = await run.io_bound(check_for_update, refresh=force)
             version_label.set_text(status.summary())
             version_badge.set_text(f"{status.latest} available" if status.update_available else "up to date")
             version_badge.props(f"color={'amber-8' if status.update_available else 'green-7'}")
