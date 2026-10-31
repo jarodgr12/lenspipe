@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import time
 import tomllib
 from pathlib import Path
 
@@ -115,29 +116,51 @@ def test_results_targets(tmp_path: Path) -> None:
     assert resolve_target(tmp_path, "combined:S", 3, "channel").directory == tmp_path / "stage3/full-band/combined/S/channel"
 
 
-def test_chain_releases_next_stage_only_after_completion(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_chain_is_queued_whole_and_runs_in_submission_order(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr("lenspipe.ui.state.RECENT_PATH", tmp_path / "recent.json")
     console = Console()
     console.open_root(tmp_path)
-    ok = ChainStep(["--version"], "first", "stage1")
-    second = ChainStep(["--version"], "second", "stage2")
-    first = console.submit_chain([ok, second])
-    assert first is not None and console.pending_chain_titles() == ["second"]
-    console.manager.wait(first.id, timeout_s=60)
-    console.tick()
+    a1 = ChainStep(["--version"], "A stage 1", "stage1")
+    a2 = ChainStep(["--version"], "A stage 2", "stage2")
+    b1 = ChainStep(["--version"], "B stage 1", "stage1")
+    started: list[str] = []
+    original_start = console.manager._start
+
+    def record_start(record):  # the order jobs are launched in; timestamps only resolve to the second
+        started.append(record.title)
+        original_start(record)
+
+    monkeypatch.setattr(console.manager, "_start", record_start)
+    first = console.submit_chain([a1, a2])
+    second = console.submit_chain([b1])
+    assert first is not None and second is not None
+    # Every step exists at once; the later stage waits for the earlier one.
+    by_title = {r.title: r for r in console.manager.list()}
+    assert by_title["A stage 2"].depends_on == first.id and by_title["B stage 1"].depends_on is None
+    assert console.pending_chain_titles() == ["A stage 2"]
+    for _ in range(200):
+        console.tick()
+        if all(r.is_terminal for r in console.manager.list()):
+            break
+        time.sleep(0.1)
+    done = {r.title: r for r in console.manager.list()}
+    assert {r.status for r in done.values()} == {"completed"}
+    # B's stage 1 did not jump ahead of A's stage 2.
+    assert started == ["A stage 1", "A stage 2", "B stage 1"]
     assert console.pending_chain_titles() == []
-    records = console.manager.list()
-    assert [r.title for r in records] == ["second", "first"]
-    console.manager.wait(records[0].id, timeout_s=60)
 
     bad = ChainStep(["no-such-command"], "bad", "stage1")
     skipped = ChainStep(["--version"], "skipped", "stage2")
     failed = console.submit_chain([bad, skipped])
     console.manager.wait(failed.id, timeout_s=60)
-    console.tick()
-    assert console.pending_chain_titles() == []
-    assert not any(r.title == "skipped" for r in console.manager.list())
-    assert console.notices and "skipped" in console.notices[-1]
+    for _ in range(50):
+        console.tick()
+        if console.manager.list()[0].status == "skipped":
+            break
+        time.sleep(0.1)
+    skipped_job = next(r for r in console.manager.list() if r.title == "skipped")
+    assert skipped_job.status == "skipped" and "bad" in (skipped_job.error or "")
+    assert console.notices and "Skipped skipped" in console.notices[-1]
     assert (tmp_path / "recent.json").is_file()
 
 

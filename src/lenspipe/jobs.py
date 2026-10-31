@@ -27,7 +27,7 @@ from lenspipe.project import Layout
 
 __all__ = ["JobManager", "JobRecord", "job_result_path", "write_job_result"]
 
-TERMINAL = {"completed", "failed", "cancelled"}
+TERMINAL = {"completed", "failed", "cancelled", "skipped"}
 
 
 def _now() -> str:
@@ -64,6 +64,7 @@ class JobRecord:
     pid: int | None = None
     error: str | None = None
     extra: dict[str, Any] = field(default_factory=dict)
+    depends_on: str | None = None  # id of the job that must complete first (a stage chain)
 
     @property
     def directory(self) -> Path:
@@ -214,7 +215,10 @@ class JobManager:
 
     # -- creation -----------------------------------------------------------
 
-    def submit(self, argv: list[str], *, title: str, stage: str, **extra: Any) -> JobRecord:
+    def submit(
+        self, argv: list[str], *, title: str, stage: str, depends_on: str | None = None, **extra: Any
+    ) -> JobRecord:
+        """Queue a job. With ``depends_on`` it waits for that job to complete and is skipped if it does not."""
         with self._lock:
             job_id = self._new_id(stage)
             record = JobRecord(
@@ -225,6 +229,7 @@ class JobManager:
                 project_root=str(self.layout.root),
                 created_utc=_now(),
                 extra=dict(extra),
+                depends_on=depends_on,
             )
             source = config_for_argv(self.layout.root, argv)
             if source is not None:
@@ -254,7 +259,14 @@ class JobManager:
     # -- lifecycle ----------------------------------------------------------
 
     def pump(self) -> None:
-        """Reconcile running jobs and start queued ones up to the concurrency cap."""
+        """Reconcile running jobs and start queued ones, strictly in submission order.
+
+        A queued job that depends on another waits until that job has completed;
+        while it waits, nothing queued after it starts either, so a chain submitted
+        first runs to the end before a chain submitted later begins. When the job
+        it depends on failed, was cancelled or was itself skipped, it is marked
+        ``skipped`` and the queue moves on.
+        """
         with self._lock:
             records = self.list()
             running = [r for r in records if r.status == "running"]
@@ -264,6 +276,18 @@ class JobManager:
             for record in sorted((r for r in records if r.status == "queued"), key=lambda r: r.created_utc):
                 if running_count >= self.max_concurrent:
                     break
+                if record.depends_on:
+                    dependency = self.get(record.depends_on)
+                    if dependency is None or dependency.status in {"failed", "cancelled", "skipped"}:
+                        reason = dependency.status if dependency else "missing"
+                        name = dependency.title if dependency else record.depends_on
+                        record.status = "skipped"
+                        record.error = f"not run: the previous stage ({name}) {reason}"
+                        record.finished_utc = _now()
+                        record.save()
+                        continue
+                    if dependency.status != "completed":
+                        break  # keep the queue in order: nothing behind a waiting stage jumps ahead
                 self._start(record)
                 running_count += 1
 

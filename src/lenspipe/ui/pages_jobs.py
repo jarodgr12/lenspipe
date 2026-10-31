@@ -91,6 +91,12 @@ def jobs_page(job: str | None = None) -> None:
                         "outline no-caps dense"
                     )
                 ui.label(record.command_line).classes(MONO + " select-all")
+                if record.depends_on and record.status == "queued":
+                    earlier = console.manager.get(record.depends_on) if console.manager else None
+                    ui.label(
+                        f"Waits for {earlier.title if earlier else record.depends_on} to complete; "
+                        "jobs queued after this one wait too."
+                    ).classes("text-caption text-amber-9")
                 with ui.grid(columns=4).classes("w-full gap-x-6 gap-y-1 text-sm"):
                     for name, value in (
                         ("Job id", record.id),
