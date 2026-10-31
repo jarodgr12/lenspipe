@@ -191,9 +191,19 @@ def run_page(run: str | None = None) -> None:
                             2: ui.checkbox("Stage 2  channel fits", value=True),
                             3: ui.checkbox("Stage 3  spectra", value=False),
                         }
-                    epochs = ui.select(
-                        epoch_options, label="Epochs (empty = all)", multiple=True, value=[]
-                    ).props("dense outlined use-chips options-dense").classes("w-full")
+                    with ui.row().classes("w-full items-center gap-x-4 gap-y-1 wrap"):
+                        ui.label("Epochs (none ticked = all):").classes("text-sm")
+                        epoch_boxes = {
+                            key: ui.checkbox(text, value=False).props("dense") for key, text in epoch_options.items()
+                        }
+                        if not epoch_boxes:
+                            ui.label(
+                                f"no epochs found: no <source>.<epoch>.uvfits in {console.layout.inputs} and no "
+                                "stage products yet"
+                            ).classes("text-sm text-negative")
+                        else:
+                            ui.button("All", on_click=lambda: set_all_epochs(True)).props("flat dense no-caps")
+                            ui.button("None", on_click=lambda: set_all_epochs(False)).props("flat dense no-caps")
                     with ui.row().classes("gap-6 items-center"):
                         overwrite = ui.switch("Overwrite existing products")
                         dry_run = ui.switch("Dry run (print DifMAP commands only)")
@@ -431,7 +441,7 @@ def run_page(run: str | None = None) -> None:
                 root=console.root,
                 stages=stages,
                 run=(run_label.value or "").strip() or None,
-                epochs=list(epochs.value or []),
+                epochs=[key for key, box in epoch_boxes.items() if box.value],
                 overwrite=bool(overwrite.value),
                 dry_run=bool(dry_run.value),
                 workers=_int_or_none(workers.value),
@@ -585,6 +595,11 @@ def run_page(run: str | None = None) -> None:
             notes_label.set_text("  ".join(notes))
             submit_button.set_enabled(bool(steps) and run_state()[1] is None)
 
+        def set_all_epochs(state: bool) -> None:
+            for box in epoch_boxes.values():
+                box.set_value(state)
+            refresh_preview()
+
         def on_run_settled() -> None:
             # Called when the label is confirmed (Enter, leaving the box, or the picker). Another
             # *existing* run means another baseline config for every field, so the page reloads
@@ -616,7 +631,7 @@ def run_page(run: str | None = None) -> None:
             ui.navigate.to(f"/run?run={label}")
 
         for widget in (
-            *stage_boxes.values(), epochs, overwrite, dry_run, workers, calibration_mode, if_count,
+            *stage_boxes.values(), *epoch_boxes.values(), overwrite, dry_run, workers, calibration_mode, if_count,
             s1_channels_per_if, s1_edge, s1_exclude, final_if, final_if_channels, reimage, reimage_only, mode, channels_per_if,
             channels, shards, edge, s2_exclude, iterations, unflag, keep_models, plots, s2_error_bars,
             error_source, product, plot_workers, fit_method, reference_frequency, formats,
