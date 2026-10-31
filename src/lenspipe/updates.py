@@ -50,8 +50,27 @@ def parse_release_tags(ls_remote_output: str) -> list[str]:
     return sorted(found, key=_version_tuple)
 
 
-def latest_release(repo: str = DEFAULT_REPO, timeout_s: float = 15.0) -> str | None:
-    """The newest release tag on ``repo``, or None when it cannot be read (offline, no git)."""
+_RELEASE_CACHE: dict[str, tuple[float, str | None]] = {}
+RELEASE_CACHE_SECONDS = 3600.0
+
+
+def latest_release(repo: str = DEFAULT_REPO, timeout_s: float = 15.0, *, refresh: bool = False) -> str | None:
+    """The newest release tag on ``repo``, or None when it cannot be read (offline, no git).
+
+    The answer is kept for an hour per process, so opening the Project page does
+    not reach the network every time; ``refresh`` forces a new look.
+    """
+    import time
+
+    cached = _RELEASE_CACHE.get(repo)
+    if cached is not None and not refresh and time.monotonic() - cached[0] < RELEASE_CACHE_SECONDS:
+        return cached[1]
+    result_version = _latest_release_uncached(repo, timeout_s)
+    _RELEASE_CACHE[repo] = (time.monotonic(), result_version)
+    return result_version
+
+
+def _latest_release_uncached(repo: str, timeout_s: float) -> str | None:
     git = shutil.which("git")
     if git is None:
         return None
@@ -111,8 +130,8 @@ class UpdateStatus:
         return head
 
 
-def check_for_update(repo: str = DEFAULT_REPO) -> UpdateStatus:
-    return UpdateStatus(installed=__version__, latest=latest_release(repo), source=install_source())
+def check_for_update(repo: str = DEFAULT_REPO, *, refresh: bool = False) -> UpdateStatus:
+    return UpdateStatus(installed=__version__, latest=latest_release(repo, refresh=refresh), source=install_source())
 
 
 def restart_argv(argv: list[str] | None = None) -> list[str]:

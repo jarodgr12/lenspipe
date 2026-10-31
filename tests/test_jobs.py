@@ -77,3 +77,27 @@ def test_tail_limits_lines(project: Path, lines: int) -> None:
     record = manager.submit(["describe", str(project)], title="describe", stage="describe")
     final = manager.wait(record.id, timeout_s=60)
     assert len(final.tail(lines).splitlines()) <= lines
+
+
+def test_finished_jobs_are_read_from_disk_only_once(project: Path, monkeypatch) -> None:
+    """Every console tick lists the jobs; finished ones must not cost a file read each time."""
+    from lenspipe.jobs import JobManager, JobRecord
+
+    manager = JobManager(project)
+    done = manager.submit(["--version"], title="done", stage="other")
+    manager.wait(done.id, timeout_s=60)
+    assert manager.list()[0].status == "completed"
+    loads: list[str] = []
+    original = JobRecord.load
+
+    def counting_load(directory):
+        loads.append(directory.name)
+        return original(directory)
+
+    monkeypatch.setattr(JobRecord, "load", staticmethod(counting_load))
+    manager.list()
+    manager.list()
+    assert done.id not in loads  # served from the cache
+    queued = manager.submit(["--version"], title="again", stage="other")
+    manager.wait(queued.id, timeout_s=60)
+    assert queued.id in loads  # active jobs are re-read until they finish
