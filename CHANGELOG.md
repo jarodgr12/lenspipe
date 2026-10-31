@@ -3,6 +3,19 @@
 Each entry says whether existing products need re-running. The `lenspipe`
 version that made a product is recorded in its metadata JSON.
 
+## 2.4.5 — 2026-10-31
+
+**Re-run needed:** no.
+
+- Fixed: the job queue runs strictly in submission order. A Stage 1-2-3
+  chain is now queued whole, each stage waiting for the previous one, so a
+  chain submitted later cannot start before an earlier chain has finished.
+  Before, only the first stage was queued and the next one was created
+  when it finished, so another run's Stage 1 queued in the meantime ran
+  first. A stage whose predecessor failed or was cancelled is marked
+  "skipped" with the reason; the Jobs page shows what each queued stage
+  waits for.
+
 ## 2.4.4 — 2026-10-31
 
 **Re-run needed:** no.

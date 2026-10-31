@@ -29,6 +29,7 @@ STATUS_COLORS = {
     "completed": "green-7",
     "failed": "red-7",
     "cancelled": "grey-8",
+    "skipped": "grey-8",
 }
 
 
