@@ -11,14 +11,16 @@ from pathlib import Path
 
 from lenspipe.channels import IfSelection, selections_from_exclusions
 from lenspipe.config import Stage1Config, Stage2Config
-from lenspipe.difmap.logparse import STAGE1_RMS_MARKER, STAGE2_RMS_MARKER
+from lenspipe.difmap.logparse import STAGE1_MARK_MARKER, STAGE1_RMS_MARKER, STAGE2_RMS_MARKER
 
 __all__ = [
     "fit_model_path",
     "if_selfcal_block",
     "imaging_commands",
     "per_if_schedule_block",
+    "mark",
     "mapsize_command",
+    "strip_marks",
     "stage1_commands",
     "stage2_commands",
 ]
@@ -31,6 +33,16 @@ def _num(value: float) -> str:
 
 def _bool(value: bool) -> str:
     return "true" if value else "false"
+
+
+def mark(name: str) -> str:
+    """A ``print`` DifMAP echoes when it reaches this point; Stage 1 times the phases from them."""
+    return f'print "{STAGE1_MARK_MARKER}", "{name}"'
+
+
+def strip_marks(text: str) -> str:
+    """The script without its progress ``print`` lines (what the legacy scripts look like)."""
+    return "\n".join(line for line in text.split("\n") if not line.startswith(f'print "{STAGE1_MARK_MARKER}"'))
 
 
 def mapsize_command(pixels: int, cell_mas: float | None) -> str:
@@ -63,6 +75,7 @@ def if_selfcal_block(
         blocks.extend(
             [
                 f"! IF {selection.if_number}: channels {selection.label}",
+                mark(f"final-if {selection.if_number}"),
                 f"select i,{selection.select_arguments}",
                 "selfcal true,true,3600",
                 "selfcal false,false,0.5",
@@ -97,12 +110,14 @@ def per_if_schedule_block(
         lines.append("! IF(s) skipped (no channels left after exclusions): " + ", ".join(str(n) for n in skipped))
     for selection in selections:
         lines.append(f"! IF {selection.if_number}: channels {selection.label}")
+        lines.append(mark(f"if {selection.if_number}"))
         lines.append(f"select i,{selection.select_arguments}")
         lines.append(f"rmodel {fixed_index_model}")
         for step in config.selfcal:
             lines.extend(step.difmap_commands(per_if=True))
         lines.append(f"wmodel {per_if_models[selection.if_number - 1]}")
     lines.append("! Full band: fit the final model to the per-IF calibrated data (no further self-cal).")
+    lines.append(mark("final-fit"))
     lines.append(f"select i,1,{layout.total_channels}")
     lines.append(f"rmodel {starting_model}")
     lines.append(f"modelfit {config.selfcal[-1].modelfit_iterations}")
@@ -153,7 +168,8 @@ select i
         schedule_block = per_if_schedule_block(config, starting_model, fixed_index_model, per_if_models)
     else:
         step_lines: list[str] = []
-        for step in config.selfcal:
+        for number, step in enumerate(config.selfcal, start=1):
+            step_lines.append(mark(f"step {number}"))
             step_lines.extend(step.difmap_commands())
             step_lines.append("")
         schedule_block = f"rmodel {starting_model}\n\n" + "\n".join(step_lines).rstrip("\n")
@@ -169,9 +185,11 @@ select i
 {schedule_block}
 
 {final_if_section}
+{mark("write")}
 wobs {calibrated_uvfits}
 wmodel {final_model}
 
+{mark("image")}
 invert
 print "{STAGE1_RMS_MARKER}", imstat(rms)
 wdmap {residual_image}

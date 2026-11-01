@@ -6,6 +6,7 @@ import hashlib
 import json
 import math
 import threading
+import time
 from collections.abc import Iterable
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
@@ -16,12 +17,14 @@ from lenspipe import __version__
 from lenspipe.channels import IfSelection
 from lenspipe.config import LenspipeConfig
 from lenspipe.difmap import (
+    STAGE1_MARK_MARKER,
     STAGE1_RMS_MARKER,
     difmap_version,
     extract_last_numeric,
     run_difmap,
     tagged_scalar,
 )
+from lenspipe.difmap.logparse import strip_prompts
 from lenspipe.difmap.runner import DifmapNotFound
 from lenspipe.difmap.scripts import imaging_commands, stage1_commands
 from lenspipe.models import (
@@ -193,6 +196,7 @@ def _write_metadata(
     duration_s: float,
     beam: dict[str, float] | None = None,
     native_geometry: dict[str, Any] | None = None,
+    timings: dict[str, float] | None = None,
 ) -> None:
     created = utc_now()
     stage1 = config.stage1
@@ -270,6 +274,7 @@ def _write_metadata(
             "difmap": difmap_info,
             "command_script_sha256": hashlib.sha256(commands.encode("utf-8")).hexdigest(),
             "duration_s": round(duration_s, 3),
+            "timings_s": timings or {},  # seconds per script phase: "if 3", "step 2", "final-fit", "write", "image"
             "final_if_selfcal": {
                 "enabled": stage1.final_if_selfcal.enabled,
                 "n_ifs": stage1.final_if_selfcal.if_count if stage1.final_if_selfcal.enabled else 0,
@@ -406,18 +411,32 @@ def run_epoch(
             f"spectral index fixed at 0 for {pinned} component(s)"
         )
 
-    steps_total = len(config.stage1.selfcal) * (config.stage1.per_if.if_count if per_if else 1)
-    done = {"n": 0}
+    # The script prints a STAGE1_MARK line at the start of every phase (each IF in per-IF
+    # mode, each schedule step in full-band mode, the final fit, writing, imaging); the time
+    # between marks is that phase's cost, logged as it happens and kept in the metadata.
+    marks_total = commands.count(f'print "{STAGE1_MARK_MARKER}"')
+    marks: list[tuple[str, float]] = []
+    timings: dict[str, float] = {}
 
     def on_line(line: str) -> None:
-        # DifMAP echoes nothing structured for selfcal; count modelfit summaries loosely.
-        if line.lstrip().startswith("Iteration") and "Chi-squared" in line:
+        text = strip_prompts(line).strip()
+        if not text.startswith(STAGE1_MARK_MARKER):
             return
-        if "Applying" in line and "selfcal" in line.lower():
-            done["n"] = min(steps_total, done["n"] + 1)
-            reporter.progress(label, done["n"], steps_total, "self-calibration")
+        name = text[len(STAGE1_MARK_MARKER):].strip()
+        now = time.monotonic()
+        detail = name
+        if marks:
+            previous, since = marks[-1]
+            timings[previous] = round(now - since, 1)
+            reporter.log(f"[{label}] {previous}: {timings[previous]:.0f} s")
+            if_times = [v for k, v in timings.items() if k.startswith("if ")]
+            if name.startswith("if ") and if_times:
+                left = marks_total - len(marks) - 1
+                detail = f"{name}; last IF {if_times[-1]:.0f} s; about {left * sum(if_times) / len(if_times) / 60:.0f} min left"
+        marks.append((name, now))
+        reporter.progress(label, len(marks), marks_total, detail)
 
-    reporter.progress(label, 0, steps_total, "starting DifMAP")
+    reporter.progress(label, 0, marks_total, "starting DifMAP")
     try:
         result = run_difmap(
             config.project.difmap.executable,
@@ -462,6 +481,17 @@ def run_epoch(
         rms = extract_last_numeric(result.log_text)
     for own_log in paths.output_directory.glob("difmap.log*"):  # duplicate of our captured log
         own_log.unlink(missing_ok=True)
+    if marks:
+        last, since = marks[-1]
+        timings[last] = round(time.monotonic() - since, 1)
+    if_times = [v for k, v in timings.items() if k.startswith("if ")]
+    if if_times:
+        reporter.log(
+            f"[{label}] per-IF calibration: {len(if_times)} IFs in {sum(if_times) / 60:.1f} min "
+            f"({sum(if_times) / len(if_times):.0f} s per IF, slowest {max(if_times):.0f} s); "
+            f"final fit {timings.get('final-fit', 0):.0f} s, write {timings.get('write', 0):.0f} s, "
+            f"imaging {timings.get('image', 0):.0f} s"
+        )
 
     beam = _stamp_beam(paths.native_clean_image, paths.native_residual_image, reporter, label)
 
@@ -482,12 +512,13 @@ def run_epoch(
             result.duration_s,
             beam=beam,
             native_geometry=native_geometry,
+            timings=timings,
         )
     except (OSError, ModelFormatError, ValueError) as exc:
         reporter.clear(label)
         return Stage1Result(paths, False, "failed", f"post-processing error: {exc}")
 
-    reporter.progress(label, steps_total, steps_total, "completed")
+    reporter.progress(label, marks_total, marks_total, "completed")
     return Stage1Result(
         paths, True, "completed", "completed", rms_jy_per_beam=rms, commands=commands, geometry=native_geometry
     )

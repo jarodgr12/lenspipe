@@ -18,7 +18,7 @@ from lenspipe.channels import (
 )
 from lenspipe.cli import app
 from lenspipe.config import FinalIfSelfcal, LenspipeConfig
-from lenspipe.difmap.scripts import if_selfcal_block, stage1_commands
+from lenspipe.difmap.scripts import if_selfcal_block, stage1_commands, strip_marks
 from lenspipe.progress import Reporter
 from lenspipe.stage1 import run_stage1
 from lenspipe.ui.commands import RunRequest, build_steps
@@ -73,7 +73,7 @@ def test_config_validates_and_round_trips_the_spec() -> None:
 
 def test_script_selects_each_if_minus_its_exclusions_and_skips_empty_ifs() -> None:
     block, selections = if_selfcal_block(3, 4, 1, exclude_channels="spw1:1; spw2")
-    assert block.split("\n\n") == [
+    assert strip_marks(block).split("\n\n") == [
         "! IF(s) skipped (no channels left after exclusions): 3",
         "! IF 1: channels 2-3\nselect i,2,3\nselfcal true,true,3600\nselfcal false,false,0.5",
         "! IF 2: channels 7\nselect i,7,7\nselfcal true,true,3600\nselfcal false,false,0.5",

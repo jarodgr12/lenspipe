@@ -3,6 +3,20 @@
 Each entry says whether existing products need re-running. The `lenspipe`
 version that made a product is recorded in its metadata JSON.
 
+## 2.4.9 — 2026-11-01
+
+**Re-run needed:** no.
+
+- Added: Stage 1 progress and timing. The DifMAP script prints a mark at
+  the start of every phase (each IF in per-IF mode, each schedule step in
+  full-band mode, the final fit, writing the calibrated data, imaging);
+  Stage 1 times the phases from them. The Jobs page progress bar now
+  advances per IF with the last IF's seconds and an estimate of the time
+  left; the job log gets one line per phase and a summary (IFs done,
+  minutes, seconds per IF, slowest IF, final fit, write, imaging); the
+  metadata records `timings_s` per phase. Before, Stage 1 showed no
+  progress at all until it finished.
+
 ## 2.4.8 — 2026-10-31
 
 **Re-run needed:** no.

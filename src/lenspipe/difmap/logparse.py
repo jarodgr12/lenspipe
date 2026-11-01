@@ -32,6 +32,7 @@ __all__ = [
 ]
 
 STAGE1_RMS_MARKER = "STAGE1_RMS"
+STAGE1_MARK_MARKER = "STAGE1_MARK"  # progress marks printed between the script's phases
 STAGE2_RMS_MARKER = "STAGE2_RMS"
 
 _NUMBER = r"[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[EeDd][+-]?\d+)?"
