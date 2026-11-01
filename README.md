@@ -199,14 +199,14 @@ an `inputs` link to the project's inputs, and its own `stage1/`, `stage2/` and
 `stage3/` trees laid out exactly like the project's. That is what makes an
 overnight queue safe: set the Parameters page up, type a name into the Run
 page's "Run label" box and submit; change the parameters, type another
-name, submit again. An "Existing runs" picker beside the box reopens a run. Each job reads its run's frozen file, not whatever
-`lenspipe.toml` says when it finally starts, and writes under its own label,
+name, submit again. An "Existing runs" picker beside the box reopens a run. Each job writes under its own label,
 so the morning's results can be compared instead of overwritten. The Run page
 shows whether an existing run's frozen parameters still match the Parameters
 page (with the diff) and can replace the frozen copy on request; the Project
 page lists every run with its product counts; the Results page has a "Run"
-select. Without a label, jobs behave as before: the project's own trees, and
-`lenspipe.toml` read at job start.
+select. Without a label, jobs use the project's own trees. Either way a job
+runs with the copy of `lenspipe.toml` taken when it was submitted, so editing
+the Parameters page never changes a job that is still waiting in the queue.
 
 From a shell: `--run <label>` on `stage1`, `stage2`, `stage3` and `run`
 creates the run on first use and works inside it; `lenspipe runs <project>`

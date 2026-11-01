@@ -308,6 +308,14 @@ class JobManager:
                 self._start(record)
                 running_count += 1
 
+    def launch_argv(self, record: JobRecord) -> list[str]:
+        """The arguments the job really runs with: a stage command reads the copy of the config
+        taken when it was queued, so editing lenspipe.toml afterwards cannot change a waiting job."""
+        argv = list(record.argv)
+        if argv and argv[0] in STAGE_COMMANDS and "--config" not in argv and record.queued_config_path.is_file():
+            argv += ["--config", str(record.queued_config_path)]
+        return argv
+
     def _start(self, record: JobRecord) -> None:
         record.directory.mkdir(parents=True, exist_ok=True)
         env = dict(os.environ)
@@ -317,7 +325,7 @@ class JobManager:
         log_handle = record.log_path.open("ab")
         try:
             process = subprocess.Popen(
-                [sys.executable, "-m", "lenspipe", *record.argv],
+                [sys.executable, "-m", "lenspipe", *self.launch_argv(record)],
                 stdout=log_handle,
                 stderr=subprocess.STDOUT,
                 stdin=subprocess.DEVNULL,
