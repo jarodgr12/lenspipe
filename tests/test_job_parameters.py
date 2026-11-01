@@ -59,3 +59,27 @@ def test_non_stage_jobs_have_no_parameter_record(project: Path, argv: list[str])
     job = manager.submit(argv, title="t", stage="other")
     assert job.parameters() is None and "config_source" not in job.extra
     manager.wait(job.id, timeout_s=120)
+
+
+def test_a_waiting_job_runs_with_the_config_it_was_queued_with(project: Path, fake_difmap: Path, monkeypatch) -> None:
+    """Queue a job, edit lenspipe.toml while it waits, let it start: it must use the old values."""
+    from lenspipe.jobs import JobManager, JobRecord
+
+    (project / "lenspipe.toml").write_text(f'[project.difmap]\nexecutable = "{fake_difmap}"\n[stage2]\nunflag = true\n')
+    manager = JobManager(project)
+    blocker = JobRecord(
+        id="20260101T000000-stage1", title="busy", stage="stage1", argv=["stage1"], project_root=str(project),
+        created_utc="2026-01-01T00:00:00+00:00", status="running", pid=424242, started_utc="2026-01-01T00:00:01+00:00",
+    )
+    blocker.save()
+    monkeypatch.setattr("lenspipe.jobs._is_lenspipe_job", lambda pid: True)
+    waiting = manager.submit(["stage1", str(project), "--dry-run", "--epoch", "A"], title="w", stage="stage1")
+    assert manager.get(waiting.id).status == "queued"
+    assert manager.launch_argv(waiting)[-2:] == ["--config", str(waiting.queued_config_path)]
+    (project / "lenspipe.toml").write_text(f'[project.difmap]\nexecutable = "{fake_difmap}"\n[stage2]\nunflag = false\n')
+    blocker.status = "completed"
+    blocker.save()
+    manager._finished.pop(blocker.id, None)
+    manager.wait(waiting.id, timeout_s=120)
+    assert manager.get(waiting.id).status == "completed"
+    assert "unflag = true" in waiting.effective_config_path.read_text()  # not the edited file

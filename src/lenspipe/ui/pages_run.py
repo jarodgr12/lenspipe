@@ -528,8 +528,9 @@ def run_page(run: str | None = None) -> None:
             run_note.classes(remove="text-negative", add="opacity-70")
             if label is None:
                 run_note.set_text(
-                    "Outputs go to the project's own stage1/, stage2/ and stage3/; each job reads lenspipe.toml "
-                    "when it starts."
+                    "Outputs go to the project's own stage1/, stage2/ and stage3/. Every job keeps a copy of "
+                    "lenspipe.toml from the moment it is submitted and runs with that, so editing the Parameters "
+                    "page afterwards does not touch a waiting job."
                 )
                 tree_note.set_text("Stage 2 and 3 read the same mode's tree; results live under stage1/<mode>/")
                 return

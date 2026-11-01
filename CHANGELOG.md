@@ -3,6 +3,17 @@
 Each entry says whether existing products need re-running. The `lenspipe`
 version that made a product is recorded in its metadata JSON.
 
+## 2.4.10 — 2026-11-02
+
+**Re-run needed:** no.
+
+- Fixed: a queued job used whatever `lenspipe.toml` said when it started,
+  so queuing a job, editing the Parameters page and queuing another made
+  the first job run with the second job's parameters. Every stage job now
+  runs with the copy of the config taken when it was submitted (the one
+  the Jobs page shows as "queued with"). Run labels are no longer needed
+  for this; they remain the way to keep outputs apart.
+
 ## 2.4.9 — 2026-11-01
 
 **Re-run needed:** no.
