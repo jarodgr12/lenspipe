@@ -44,11 +44,13 @@ def test_stage1_script_emits_gscale_at_the_end_of_its_step(project: Path) -> Non
         clean_image=Path("/o/c.fits"), calibrated_uvfits=Path("/o/x.cal.uvf"), final_model=Path("/o/x.gmod"),
         config=cfg.stage1,
     )
+    from lenspipe.difmap.scripts import strip_marks
+
     assert (
         "selfcal false,false,3600\nmodelfit 50\n\n"
         "selfcal false,false,1\nmodelfit 50\ngscale false\nmodelfit 50\n\n"
         "selfcal true,true,3600\nmodelfit 50"
-    ) in text
+    ) in strip_marks(text)
     assert text.count("gscale") == 1
 
 

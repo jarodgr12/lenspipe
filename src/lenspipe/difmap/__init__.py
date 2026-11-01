@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from lenspipe.difmap.logparse import (
+    STAGE1_MARK_MARKER,
     STAGE1_RMS_MARKER,
     STAGE2_RMS_MARKER,
     extract_last_numeric,
@@ -13,6 +14,7 @@ from lenspipe.difmap.logparse import (
 from lenspipe.difmap.runner import DifmapResult, difmap_version, run_difmap
 
 __all__ = [
+    "STAGE1_MARK_MARKER",
     "STAGE1_RMS_MARKER",
     "STAGE2_RMS_MARKER",
     "DifmapResult",

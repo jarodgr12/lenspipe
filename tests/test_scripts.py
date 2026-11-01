@@ -12,6 +12,7 @@ from lenspipe.difmap.scripts import (
     imaging_commands,
     stage1_commands,
     stage2_commands,
+    strip_marks,
 )
 from lenspipe.stage1 import make_paths as make_stage1_paths
 from lenspipe.stage2 import make_fit_ranges, plan_shards, product_tag
@@ -50,7 +51,7 @@ def test_stage1_commands_match_legacy(project: Path, legacy_stage1, final_if: bo
     # imaging (as in legacy v1.2.2), the maps of this pass are the *native* ones, and the
     # residual RMS is printed with a tag. Everything up to the imaging is identical.
     legacy_head = legacy_text.split("invert\n")[0]
-    ours_head, ours_tail = ours.split("wobs ", 1)
+    ours_head, ours_tail = strip_marks(ours).split("wobs ", 1)
     assert ours_head == legacy_head
     assert ours_tail == (
         f"{paths.calibrated_uvfits}\nwmodel {paths.final_model}\n\n"
@@ -73,6 +74,7 @@ def test_stage1_custom_schedule_renders_like_legacy_numbers() -> None:
         final_model=Path("/o/x.gmod"),
         config=config,
     )
+    text = strip_marks(text)
     assert "mapsize 1024\n" in text  # the calibration pass always images on DifMAP's native cell
     assert "selfcal false,false,10\nmodelfit 5\n\nselfcal true,false,0.25\nmodelfit 7\n" in text
     imaging = imaging_commands(

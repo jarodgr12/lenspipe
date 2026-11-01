@@ -11,7 +11,7 @@ import pytest
 from astropy.io import fits
 
 from lenspipe.config import LenspipeConfig, SelfcalStep, Stage1Config, render_toml
-from lenspipe.difmap.scripts import stage1_commands
+from lenspipe.difmap.scripts import stage1_commands, strip_marks
 from lenspipe.models import write_fixed_spectral_index_model
 from lenspipe.progress import Reporter
 from lenspipe.project import Layout, migrate_flat_layout
@@ -58,6 +58,8 @@ def test_per_if_script_structure() -> None:
         clean_image=Path("/o/nc.fits"), calibrated_uvfits=Path("/o/x.cal.uvf"), final_model=Path("/o/x.gmod"),
         config=cfg, fixed_index_model=Path("/o/x.fixed.gmod"), per_if_models=[Path("/o/x.if001.gmod"), Path("/o/x.if002.gmod")],
     )
+    assert text.count('print "STAGE1_MARK"') == 5  # if 1, if 2, final-fit, write, image
+    text = strip_marks(text)
     one_if = (
         "rmodel /o/x.fixed.gmod\nselfcal false,false,3600\nmodelfit 50\ngscale\nmodelfit 50\n"
         "selfcal false,false,0.5\nmodelfit 30\n"
@@ -201,6 +203,7 @@ def test_per_if_mode_honours_exclude_channels_and_skips_empty_ifs(project: Path,
         config=cfg, fixed_index_model=Path("/o/x.fixed.gmod"),
         per_if_models=[Path("/o/x.if001.gmod"), Path("/o/x.if002.gmod"), Path("/o/x.if003.gmod")],
     )
+    text = strip_marks(text)
     assert "! IF(s) skipped (no channels left after exclusions): 3" in text
     assert "! IF 2: channels 5 7-8\nselect i,5,5,7,8\n" in text and "wmodel /o/x.if002.gmod" in text
     assert "wmodel /o/x.if003.gmod" not in text
@@ -215,7 +218,10 @@ def test_per_if_mode_honours_exclude_channels_and_skips_empty_ifs(project: Path,
     assert all(r.ok for r in results), [r.message for r in results]
     d = Layout.at(project).stage_dir(1, "per-if") / "MG0414.A"
     assert (d / "MG0414.A.if001.gmod").is_file() and not (d / "MG0414.A.if002.gmod").exists()
-    meta = json.loads((d / "MG0414.A.stage1.metadata.json").read_text())["per_if"]
+    whole = json.loads((d / "MG0414.A.stage1.metadata.json").read_text())
+    assert set(whole["timings_s"]) == {"if 1", "final-fit", "write", "image"}  # seconds per phase, from the marks
+    assert all(isinstance(v, float) and v >= 0 for v in whole["timings_s"].values())
+    meta = whole["per_if"]
     assert meta["exclude_channels_spec"] == "spw0:1; spw1" and meta["skipped_ifs"] == [2]
     assert meta["selected_ranges_one_based"] == [
         {"if_number": 1, "first_channel": 1, "last_channel": 4, "channels": [[1, 1], [3, 4]], "n_channels": 3}
