@@ -201,3 +201,22 @@ def test_project_page_flag_card_renders(project: Path, fake_difmap: Path) -> Non
     assert any("MG0414.A.uvfits" in text and "unflagged overall" in text for text in labels)
     tables = [e for e in holder.descendants() if type(e).__name__ == "Table"]
     assert tables and len(tables[0].rows) == report.n_if
+
+
+def test_outdated_console_banner_offers_a_restart(monkeypatch: pytest.MonkeyPatch) -> None:
+    """After an update the console keeps the old job handling until it restarts; every page says so."""
+    from nicegui import ui
+
+    from lenspipe.ui.layout import _outdated_banner
+
+    monkeypatch.setattr("lenspipe.updates.installed_version", lambda: "99.0.0")
+    with ui.element("div") as holder:
+        _outdated_banner()
+    texts = [e.text for e in holder.descendants() if hasattr(e, "text")]
+    assert any("99.0.0 is installed" in text for text in texts)
+    assert any(text == "Restart console" for text in texts)
+
+    monkeypatch.setattr("lenspipe.updates.installed_version", lambda: None)
+    with ui.element("div") as quiet:
+        _outdated_banner()
+    assert not list(quiet.descendants())

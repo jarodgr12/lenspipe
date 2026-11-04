@@ -50,3 +50,14 @@ def test_check_for_update_reads_git_and_uv(monkeypatch: pytest.MonkeyPatch) -> N
 def test_restart_argv_reuses_the_ui_arguments_without_opening_a_browser() -> None:
     assert restart_argv(["ui", "/p", "--port", "8972"]) == [sys.executable, "-m", "lenspipe", "ui", "/p", "--port", "8972", "--no-browser"]
     assert restart_argv(["ui", "/p", "--no-browser"]).count("--no-browser") == 1
+
+
+def test_console_outdated_compares_the_installed_version_with_the_running_one(monkeypatch: pytest.MonkeyPatch) -> None:
+    from lenspipe import updates
+
+    assert updates.installed_version() == __version__  # nothing reinstalled under this test process
+    assert updates.console_outdated() is None
+    monkeypatch.setattr(updates, "installed_version", lambda: "99.0.0")
+    assert updates.console_outdated() == "99.0.0"
+    monkeypatch.setattr(updates, "installed_version", lambda: None)  # a source checkout: nothing to compare
+    assert updates.console_outdated() is None

@@ -3,6 +3,24 @@
 Each entry says whether existing products need re-running. The `lenspipe`
 version that made a product is recorded in its metadata JSON.
 
+## 2.4.11 — 2026-11-04
+
+**Re-run needed:** only jobs that ran with the wrong parameters. The Jobs
+page's "Parameters this job used" panel shows which file each job read.
+
+- Fixed: jobs could still run with the newest Parameters-page values
+  instead of the ones they were queued with. The 2.4.10 fix lived in the
+  console process, and a console started before an update keeps running
+  its old code (job queueing included) until it is restarted, so it kept
+  launching jobs without their queued copy. Each stage command now reads
+  its job's own `lenspipe.toml` copy itself, so this holds even under a
+  console that has not been restarted.
+- Added: the first line of each job's `effective_config.toml` names the
+  file the parameters were read from and the lenspipe version that ran.
+- Added: every console page shows a red banner with a "Restart console"
+  button when a newer lenspipe is installed than the one the console is
+  running.
+
 ## 2.4.10 — 2026-11-02
 
 **Re-run needed:** no.

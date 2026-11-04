@@ -110,14 +110,37 @@ def _run_root(project_root: Path, label: str) -> Path:
     return run.root
 
 
+_config_source: Path | None = None  # the file _load read; named in the job's effective_config.toml
+
+
+def _job_config_copy() -> Path | None:
+    """Inside a console job, the copy of lenspipe.toml taken when the job was queued.
+
+    Consoles from 2.4.10 pass it with --config. Reading it here as well means a console
+    still running an older version (not restarted after ``lenspipe update``) cannot make
+    a queued job pick up parameters saved after it was queued.
+    """
+    from lenspipe.progress import JOB_DIR_ENV
+
+    job_dir = os.environ.get(JOB_DIR_ENV)
+    if not job_dir:
+        return None
+    copy = Path(job_dir) / CONFIG_FILENAME
+    return copy if copy.is_file() else None
+
+
 def _load(project: Path, config_path: Path | None, run: str | None = None) -> tuple[Path, LenspipeConfig]:
     import tomllib
 
     from pydantic import ValidationError
 
+    global _config_source
     root = _project_root(project)
     if run:
         root = _run_root(root, run)
+    if config_path is None:
+        config_path = _job_config_copy()
+    _config_source = config_path or root / CONFIG_FILENAME
     try:
         return root, load_config(root, config_path)
     except tomllib.TOMLDecodeError as exc:
@@ -144,6 +167,7 @@ def _record_effective_config(cfg: LenspipeConfig) -> None:
         Path(job_dir).mkdir(parents=True, exist_ok=True)
         (Path(job_dir) / "effective_config.toml").write_text(
             "# Parameters used by this job, after every command-line override.\n"
+            f"# Read from {_config_source} by lenspipe {__version__}.\n"
             + tomli_w.dumps(cfg.model_dump(mode="json", exclude_none=True)),
             encoding="utf-8",
         )
