@@ -22,6 +22,8 @@ __all__ = [
     "DEFAULT_REPO",
     "UpdateStatus",
     "check_for_update",
+    "console_outdated",
+    "installed_version",
     "install_source",
     "is_newer",
     "latest_release",
@@ -42,6 +44,24 @@ def _version_tuple(text: str) -> tuple[int, ...]:
 def is_newer(candidate: str, installed: str = __version__) -> bool:
     """True when ``candidate`` is a higher X.Y.Z than ``installed``."""
     return _version_tuple(candidate) > _version_tuple(installed)
+
+
+def installed_version() -> str | None:
+    """The lenspipe version installed on disk now; after an update it is newer than the code this process loaded."""
+    import importlib
+    from importlib.metadata import PackageNotFoundError, version
+
+    importlib.invalidate_caches()  # drop the cached directory listing, so a reinstall is seen
+    try:
+        return version("lenspipe")
+    except PackageNotFoundError:
+        return None
+
+
+def console_outdated() -> str | None:
+    """The installed version when it is newer than the one this (long-running) process is executing."""
+    installed = installed_version()
+    return installed if installed and is_newer(installed) else None
 
 
 def parse_release_tags(ls_remote_output: str) -> list[str]:

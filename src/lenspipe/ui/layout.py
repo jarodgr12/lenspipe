@@ -103,4 +103,35 @@ def frame(title: str, path: str) -> Iterator[None]:
                         ui.item_label(label)
 
     with ui.column().classes("w-full max-w-screen-xl gap-4 p-2"):
+        _outdated_banner()
         yield
+
+
+def _outdated_banner() -> None:
+    """After an update the console keeps running the old code (job queueing included) until it restarts."""
+    from lenspipe import __version__
+    from lenspipe.updates import console_outdated
+
+    newer = console_outdated()
+    if newer is None:
+        return
+
+    async def restart() -> None:
+        import asyncio
+
+        from nicegui import run
+
+        from lenspipe.updates import restart_console
+
+        ui.notify("Restarting the console; this page reloads in a few seconds", type="info")
+        ui.run_javascript("setTimeout(() => location.reload(), 6000)")
+        await asyncio.sleep(0.5)
+        await run.io_bound(restart_console)
+
+    with ui.row().classes("w-full items-center gap-3 no-wrap q-pa-sm rounded-borders bg-red-1 text-red-10"):
+        ui.icon("warning", size="sm")
+        ui.label(
+            f"lenspipe {newer} is installed, but this console is still running {__version__}: it queues and "
+            "starts jobs the old way until it is restarted. Restart it when no job is running."
+        ).classes("text-sm flex-1")
+        ui.button("Restart console", icon="restart_alt", on_click=restart).props("unelevated dense no-caps color=red-8")

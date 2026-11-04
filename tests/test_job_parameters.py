@@ -83,3 +83,27 @@ def test_a_waiting_job_runs_with_the_config_it_was_queued_with(project: Path, fa
     manager.wait(waiting.id, timeout_s=120)
     assert manager.get(waiting.id).status == "completed"
     assert "unflag = true" in waiting.effective_config_path.read_text()  # not the edited file
+
+
+def test_a_job_started_without_config_flag_still_reads_its_own_copy(project: Path, fake_difmap: Path) -> None:
+    """A console started before 2.4.10 launches jobs without --config; the job must still use its copy."""
+    import os
+    import subprocess
+    import sys
+
+    from lenspipe.progress import JOB_DIR_ENV
+
+    (project / "lenspipe.toml").write_text(f'[project.difmap]\nexecutable = "{fake_difmap}"\n[stage2]\nmodelfit_iterations = 7\n')
+    manager = JobManager(project)
+    blocker = manager.submit(["stage1", str(project), "--dry-run", "--epoch", "A"], title="t", stage="stage1")
+    manager.wait(blocker.id, timeout_s=120)
+    job = manager.get(blocker.id)
+    (project / "lenspipe.toml").write_text(f'[project.difmap]\nexecutable = "{fake_difmap}"\n[stage2]\nmodelfit_iterations = 13\n')
+    job.effective_config_path.unlink()
+    env = {**os.environ, JOB_DIR_ENV: str(job.directory)}
+    # Exactly what an old console runs: the stored argv, no --config appended.
+    done = subprocess.run([sys.executable, "-m", "lenspipe", *job.argv], cwd=project, env=env, capture_output=True, text=True)
+    assert done.returncode == 0, done.stderr
+    used = job.effective_config_path.read_text()
+    assert tomllib.loads(used)["stage2"]["modelfit_iterations"] == 7  # the queued copy, not the edited file (13)
+    assert f"# Read from {job.queued_config_path}" in used
