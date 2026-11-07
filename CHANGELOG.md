@@ -3,6 +3,20 @@
 Each entry says whether existing products need re-running. The `lenspipe`
 version that made a product is recorded in its metadata JSON.
 
+## 2.4.12 — 2026-11-07
+
+**Re-run needed:** Stage 3 only, to get the new figures (Stage 1 and 2
+products are unchanged).
+
+- Added: journal versions of three combined Stage 3 figures,
+  `<stem>.average_spectrum_mnras`, `<stem>.average_flux_ratios_mnras` and
+  `<stem>.rcusp_vs_mjd_mnras`, written beside the standard ones from the
+  same data. They have no title and no fit caption, axis labels and tick
+  labels 2 pt larger, and the key back inside the axes, placed where it
+  covers no point, error bar or line; when every position inside would
+  touch data, the top of the y-range is raised to make room. R_cusp has a
+  single series and so no key. The standard figures are unchanged.
+
 ## 2.4.11 — 2026-11-04
 
 **Re-run needed:** only jobs that ran with the wrong parameters. The Jobs

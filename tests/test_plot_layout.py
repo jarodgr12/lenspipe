@@ -54,10 +54,24 @@ def test_no_stage3_figure_draws_text_inside_its_axes(project: Path, fake_difmap:
     run_stage2(project, cfg, reporter=quiet, workers=1)
 
     inside: list[str] = []
+    mnras: dict[str, dict] = {}
+    standard: dict[str, dict] = {}
     real_save = plotting.save_figure
 
     def inspecting_save(fig, base_path, dpi=300, bbox_inches="tight"):
         fig.canvas.draw()
+        name = Path(base_path).name
+        if len(fig.axes) == 1:
+            ax = fig.axes[0]
+            record = {
+                "title": ax.get_title(), "texts": [t.get_text() for t in ax.texts],
+                "xlabel": ax.xaxis.label.get_fontsize(), "xtick": ax.get_xticklabels()[0].get_fontsize(),
+                "legend_hits": _legend_hits(ax), "legend": ax.get_legend() is not None,
+            }
+            (mnras if name.endswith("_mnras") else standard)[name] = record
+        if name.endswith("_mnras"):
+            real_save(fig, base_path, dpi=dpi, bbox_inches=bbox_inches)
+            return
         for ax in fig.axes:
             box = ax.get_window_extent()
             for text in ax.texts:
@@ -75,3 +89,65 @@ def test_no_stage3_figure_draws_text_inside_its_axes(project: Path, fake_difmap:
     monkeypatch.setattr(plotting, "_save_figure", inspecting_save)
     assert run_stage3(project, cfg, reporter=quiet, workers=1).ok
     assert inside == []
+
+    # The _mnras versions: no title or annotations, axis fonts 2 pt larger, the key inside but on no data.
+    assert sorted(name.split(".")[-1] for name in mnras) == [
+        "average_flux_ratios_mnras", "average_spectrum_mnras", "rcusp_vs_mjd_mnras",
+    ]
+    for name, record in mnras.items():
+        plain = standard[name[: -len("_mnras")]]
+        assert record["title"] == "" and record["texts"] == [], name
+        assert record["xlabel"] == plain["xlabel"] + 2 and record["xtick"] == plain["xtick"] + 2, name
+        assert record["legend_hits"] == [], f"{name}: key covers {record['legend_hits']}"
+    assert mnras[next(n for n in mnras if "average_spectrum" in n)]["legend"]
+    assert mnras[next(n for n in mnras if "average_flux_ratios" in n)]["legend"]
+
+
+def _legend_hits(ax) -> list[str]:
+    """Data artists the legend box (inside the axes) touches: markers, lines or error bars."""
+    legend = ax.get_legend()
+    if legend is None:
+        return []
+    box = legend.get_window_extent()
+    axes_box = ax.get_window_extent()
+    if not (box.x0 >= axes_box.x0 and box.x1 <= axes_box.x1 and box.y0 >= axes_box.y0 and box.y1 <= axes_box.y1):
+        return ["outside the axes"]
+    hits = []
+    for line in ax.get_lines():
+        path = line.get_transform().transform_path(line.get_path())
+        joined = line.get_linestyle() not in {"None", "none", "", " "}
+        if joined and path.intersects_bbox(box, filled=False):
+            hits.append(f"line {line.get_label()}")
+        elif not joined and any(box.contains(x, y) for x, y in path.vertices):
+            hits.append(f"markers {line.get_label()}")
+    for collection in ax.collections:
+        for path in collection.get_paths():
+            if collection.get_transform().transform_path(path).intersects_bbox(box, filled=False):
+                hits.append("error bar")
+                break
+    return hits
+
+
+def test_legend_inside_clear_finds_room_when_every_corner_holds_data() -> None:
+    """Data in every corner and the middle: the key goes into new headroom above the data, touching nothing."""
+    import numpy as np
+
+    from lenspipe.stage3.plotting import legend_inside_clear
+
+    fig, ax = plt.subplots(figsize=(8, 8))
+    x = np.linspace(12.0, 18.0, 60)
+    for offset, label in ((0.0, "A1"), (0.5, "A2"), (1.0, "B")):
+        ax.errorbar(x, np.full_like(x, 1.0 + offset), yerr=0.1, fmt="o", ms=4.5, label=label)
+    ax.plot(x, 1.0 + (x - 12.0) / 6.0 * 1.0, color="black", linestyle="--")  # a diagonal through the middle
+    ax.set_xlim(11.7, 18.3)
+    ax.set_ylim(0.85, 2.15)  # the data reach every edge: no inside position is free
+    legend = legend_inside_clear(ax)
+    fig.canvas.draw()
+    assert legend is not None and ax.get_ylim()[1] > 2.15  # room was made above the data
+    assert _legend_hits(ax) == []
+    plt.close(fig)
+
+    fig, ax = plt.subplots()
+    ax.plot([0, 1], [0, 1])  # nothing labelled: no key at all
+    assert legend_inside_clear(ax) is None
+    plt.close(fig)
