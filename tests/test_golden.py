@@ -268,6 +268,7 @@ def test_stage3_products_match_legacy(project: Path, fake_difmap: Path, fake_dif
             if "rms_" not in p.name and ".image" not in p.name
             and "normalised_reference_fluxes" not in p.name and "fluxes_vs_mjd_per_image" not in p.name
             and "normalised_rcusp" not in p.name and "_scatter" not in p.name
+            and "_mnras" not in p.name  # journal versions of three combined figures (2.4.12)
             and p.name not in {
                 "MG0414.A.channel.png", "MG0414.B.channel.png", "MG0414.channel.png",
             }

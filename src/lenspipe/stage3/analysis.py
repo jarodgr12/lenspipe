@@ -131,6 +131,7 @@ from lenspipe.stage3.io import (
     safe_label,
 )
 from lenspipe.stage3.plotting import (
+    MNRAS_SUFFIX,
     calculate_ratio_y_limits,
     calculate_spectrum_y_limits,
     configure_matplotlib,
@@ -1673,15 +1674,17 @@ def write_combined_products(
                         "n_points": fit.n_points,
                     },
                 ])
-            plot_combined_average_spectrum(
-                average_spectrum_frequency,
-                average_spectrum_series,
-                source,
-                plots_dir / f"{stem}.average_spectrum",
-                fits=average_spectrum_fits,
-                reference_frequency_ghz=reference_frequency_ghz,
-                y_limits=spectrum_y_limits,
-            )
+            for suffix, mnras in (("", False), (MNRAS_SUFFIX, True)):
+                plot_combined_average_spectrum(
+                    average_spectrum_frequency,
+                    average_spectrum_series,
+                    source,
+                    plots_dir / f"{stem}.average_spectrum{suffix}",
+                    fits=average_spectrum_fits,
+                    reference_frequency_ghz=reference_frequency_ghz,
+                    y_limits=spectrum_y_limits,
+                    mnras=mnras,
+                )
 
             average_spectrum_rows: list[dict[str, Any]] = []
             for row_index, frequency_ghz in enumerate(average_spectrum_frequency):
@@ -1731,14 +1734,16 @@ def write_combined_products(
                     "degrees_of_freedom": fit.degrees_of_freedom,
                     "n_points": fit.n_points,
                 })
-            plot_combined_average_flux_ratios(
-                average_ratio_frequency,
-                average_ratio_series,
-                source,
-                plots_dir / f"{stem}.average_flux_ratios",
-                fits=average_ratio_fits,
-                y_limits=ratio_y_limits,
-            )
+            for suffix, mnras in (("", False), (MNRAS_SUFFIX, True)):
+                plot_combined_average_flux_ratios(
+                    average_ratio_frequency,
+                    average_ratio_series,
+                    source,
+                    plots_dir / f"{stem}.average_flux_ratios{suffix}",
+                    fits=average_ratio_fits,
+                    y_limits=ratio_y_limits,
+                    mnras=mnras,
+                )
 
             average_ratio_rows: list[dict[str, Any]] = []
             for row_index, frequency_ghz in enumerate(average_ratio_frequency):
@@ -2031,12 +2036,14 @@ def write_combined_products(
                     "degrees_of_freedom": rcusp_fit.degrees_of_freedom,
                     "n_points": rcusp_fit.n_points,
                 })
-            plot_epoch_rcusp_vs_mjd(
-                mjds, rcusp_values, rcusp_errors, source,
-                plots_dir / f"{stem}.rcusp_vs_mjd",
-                fit=rcusp_fit,
-                scatter=rcusp_scatter,
-            )
+            for suffix, mnras in (("", False), (MNRAS_SUFFIX, True)):
+                plot_epoch_rcusp_vs_mjd(
+                    mjds, rcusp_values, rcusp_errors, source,
+                    plots_dir / f"{stem}.rcusp_vs_mjd{suffix}",
+                    fit=rcusp_fit,
+                    scatter=rcusp_scatter,
+                    mnras=mnras,
+                )
             # R_cusp normalised to its all-visit weighted mean, with the same two
             # scatter statistics (per cent) as the normalised ratios and fluxes.
             normalised_rcusp_series = _normalised_ratio_series(

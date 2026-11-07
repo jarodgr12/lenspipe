@@ -342,6 +342,85 @@ def caption_below(ax, lines, fontsize: float = 9.0, offset: float = 0.11):
     )
 
 
+MNRAS_SUFFIX = "_mnras"
+MNRAS_FONT_STEP = 2.0  # points added to axis labels and tick labels on the _mnras figures
+
+
+def mnras_axis_fonts(ax) -> None:
+    """Axis labels and tick labels ``MNRAS_FONT_STEP`` points larger than on the standard figures."""
+    from matplotlib.font_manager import FontProperties
+
+    for label in (ax.xaxis.label, ax.yaxis.label):
+        label.set_fontsize(label.get_fontsize() + MNRAS_FONT_STEP)
+    for axis_name in ("x", "y"):
+        size = FontProperties(size=mpl.rcParams[f"{axis_name}tick.labelsize"]).get_size_in_points()
+        ax.tick_params(axis=axis_name, labelsize=size + MNRAS_FONT_STEP)
+
+
+def _drawn_points(ax, samples_per_segment: int = 25) -> np.ndarray:
+    """Display coordinates covering every marker, line and error bar in ``ax``.
+
+    Joined lines and error-bar segments are sampled along their length, so a
+    legend box that crosses a line between two vertices is still caught.
+    """
+    paths: list[tuple[np.ndarray, bool]] = []
+    for line in ax.get_lines():
+        xy = np.asarray(line.get_xydata(), dtype=float)
+        if xy.size:
+            paths.append((xy, line.get_linestyle() not in {"None", "none", "", " "}))
+    for collection in ax.collections:
+        for segment in getattr(collection, "get_segments", list)():
+            paths.append((np.asarray(segment, dtype=float), True))
+    steps = np.linspace(0.0, 1.0, samples_per_segment)[:, None]
+    chunks: list[np.ndarray] = []
+    for xy, joined in paths:
+        display = ax.transData.transform(xy)
+        display = display[np.all(np.isfinite(display), axis=1)]
+        if joined and len(display) > 1:
+            chunks.extend(a + (b - a) * steps for a, b in zip(display[:-1], display[1:], strict=False))
+        else:
+            chunks.append(display)
+    return np.vstack(chunks) if chunks else np.empty((0, 2))
+
+
+LEGEND_INSIDE_LOCATIONS = (
+    "upper right", "upper left", "lower right", "lower left",
+    "upper center", "lower center", "center right", "center left",
+)
+
+
+def legend_inside_clear(ax, padding_px: float = 6.0, headroom_steps: int = 10):
+    """Place the legend inside the axes where it covers no marker, error bar or line.
+
+    Every inside position is tried in turn; the first whose box (plus
+    ``padding_px``) holds none of the drawn data is kept. When none is free the
+    top of the y-range is raised by 12 per cent and the positions are tried
+    again, so the key ends up in empty space above the data rather than on it.
+    Call it after the axis limits are final. Returns the legend (None without labels).
+    """
+    handles, labels = ax.get_legend_handles_labels()
+    if not handles:
+        return None
+    fig = ax.figure
+    legend = None
+    for _ in range(headroom_steps + 1):
+        fig.canvas.draw()
+        points = _drawn_points(ax)
+        for location in LEGEND_INSIDE_LOCATIONS:
+            legend = ax.legend(handles, labels, loc=location, frameon=False)
+            fig.canvas.draw()
+            box = legend.get_window_extent().padded(padding_px)
+            covered = (
+                (points[:, 0] >= box.x0) & (points[:, 0] <= box.x1)
+                & (points[:, 1] >= box.y0) & (points[:, 1] <= box.y1)
+            )
+            if not np.any(covered):
+                return legend
+        low, high = ax.get_ylim()
+        ax.set_ylim(low, high + 0.12 * (high - low))
+    return legend
+
+
 def _draw_spectrum_panel(
     ax,
     frequency_ghz,
@@ -643,6 +722,18 @@ def plot_spectra_with_residuals(
 
 
 
+def _finish_summary(ax, mnras: bool, caption_lines) -> None:
+    """Standard figures: title, key beside the axes, fit caption below. ``_mnras``: none of
+    those, larger axis fonts and the key inside the axes clear of the data."""
+    if mnras:
+        mnras_axis_fonts(ax)
+        legend_inside_clear(ax)
+    else:
+        ax.set_title("All epochs")
+        legend_outside(ax)
+        caption_below(ax, caption_lines)
+
+
 def plot_combined_average_spectrum(
     frequency_ghz,
     averaged_flux_series,
@@ -651,12 +742,14 @@ def plot_combined_average_spectrum(
     fits=None,
     reference_frequency_ghz=15.0,
     y_limits=None,
+    mnras: bool = False,
 ) -> None:
     """Plot the epoch-averaged grouped-image spectra in a single panel.
 
     Each data point is the inverse-variance weighted mean of the fitted grouped
     flux densities from all selected epochs at the corresponding Stage 2
-    frequency interval.
+    frequency interval. ``mnras`` drops the title and fit caption, enlarges the
+    axis fonts and keeps the key inside the axes, clear of the data.
     """
     fig, ax = plt.subplots(figsize=(8, 8))
     correct_tick_marks(ax)
@@ -707,15 +800,13 @@ def plot_combined_average_spectrum(
 
     ax.set_xlabel("Frequency [GHz]")
     ax.set_ylabel("Flux density [mJy]")
-    ax.set_title("All epochs")
-    legend_outside(ax)
-    caption_below(ax, caption_lines)
     ax.set_xlim(*SUMMARY_FREQUENCY_LIMITS_GHZ)
     ax.set_xticks(SUMMARY_FREQUENCY_TICKS_GHZ)
     if y_limits is None and limit_arrays:
         y_limits = _positive_quantity_limits(limit_arrays)
     if y_limits is not None:
         ax.set_ylim(*y_limits)
+    _finish_summary(ax, mnras, caption_lines)
     _save_figure(fig, output_base)
 
 
@@ -726,12 +817,14 @@ def plot_combined_average_flux_ratios(
     output_base,
     fits=None,
     y_limits=None,
+    mnras: bool = False,
 ) -> None:
     """Plot channel-by-channel flux ratios averaged over all selected epochs.
 
     Each point is the inverse-variance weighted mean of the measured flux ratio
     at one retained Stage 2 fit index. When an epoch-specific channel mask is
     active, the point is formed from whichever epochs retain that index.
+    ``mnras`` as for :func:`plot_combined_average_spectrum`.
     """
     fig, ax = plt.subplots(figsize=(8, 8))
     correct_tick_marks(ax)
@@ -775,15 +868,13 @@ def plot_combined_average_flux_ratios(
 
     ax.set_xlabel("Frequency [GHz]")
     ax.set_ylabel("Flux ratio")
-    ax.set_title("All epochs")
-    legend_outside(ax)
-    caption_below(ax, caption_lines)
     ax.set_xlim(*SUMMARY_FREQUENCY_LIMITS_GHZ)
     ax.set_xticks(SUMMARY_FREQUENCY_TICKS_GHZ)
     if y_limits is None and limit_arrays:
         y_limits = _positive_quantity_limits(limit_arrays)
     if y_limits is not None:
         ax.set_ylim(*y_limits)
+    _finish_summary(ax, mnras, caption_lines)
     _save_figure(fig, output_base)
 
 def plot_epoch_weighted_flux_ratios_vs_mjd(
@@ -1156,11 +1247,13 @@ def plot_epoch_rcusp_vs_mjd(
     fit=None,
     y_limits=None,
     scatter=None,
+    mnras: bool = False,
 ) -> None:
     """Plot the cusp relation ``R_cusp(A1, A2, B)`` versus MJD.
 
     The title quotes the weighted mean with its formal error and, when given,
     the visit-to-visit scatter, which is usually the more honest uncertainty.
+    ``mnras`` drops the title and enlarges the axis fonts (one series, so no key).
     """
     fig, ax = plt.subplots(figsize=(8, 8))
     correct_tick_marks(ax)
@@ -1211,7 +1304,10 @@ def plot_epoch_rcusp_vs_mjd(
 
     ax.set_xlabel("MJD")
     ax.set_ylabel(r"$R_{\rm cusp}$")
-    ax.set_title(title)
+    if mnras:
+        mnras_axis_fonts(ax)
+    else:
+        ax.set_title(title)
     if y_limits is not None:
         ax.set_ylim(*y_limits)
     _save_figure(fig, output_base)
