@@ -444,6 +444,14 @@ class Stage3Config(_Model):
         ),
     )
     annotations: bool = Field(True, description="Also write annotated spectrum figures.")
+    jackknife: bool = Field(
+        False,
+        description=(
+            "Jackknife errors across Stage 2 products that each leave out one channel block in the same "
+            "windows (stage2.exclude_channels 'spw0-47:2-5', 'spw0-47:6-9', ...): per-epoch and all-visit "
+            "estimates with sqrt((n-1)/n sum(x - mean)^2), written as <base>_x_<windows>_jackknife."
+        ),
+    )
     plot_error_bars: bool = Field(
         True, description="Draw error bars on every Stage 3 figure; off plots the points alone."
     )
@@ -664,6 +672,7 @@ frequency_frame_ghz = [11.7, 18.3]
 frequency_ticks_ghz = [12.0, 13.0, 14.0, 15.0, 16.0, 17.0, 18.0]
 rcusp_images = ["A1", "A2", "B"]    # [] disables R_cusp
 annotations = true
+jackknife = false                   # jackknife errors over Stage 2 products that each leave out one channel block
 plot_error_bars = true              # error bars on every Stage 3 figure
 point_opacity = 1.0                 # markers, 0 (transparent) to 1 (opaque)
 error_bar_opacity = 1.0             # error bars, set separately from the markers

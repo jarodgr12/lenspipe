@@ -389,17 +389,20 @@ LEGEND_INSIDE_LOCATIONS = (
 )
 
 
-def legend_inside_clear(ax, padding_px: float = 6.0, headroom_steps: int = 10):
+def legend_inside_clear(ax, padding_px: float = 6.0, headroom_steps: int = 10, title: str | None = None):
     """Place the legend inside the axes where it covers no marker, error bar or line.
 
     Every inside position is tried in turn; the first whose box (plus
     ``padding_px``) holds none of the drawn data is kept. When none is free the
     top of the y-range is raised by 12 per cent and the positions are tried
     again, so the key ends up in empty space above the data rather than on it.
-    Call it after the axis limits are final. Returns the legend (None without labels).
+    ``title`` heads the key (a panel name on multi-panel figures, which have no
+    axes titles in this style); with a title and no labelled artists the key is
+    the name alone. Call it after the axis limits are final. Returns the legend
+    (None with neither labels nor title).
     """
     handles, labels = ax.get_legend_handles_labels()
-    if not handles:
+    if not handles and not title:
         return None
     fig = ax.figure
     legend = None
@@ -407,7 +410,7 @@ def legend_inside_clear(ax, padding_px: float = 6.0, headroom_steps: int = 10):
         fig.canvas.draw()
         points = _drawn_points(ax)
         for location in LEGEND_INSIDE_LOCATIONS:
-            legend = ax.legend(handles, labels, loc=location, frameon=False)
+            legend = ax.legend(handles, labels, loc=location, frameon=False, title=title)
             fig.canvas.draw()
             box = legend.get_window_extent().padded(padding_px)
             covered = (

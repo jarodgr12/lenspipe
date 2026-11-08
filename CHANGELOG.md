@@ -3,6 +3,32 @@
 Each entry says whether existing products need re-running. The `lenspipe`
 version that made a product is recorded in its metadata JSON.
 
+## 2.4.13 — 2026-11-08
+
+**Re-run needed:** Stage 3 only, with the jackknife switch on, for the
+jackknife products (nothing else changes).
+
+- Added: jackknife errors in Stage 3 (`stage3.jackknife`, CLI
+  `--jackknife`, Run page switch "Jackknife errors"), replacing the
+  collaborators' `jackknife_1.py` / `jackknife_edit.py` scripts. A set is
+  every Stage 2 product of one source that leaves out one channel block in
+  the same windows (`stage2.exclude_channels` `spw0-47:2-5`,
+  `spw0-47:6-9`, ...). Stage 3 analyses the whole set (naming one sample or
+  the base product on the Run page is enough) and writes
+  `combined/<source>/<base>_x_<windows>_jackknife/`: per-sample average
+  fits, the jackknife mean and error sqrt((n-1)/n sum(x - mean)^2) of each
+  average flux ratio and S_ref, per-epoch S_ref, alpha and ratio_ref with
+  jackknife errors, per-channel component spectra, and the scatter across
+  epochs (plain and weighted per cent, formerly the figure annotations).
+  Figures: histograms of the per-sample average ratios and fluxes, fluxes,
+  alphas, alpha offsets, ratios and normalised ratios versus MJD, and the
+  per-epoch spectra grid, all in the `_mnras` style. Differences from the
+  scripts: n is the number of samples found (not a fixed 15), a missing
+  sample is left out of that value rather than read as zero, MJDs come from
+  the visits themselves, fluxes are plotted in mJy, histogram bins are
+  automatic, and the epoch names on the spectra grid are keys inside the
+  panels instead of titles.
+
 ## 2.4.12 — 2026-11-07
 
 **Re-run needed:** Stage 3 only, to get the new figures (Stage 1 and 2

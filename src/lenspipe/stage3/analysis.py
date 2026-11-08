@@ -322,6 +322,19 @@ def _stage3_dry_run(
             combined_dir = combined_dir / analysis_tag
         reporter.log(f"[stage3]   combined {source}.{product_tag}: {n_visits} visit(s) -> {combined_dir}")
         products_out.append(str(combined_dir))
+    if settings.jackknife:
+        from lenspipe.stage3.jackknife import sample_key
+
+        families: dict[tuple[str, str, str], set[str]] = defaultdict(set)
+        for dataset in datasets:
+            key = sample_key(dataset.product_tag, load_stage2_metadata(dataset))
+            if key is not None:
+                families[(dataset.source, *key)].add(dataset.product_tag)
+        found = {key: tags for key, tags in families.items() if len(tags) >= 2}
+        if not found:
+            reporter.warn("[stage3]   jackknife: no set of two or more channel-block exclusion products selected")
+        for (source, base, windows), tags in sorted(found.items()):
+            reporter.log(f"[stage3]   jackknife {source}.{base}_x_{windows}_jackknife: {len(tags)} samples")
     reporter.log("[stage3] DRY RUN: nothing written")
     return Stage3Summary(
         analyses=len(datasets), per_visit_written_or_skipped=0, combined_written_or_skipped=0,
@@ -2346,6 +2359,14 @@ def run_stage3(
     plotting.configure_error_bars(settings.plot_error_bars)
     plotting.configure_opacity(settings.point_opacity, settings.error_bar_opacity)
 
+    if settings.jackknife:
+        from lenspipe.stage3.jackknife import with_jackknife_samples
+
+        # The Run page names one product; the jackknife needs every sample of its set in this run.
+        widened = with_jackknife_samples(root, epochs or None, products or None, calibration_mode)
+        if widened and widened != (products or None):
+            reporter.log(f"[stage3] jackknife: analysing {len(widened)} product(s): {', '.join(sorted(widened))}")
+        products = widened
     datasets = discover_stage2_datasets(
         root, requested_epochs=epochs or None, requested_products=products or None,
         calibration_mode=calibration_mode,
@@ -2521,6 +2542,29 @@ def run_stage3(
         except Exception as exc:  # noqa: BLE001
             failures += 1
             reporter.error(f"combined products failed for {source}.{product_tag}: {exc}")
+
+    if settings.jackknife:
+        from lenspipe.stage3.jackknife import find_jackknife_sets, write_jackknife_products
+
+        sets = find_jackknife_sets(analyses)
+        if not sets:
+            reporter.warn(
+                "[stage3] jackknife: no set found. It needs two or more Stage 2 products of one source that "
+                "each leave out a channel block in the same windows (stage2.exclude_channels "
+                "'spw0-47:2-5', 'spw0-47:6-9', ...), all selected for this Stage 3 run."
+            )
+        for jack in sets:
+            reporter.log(f"[stage3] jackknife {jack.source}.{jack.name}: {jack.n} samples ({', '.join(sorted(jack.samples))})")
+            try:
+                path = write_jackknife_products(
+                    jack, settings.reference_frequency_ghz, overwrite=overwrite, analysis_tag=analysis_tag,
+                )
+                combined_written += 1
+                if path is not None:
+                    products_out.append(str(path))
+            except Exception as exc:  # noqa: BLE001
+                failures += 1
+                reporter.error(f"jackknife failed for {jack.source}.{jack.name}: {exc}")
 
     reporter.log(
         f"[stage3] analyses={len(analyses)} per-visit={written} combined={combined_written} "
