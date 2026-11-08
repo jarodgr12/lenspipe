@@ -132,29 +132,26 @@ def with_jackknife_samples(
     requested_epochs: set[str] | None,
     requested_products: set[str] | None,
     calibration_mode: str,
-) -> set[str] | None:
-    """The Stage 2 products to analyse with the jackknife on: those requested plus their sets' samples.
+) -> set[str]:
+    """The sample products a jackknife run analyses; only these, never the base or other products.
 
-    Nothing requested: every product that belongs to a set of two or more samples.
-    A requested sample brings in the rest of its set; a requested base product
-    (``if64_edge2``) brings in every set made from it. Returns the request unchanged
-    when no set applies, so the usual "select a product" message still appears.
+    Nothing requested: every sample of every set of two or more. A requested
+    sample selects its whole set; a requested base product (``if64_edge2``)
+    selects every set made from it; other requested products select nothing.
+    Empty when no set applies.
     """
     tags = {tag for found in available_stage2_products(project_root, requested_epochs, calibration_mode).values() for tag in found}
     if not tags:
-        return requested_products
+        return set()
     families: dict[tuple[str, str, str], set[str]] = defaultdict(set)
     for dataset in discover_stage2_datasets(project_root, requested_epochs, tags, calibration_mode):
         key = sample_key(dataset.product_tag, load_stage2_metadata(dataset))
         if key is not None:
             families[(dataset.source, *key)].add(dataset.product_tag)
     sets = {key: members for key, members in families.items() if len(members) >= 2}
-    if not requested_products:
-        found = set().union(*sets.values()) if sets else set()
-        return found or requested_products
-    wanted = set(requested_products)
+    wanted: set[str] = set()
     for (_, base, _), members in sets.items():
-        if members & requested_products or base in requested_products:
+        if not requested_products or members & requested_products or base in requested_products:
             wanted |= members
     return wanted
 
@@ -382,8 +379,8 @@ def write_jackknife_products(
                 mean = float(np.nanmean(ratio_est[r][0]))
                 normalised[r] = (ratio_est[r][0] / mean, ratio_est[r][1] / mean)
             plot_jackknife_stack(
-                mjd, normalised, {r: f"{r} / mean" for r in ratios},
-                plots_dir / f"{stem}.normalised_flux_ratios_vs_mjd", colour_offset=1,
+                mjd, normalised, {r: r for r in ratios},
+                plots_dir / f"{stem}.normalised_flux_ratios_vs_mjd", colour_offset=1, centre=1.0,
             )
         plot_jackknife_spectra_grid(spectra_grid, plots_dir / f"{stem}.spectra_all_epochs")
 

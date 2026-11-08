@@ -70,8 +70,13 @@ def plot_jackknife_stack(
     y_labels: Mapping[str, str],
     output_base: Path,
     colour_offset: int = 0,
+    centre: float | None = None,
 ) -> None:
-    """Stacked panels sharing the MJD axis: one quantity per panel, jackknife mean and error per epoch."""
+    """Stacked panels sharing the MJD axis: one quantity per panel, jackknife mean and error per epoch.
+
+    ``centre`` (1.0 for normalised series) puts every panel's y-axis symmetric
+    about that value, wide enough for the furthest point plus its error bar.
+    """
     items = list(series.items())
     if not items:
         return
@@ -90,7 +95,12 @@ def plot_jackknife_stack(
                 ax, mjd[mask], y[mask], plotting._yerr(np.where(np.isfinite(sigma), sigma, 0.0)[mask]),
                 color=COLOURS[(index + colour_offset) % len(COLOURS)], ms=4.5,
             )
-        ax.margins(y=0.15)
+        if centre is not None and np.any(mask):
+            reach = np.abs(y[mask] - centre) + np.where(np.isfinite(sigma[mask]), sigma[mask], 0.0)
+            half = max(float(np.max(reach)) * 1.15, 1e-9)
+            ax.set_ylim(centre - half, centre + half)
+        else:
+            ax.margins(y=0.15)
         ax.set_ylabel(y_labels[label])
         # Panels touch, so a tick label on a shared edge would collide with the neighbour's: keep only inner ones.
         ax.yaxis.set_major_locator(MaxNLocator(nbins=4))

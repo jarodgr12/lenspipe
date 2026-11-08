@@ -3,6 +3,22 @@
 Each entry says whether existing products need re-running. The `lenspipe`
 version that made a product is recorded in its metadata JSON.
 
+## 2.4.14 — 2026-11-08
+
+**Re-run needed:** Stage 3 with the jackknife switch, for the corrected
+normalised-ratio figure. The per-sample Stage 3 folders a 2.4.13 jackknife
+run wrote can be deleted; 2.4.14 no longer makes them.
+
+- Changed: with the jackknife on, Stage 3 writes only the `_jackknife`
+  product. The sample products are read as inputs, and none of their own
+  per-visit or combined plots and tables are written; neither is the base
+  product's, even when it is the product named on the Run page (naming it
+  just selects its jackknife set). With no jackknife set to work on, Stage 3
+  now stops with a message instead of running an ordinary analysis.
+- Changed: the jackknife `normalised_flux_ratios_vs_mjd` figure labels each
+  panel with the ratio alone (`B/A`, not `B/A / mean`) and centres every
+  panel's y-axis on 1, wide enough for the furthest point and its error bar.
+
 ## 2.4.13 — 2026-11-08
 
 **Re-run needed:** Stage 3 only, with the jackknife switch on, for the
