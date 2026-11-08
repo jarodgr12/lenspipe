@@ -50,6 +50,7 @@ class RunRequest:
     stage3_exclude_channels: str | None = None
     stage3_exclude_epoch_channels: list[str] = field(default_factory=list)
     stage3_annotations: bool | None = None
+    stage3_jackknife: bool | None = None
     stage3_error_bars: bool | None = None
     stage3_point_opacity: float | None = None
     stage3_error_bar_opacity: float | None = None
@@ -163,6 +164,7 @@ def build_steps(request: RunRequest) -> tuple[list[ChainStep], list[str]]:
         for item in request.stage3_exclude_epoch_channels:
             argv += ["--exclude-epoch-channels", item]
         argv += _toggle(request.stage3_annotations, "--annotations", "--no-annotations")
+        argv += _toggle(request.stage3_jackknife, "--jackknife", "--no-jackknife")
         argv += _toggle(request.stage3_error_bars, "--error-bars", "--no-error-bars")
         argv += _number(request.stage3_point_opacity, "--point-opacity")
         argv += _number(request.stage3_error_bar_opacity, "--error-bar-opacity")

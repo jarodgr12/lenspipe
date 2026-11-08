@@ -325,6 +325,14 @@ def run_page(run: str | None = None) -> None:
                             "Plot processes", value=config.run.plot_workers, min=1, step=1
                         ).props(dense).classes("w-36")
                         ui.label(f"{cpus} CPUs").classes("text-caption opacity-70")
+                        jackknife = ui.switch("Jackknife errors", value=config.stage3.jackknife)
+                        jackknife.tooltip(
+                            "Needs one Stage 2 product per left-out channel block, all in the same windows: run "
+                            "Stage 2 once per block with its 'Channels to leave out' set to spw0-47:2-5, then "
+                            "spw0-47:6-9, and so on. With this on, Stage 3 also writes "
+                            "combined/<source>/<base>_x_<windows>_jackknife/: per-epoch and all-visit jackknife "
+                            "means and errors, sqrt((n-1)/n sum(x - mean)^2), as tables and figures in the _mnras style."
+                        )
                     with ui.expansion("Advanced", icon="tune").classes("w-full").props("dense"):
                         with ui.row().classes("gap-4 items-center q-pt-sm"):
                             fit_method = ui.select(
@@ -478,6 +486,7 @@ def run_page(run: str | None = None) -> None:
                     else _epoch_exclusions(exclude_epoch_channels.value or "")
                 ),
                 stage3_annotations=_override(bool(annotations.value), s3.annotations),
+                stage3_jackknife=_override(bool(jackknife.value), s3.jackknife),
                 stage3_error_bars=_override(bool(s3_error_bars.value), s3.plot_error_bars),
                 stage3_point_opacity=_override(round(float(point_opacity.value), 2), s3.point_opacity),
                 stage3_error_bar_opacity=_override(round(float(error_bar_opacity.value), 2), s3.error_bar_opacity),
@@ -626,7 +635,7 @@ def run_page(run: str | None = None) -> None:
             s1_channels_per_if, s1_edge, s1_exclude, final_if, final_if_channels, reimage, reimage_only, mode, channels_per_if,
             channels, shards, edge, s2_exclude, iterations, unflag, keep_models, plots, s2_error_bars,
             error_source, product, plot_workers, fit_method, reference_frequency, formats,
-            exclude_channels, exclude_epoch_channels, annotations, s3_error_bars, point_opacity, error_bar_opacity,
+            exclude_channels, exclude_epoch_channels, annotations, jackknife, s3_error_bars, point_opacity, error_bar_opacity,
             images_on, image_center, image_size, image_cmap, image_pmax, image_residual_pmax,
             image_reference_epoch,
         ):
