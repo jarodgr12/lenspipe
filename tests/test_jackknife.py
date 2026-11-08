@@ -80,20 +80,37 @@ def test_stage3_jackknife_end_to_end(four_if_project: Path, fake_difmap: Path, m
             "titles": [ax.get_title() for ax in fig.axes],
             "texts": [t.get_text() for ax in fig.axes for t in ax.texts] + [t.get_text() for t in fig.texts],
             "xtick": [ax.get_xticklabels()[0].get_fontsize() for ax in fig.axes if ax.get_xticklabels()],
+            "ylabels": [ax.get_ylabel() for ax in fig.axes],
+            "ylims": [ax.get_ylim() for ax in fig.axes],
         }
         real_save(fig, base_path, dpi=dpi, bbox_inches=bbox_inches, transparent=transparent)
 
     monkeypatch.setattr(plotting, "save_figure", recording_save)
     monkeypatch.setattr(plotting, "_save_figure", recording_save)
-    summary = run_stage3(project, base.with_overrides(stage3={"jackknife": True}), reporter=quiet, workers=1)
+    # Naming the base product, as the Run page does, selects the set; only the _jackknife output is written.
+    summary = run_stage3(
+        project, base.with_overrides(stage3={"jackknife": True}), products={"if4_edge0"}, reporter=quiet, workers=1,
+    )
     assert summary.ok
-
     stage3 = project / "stage3" / "full-band"
     out = stage3 / "combined" / "MG0414" / SET_NAME
     stem = f"MG0414.{SET_NAME}"
+    written = sorted(str(p.relative_to(stage3)) for p in stage3.iterdir())
+    assert written == ["combined"], written  # no per-visit products for any sample or for the base
+    assert [p.name for p in (stage3 / "combined" / "MG0414").iterdir()] == [SET_NAME]
+    assert not [name for name in figures if not name.startswith(stem)]  # no figure of a sub-band at all
     meta = json.loads((out / f"{stem}.combined.stage3.metadata.json").read_text())
     assert meta["kind"] == "jackknife" and meta["n_samples"] == 4
     assert sorted(meta["samples"]) == SAMPLE_TAGS  # neither the base nor the whole-window product
+
+    # The normalised ratios: each panel named by its ratio alone and centred on 1.
+    normalised = figures[f"{stem}.normalised_flux_ratios_vs_mjd"]
+    assert normalised["ylabels"] == ["A2/A1", "B/A1", "C/A1"]
+    for low, high in normalised["ylims"]:
+        assert (low + high) / 2 == pytest.approx(1.0) and high > 1.0
+
+    # For the independent check below, the samples' own Stage 3 products from an ordinary run (switch off).
+    assert run_stage3(project, base, products=set(SAMPLE_TAGS), reporter=quiet, workers=1).ok
 
     # Per epoch: recompute from each sample's own powerlaw_fits.csv, as the collaborators' script does.
     per_epoch = pd.read_csv(out / "tables" / f"{stem}.errors_per_epoch.csv")
@@ -133,12 +150,14 @@ def test_stage3_jackknife_end_to_end(four_if_project: Path, fake_difmap: Path, m
         assert set(record["titles"]) == {""}, name
         assert not [t for t in record["texts"] if t not in {"Frequency [GHz]", "Flux density [mJy]"}], name
         assert record["xtick"] and all(size == standard_tick + 2 for size in record["xtick"]), name
-    # The Run page names one product: its jackknife set joins the run, other products do not.
+    # The Run page names one product: it selects its jackknife set, and only the samples are analysed.
     widen = lambda requested: with_jackknife_samples(project, None, requested, "full-band")  # noqa: E731
-    assert widen({"if4_edge0"}) == {"if4_edge0", *SAMPLE_TAGS}
+    assert widen({"if4_edge0"}) == set(SAMPLE_TAGS)
     assert widen({SAMPLE_TAGS[2]}) == set(SAMPLE_TAGS)
-    assert widen({"if4_edge0_x_spw3"}) == {"if4_edge0_x_spw3"}
+    assert widen({"if4_edge0_x_spw3"}) == set()
     assert widen(None) == set(SAMPLE_TAGS)
+    with pytest.raises(ValueError, match="no jackknife set found"):
+        run_stage3(project, base.with_overrides(stage3={"jackknife": True}), products={"if4_edge0_x_spw3"}, reporter=quiet)
 
     assert {t.name for t in (out / "tables").glob("*.csv")} == {
         f"{stem}.{table}.csv" for table in ("samples", "average_fits", "errors_per_epoch", "spectra")

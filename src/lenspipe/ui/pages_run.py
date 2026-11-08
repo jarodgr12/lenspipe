@@ -329,9 +329,10 @@ def run_page(run: str | None = None) -> None:
                         jackknife.tooltip(
                             "Needs one Stage 2 product per left-out channel block, all in the same windows: run "
                             "Stage 2 once per block with its 'Channels to leave out' set to spw0-47:2-5, then "
-                            "spw0-47:6-9, and so on. With this on, Stage 3 also writes "
-                            "combined/<source>/<base>_x_<windows>_jackknife/: per-epoch and all-visit jackknife "
-                            "means and errors, sqrt((n-1)/n sum(x - mean)^2), as tables and figures in the _mnras style."
+                            "spw0-47:6-9, and so on. With this on, Stage 3 reads that set (pick the base product or "
+                            "any sample) and writes only combined/<source>/<base>_x_<windows>_jackknife/: per-epoch "
+                            "and all-visit jackknife means and errors, sqrt((n-1)/n sum(x - mean)^2), as tables and "
+                            "figures in the _mnras style. The samples' own plots and tables are not written."
                         )
                     with ui.expansion("Advanced", icon="tune").classes("w-full").props("dense"):
                         with ui.row().classes("gap-4 items-center q-pt-sm"):

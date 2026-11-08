@@ -313,6 +313,8 @@ def _stage3_dry_run(
             f"[stage3]   {dataset.observation_prefix} {dataset.product_tag} [{dataset.calibration_mode}] {n_rows_text}; "
             f"layout {layout.channels_per_spw} ch/spw ({layout.source}); excluded: {excluded}"
         )
+        if settings.jackknife:
+            continue  # a jackknife sample is an input only; nothing of its own is written
         reporter.log(f"[stage3]     -> {dataset.output_directory}")
         products_out.append(str(dataset.output_directory))
         combined[(dataset.source, dataset.product_tag)] += 1
@@ -334,7 +336,11 @@ def _stage3_dry_run(
         if not found:
             reporter.warn("[stage3]   jackknife: no set of two or more channel-block exclusion products selected")
         for (source, base, windows), tags in sorted(found.items()):
-            reporter.log(f"[stage3]   jackknife {source}.{base}_x_{windows}_jackknife: {len(tags)} samples")
+            jackknife_dir = Layout.at(root).stage_dir(3, calibration_mode) / "combined" / source / f"{base}_x_{windows}_jackknife"
+            if analysis_tag:
+                jackknife_dir = jackknife_dir / analysis_tag
+            reporter.log(f"[stage3]   jackknife {source}.{base}_x_{windows}_jackknife: {len(tags)} samples -> {jackknife_dir}")
+            products_out.append(str(jackknife_dir))
     reporter.log("[stage3] DRY RUN: nothing written")
     return Stage3Summary(
         analyses=len(datasets), per_visit_written_or_skipped=0, combined_written_or_skipped=0,
@@ -2362,11 +2368,20 @@ def run_stage3(
     if settings.jackknife:
         from lenspipe.stage3.jackknife import with_jackknife_samples
 
-        # The Run page names one product; the jackknife needs every sample of its set in this run.
-        widened = with_jackknife_samples(root, epochs or None, products or None, calibration_mode)
-        if widened and widened != (products or None):
-            reporter.log(f"[stage3] jackknife: analysing {len(widened)} product(s): {', '.join(sorted(widened))}")
-        products = widened
+        # The Run page names one product; the jackknife needs every sample of its set, and nothing else.
+        samples = with_jackknife_samples(root, epochs or None, products or None, calibration_mode)
+        if not samples:
+            named = f" for {sorted(products)}" if products else ""
+            raise ValueError(
+                f"jackknife: no jackknife set found{named}. It needs two or more Stage 2 products of one source "
+                "that each leave out a channel block in the same windows (stage2.exclude_channels "
+                "'spw0-47:2-5', 'spw0-47:6-9', ...); name one of them or their base product, or turn the jackknife off."
+            )
+        reporter.log(
+            f"[stage3] jackknife: {len(samples)} sample product(s), only the _jackknife output is written: "
+            + ", ".join(sorted(samples))
+        )
+        products = samples
     datasets = discover_stage2_datasets(
         root, requested_epochs=epochs or None, requested_products=products or None,
         calibration_mode=calibration_mode,
@@ -2452,7 +2467,8 @@ def run_stage3(
     products_out: list[str] = []
     plot_workers = max(1, workers or config.run.plot_workers)
 
-    for (source, product_tag), group in sorted(grouped.items()):
+    # With the jackknife on, the sample products are inputs only: none of their own outputs are written.
+    for (source, product_tag), group in ([] if settings.jackknife else sorted(grouped.items())):
         group.sort(key=lambda item: item.mjd)
         # Say up front, in the job log, when R_cusp will not be produced: a silent skip
         # looks like a bug to the person waiting for the plot.
