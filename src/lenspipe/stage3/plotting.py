@@ -357,6 +357,18 @@ def mnras_axis_fonts(ax) -> None:
         ax.tick_params(axis=axis_name, labelsize=size + MNRAS_FONT_STEP)
 
 
+def drop_edge_yticks(ax, fraction: float = 0.06) -> None:
+    """Keep only y ticks clear of the top and bottom edge, for panels stacked with no gap.
+
+    A tick label on a shared edge would collide with the neighbouring panel's.
+    Call it after the y-limits are final; the limits are kept.
+    """
+    low, high = ax.get_ylim()
+    edge = fraction * (high - low)
+    ax.set_yticks([tick for tick in ax.get_yticks() if low + edge < tick < high - edge])
+    ax.set_ylim(low, high)
+
+
 def _drawn_points(ax, samples_per_segment: int = 25) -> np.ndarray:
     """Display coordinates covering every marker, line and error bar in ``ax``.
 
@@ -389,7 +401,9 @@ LEGEND_INSIDE_LOCATIONS = (
 )
 
 
-def legend_inside_clear(ax, padding_px: float = 6.0, headroom_steps: int = 10, title: str | None = None):
+def legend_inside_clear(
+    ax, padding_px: float = 6.0, headroom_steps: int = 10, title: str | None = None, ncol: int = 1,
+):
     """Place the legend inside the axes where it covers no marker, error bar or line.
 
     Every inside position is tried in turn; the first whose box (plus
@@ -398,8 +412,9 @@ def legend_inside_clear(ax, padding_px: float = 6.0, headroom_steps: int = 10, t
     again, so the key ends up in empty space above the data rather than on it.
     ``title`` heads the key (a panel name on multi-panel figures, which have no
     axes titles in this style); with a title and no labelled artists the key is
-    the name alone. Call it after the axis limits are final. Returns the legend
-    (None with neither labels nor title).
+    the name alone. ``ncol`` lays the entries out in columns (``len(labels)`` for
+    one horizontal row). Call it after the axis limits are final. Returns the
+    legend (None with neither labels nor title).
     """
     handles, labels = ax.get_legend_handles_labels()
     if not handles and not title:
@@ -410,7 +425,10 @@ def legend_inside_clear(ax, padding_px: float = 6.0, headroom_steps: int = 10, t
         fig.canvas.draw()
         points = _drawn_points(ax)
         for location in LEGEND_INSIDE_LOCATIONS:
-            legend = ax.legend(handles, labels, loc=location, frameon=False, title=title)
+            legend = ax.legend(
+                handles, labels, loc=location, frameon=False, title=title, ncol=ncol,
+                columnspacing=1.0, handletextpad=0.3,
+            )
             fig.canvas.draw()
             box = legend.get_window_extent().padded(padding_px)
             covered = (
@@ -930,6 +948,7 @@ def plot_epoch_normalized_weighted_flux_ratios_vs_mjd(
     y_limits=None,
     y_label: str = "Flux ratio",
     colour_offset: int = 1,
+    mnras: bool = False,
 ) -> None:
     """Plot normalised series (flux ratios, or per-image fluxes) in stacked panels.
 
@@ -938,6 +957,8 @@ def plot_epoch_normalized_weighted_flux_ratios_vs_mjd(
     measured point furthest from 1.0, plus 10 per cent padding, to set their
     symmetric vertical range. ``colour_offset`` keeps each series in the colour
     it has on the other figures (ratios start one colour after the images).
+    ``mnras`` drops the scatter annotations, names each panel on its own y-axis
+    (the series label alone) and enlarges the axis fonts.
     """
     items = list(normalized_ratio_series.items())
     if not items:
@@ -1002,11 +1023,12 @@ def plot_epoch_normalized_weighted_flux_ratios_vs_mjd(
                 rf"$\sigma_{{\rm w}}={statistic.sigma_weighted_percent:.2f}\%$" "\n"
                 rf"$\sigma_{{\rm u}}={statistic.sigma_unweighted_percent:.2f}\%$"
             )
-        # In the right margin, outside the data area, vertically centred on the panel.
-        axis.text(
-            1.02, 0.5, annotation, transform=axis.transAxes,
-            ha="left", va="center", fontsize=10,
-        )
+        if not mnras:
+            # In the right margin, outside the data area, vertically centred on the panel.
+            axis.text(
+                1.02, 0.5, annotation, transform=axis.transAxes,
+                ha="left", va="center", fontsize=10,
+            )
         if panel_index < n_panels - 1:
             axis.tick_params(labelbottom=False)
 
@@ -1020,6 +1042,16 @@ def plot_epoch_normalized_weighted_flux_ratios_vs_mjd(
     fig.subplots_adjust(
         left=0.12, right=0.98, bottom=0.10, top=0.98, hspace=0.0
     )
+
+    if mnras:
+        axes[-1].set_xlabel("MJD")
+        for axis, (label, _) in zip(axes, items, strict=False):
+            axis.set_ylabel(label)
+            drop_edge_yticks(axis)
+            mnras_axis_fonts(axis)
+        fig.align_ylabels(list(axes))
+        _save_figure(fig, output_base)
+        return
 
     # Use an ordinary x-axis label on the bottom panel. This gives exactly
     # the same label-to-tick spacing as the single-panel MJD plots.

@@ -61,14 +61,16 @@ def test_no_stage3_figure_draws_text_inside_its_axes(project: Path, fake_difmap:
     def inspecting_save(fig, base_path, dpi=300, bbox_inches="tight"):
         fig.canvas.draw()
         name = Path(base_path).name
-        if len(fig.axes) == 1:
-            ax = fig.axes[0]
-            record = {
-                "title": ax.get_title(), "texts": [t.get_text() for t in ax.texts],
-                "xlabel": ax.xaxis.label.get_fontsize(), "xtick": ax.get_xticklabels()[0].get_fontsize(),
-                "legend_hits": _legend_hits(ax), "legend": ax.get_legend() is not None,
-            }
-            (mnras if name.endswith("_mnras") else standard)[name] = record
+        bottom = fig.axes[-1]  # stacked panels: the bottom one carries the x-axis label and ticks
+        record = {
+            "title": "".join(ax.get_title() for ax in fig.axes),
+            "texts": [t.get_text() for ax in fig.axes for t in ax.texts],
+            "xlabel": bottom.xaxis.label.get_fontsize(), "xtick": bottom.get_xticklabels()[0].get_fontsize(),
+            "ylabels": [ax.get_ylabel() for ax in fig.axes],
+            "legend_hits": [hit for ax in fig.axes for hit in _legend_hits(ax)],
+            "legend": any(ax.get_legend() is not None for ax in fig.axes),
+        }
+        (mnras if name.endswith("_mnras") else standard)[name] = record
         if name.endswith("_mnras"):
             real_save(fig, base_path, dpi=dpi, bbox_inches=bbox_inches)
             return
@@ -92,7 +94,8 @@ def test_no_stage3_figure_draws_text_inside_its_axes(project: Path, fake_difmap:
 
     # The _mnras versions: no title or annotations, axis fonts 2 pt larger, the key inside but on no data.
     assert sorted(name.split(".")[-1] for name in mnras) == [
-        "average_flux_ratios_mnras", "average_spectrum_mnras", "rcusp_vs_mjd_mnras",
+        "average_flux_ratios_mnras", "average_spectrum_mnras", "normalised_weighted_flux_ratios_vs_mjd_mnras",
+        "rcusp_vs_mjd_mnras",
     ]
     for name, record in mnras.items():
         plain = standard[name[: -len("_mnras")]]
@@ -101,6 +104,10 @@ def test_no_stage3_figure_draws_text_inside_its_axes(project: Path, fake_difmap:
         assert record["legend_hits"] == [], f"{name}: key covers {record['legend_hits']}"
     assert mnras[next(n for n in mnras if "average_spectrum" in n)]["legend"]
     assert mnras[next(n for n in mnras if "average_flux_ratios" in n)]["legend"]
+    # Normalised ratios: no scatter annotations (checked above), each panel named by its ratio alone.
+    normalised = next(n for n in mnras if "normalised_weighted" in n)
+    assert mnras[normalised]["ylabels"] == ["A2/A1", "B/A1", "C/A1"]
+    assert standard[normalised[: -len("_mnras")]]["texts"]  # the standard figure keeps its sigma annotations
 
 
 def _legend_hits(ax) -> list[str]:

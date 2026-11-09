@@ -3,6 +3,26 @@
 Each entry says whether existing products need re-running. The `lenspipe`
 version that made a product is recorded in its metadata JSON.
 
+## 2.4.15 — 2026-11-09
+
+**Re-run needed:** Stage 3 only (with the jackknife switch for the
+jackknife changes).
+
+- Changed: the jackknife `alpha_offsets_vs_mjd` figure shows each image's
+  alpha minus the reference image's alpha of the same visit (was: minus the
+  mean of the reference alpha over all visits). The difference is taken in
+  every sample and then jackknifed, so its error accounts for the two alphas
+  moving together; the reference image's own, always-zero panel is gone.
+  New columns `<image>_alpha_offset` and `_err` in `errors_per_epoch.csv`.
+- Changed: the jackknife `spectra_all_epochs` grid shows the grouped images
+  (A, B, ...; the sum of each image's model components, as Stage 3 fits
+  them) instead of the individual components (Aa, Ca, Cb, ...), keyed once
+  in a single horizontal row, with each panel labelled by its MJD above the
+  frame. `spectra.csv` follows (column `image`, plus `mjd`).
+- Added: `<stem>.normalised_weighted_flux_ratios_vs_mjd_mnras` beside the
+  standard normalised flux-ratio figure: no scatter annotations, each panel
+  labelled with its ratio, centred on 1, axis fonts 2 pt larger.
+
 ## 2.4.14 — 2026-11-08
 
 **Re-run needed:** Stage 3 with the jackknife switch, for the corrected

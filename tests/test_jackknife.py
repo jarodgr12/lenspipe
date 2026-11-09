@@ -82,6 +82,10 @@ def test_stage3_jackknife_end_to_end(four_if_project: Path, fake_difmap: Path, m
             "xtick": [ax.get_xticklabels()[0].get_fontsize() for ax in fig.axes if ax.get_xticklabels()],
             "ylabels": [ax.get_ylabel() for ax in fig.axes],
             "ylims": [ax.get_ylim() for ax in fig.axes],
+            "legends": [
+                [(t.get_text(), round(t.get_window_extent().y0)) for t in ax.get_legend().get_texts()]
+                for ax in fig.axes if ax.get_legend() is not None
+            ],
         }
         real_save(fig, base_path, dpi=dpi, bbox_inches=bbox_inches, transparent=transparent)
 
@@ -102,6 +106,14 @@ def test_stage3_jackknife_end_to_end(four_if_project: Path, fake_difmap: Path, m
     meta = json.loads((out / f"{stem}.combined.stage3.metadata.json").read_text())
     assert meta["kind"] == "jackknife" and meta["n_samples"] == 4
     assert sorted(meta["samples"]) == SAMPLE_TAGS  # neither the base nor the whole-window product
+
+    # The all-epochs spectra: images keyed once in a single row (A1 ... not components), each panel
+    # labelled with its MJD above the frame.
+    grid = figures[f"{stem}.spectra_all_epochs"]
+    assert len(grid["legends"]) == 1
+    assert [text for text, _ in grid["legends"][0]] == ["A1", "A2", "B", "C"]
+    assert len({y for _, y in grid["legends"][0]}) == 1  # one horizontal row
+    assert grid["titles"] == [f"MJD {plotting._format_mjd(m)}" for m in meta["mjds"]]
 
     # The normalised ratios: each panel named by its ratio alone and centred on 1.
     normalised = figures[f"{stem}.normalised_flux_ratios_vs_mjd"]
@@ -126,6 +138,15 @@ def test_stage3_jackknife_end_to_end(four_if_project: Path, fake_difmap: Path, m
         assert row["A1_flux_mjy"] == pytest.approx(s_ref.mean())
         assert row["A1_flux_err_mjy"] == pytest.approx(expected_error) and expected_error > 0
         assert row["A1_n_samples"] == 4
+        # alpha offset: alpha_A2 - alpha_A1 of this visit, differenced within each sample, then jackknifed.
+        offsets = []
+        for tag in SAMPLE_TAGS:
+            fits = pd.read_csv(stage3 / f"MG0414.{epoch}" / tag / "fits" / f"MG0414.{epoch}.{tag}.powerlaw_fits.csv")
+            alpha = dict(zip(fits.iloc[:, 0], fits["alpha"], strict=True))
+            offsets.append(alpha["A2"] - alpha["A1"])
+        offsets = np.array(offsets)
+        assert row["A2_alpha_offset"] == pytest.approx(offsets.mean())
+        assert row["A2_alpha_offset_err"] == pytest.approx(np.sqrt(3 / 4 * np.sum((offsets - offsets.mean()) ** 2)))
 
     # All visits: recompute from each sample's combined_fits.csv.
     s_ref = []
@@ -147,7 +168,8 @@ def test_stage3_jackknife_end_to_end(four_if_project: Path, fake_difmap: Path, m
     standard_tick = figures[f"MG0414.{SAMPLE_TAGS[0]}.average_spectrum"]["xtick"][0]
     for name in (f"{stem}.{figure}" for figure in expected):
         record = figures[name]
-        assert set(record["titles"]) == {""}, name
+        if not name.endswith("spectra_all_epochs"):  # the grid's panels carry their MJD above the frame
+            assert set(record["titles"]) == {""}, name
         assert not [t for t in record["texts"] if t not in {"Frequency [GHz]", "Flux density [mJy]"}], name
         assert record["xtick"] and all(size == standard_tick + 2 for size in record["xtick"]), name
     # The Run page names one product: it selects its jackknife set, and only the samples are analysed.

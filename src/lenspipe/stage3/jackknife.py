@@ -26,7 +26,6 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
-import pandas as pd
 
 from lenspipe.project import Layout
 from lenspipe.stage3 import plotting
@@ -43,7 +42,6 @@ from lenspipe.stage3.exclusions import parse_exclusion_spec
 from lenspipe.stage3.io import (
     available_stage2_products,
     discover_stage2_datasets,
-    load_spectrum,
     load_stage2_metadata,
     safe_label,
 )
@@ -156,11 +154,6 @@ def with_jackknife_samples(
     return wanted
 
 
-def _component_columns(analysis: EpochAnalysis) -> list[tuple[str, str]]:
-    records = sorted(analysis.metadata.get("components") or [], key=lambda item: int(item["row_index"]))
-    return [(str(item["name"]), f"{safe_label(item['name'])}_jy") for item in records]
-
-
 def _per_epoch(jack: JackknifeSet) -> tuple[list[tuple[str, float]], dict[str, dict[str, EpochAnalysis]]]:
     """Epochs (label, MJD) in time order and, per product, each epoch's visit."""
     by_product = {tag: {a.dataset.epoch: a for a in visits} for tag, visits in jack.samples.items()}
@@ -173,47 +166,44 @@ def _per_epoch(jack: JackknifeSet) -> tuple[list[tuple[str, float]], dict[str, d
 
 
 def _spectra(
-    epochs: list[tuple[str, float]], by_product: dict[str, dict[str, EpochAnalysis]]
-) -> tuple[list[dict[str, Any]], list[tuple[str, dict[str, tuple[np.ndarray, np.ndarray, np.ndarray]]]]]:
-    """Per-channel component fluxes from each sample's Stage 2 spectrum, aligned by fit index."""
+    epochs: list[tuple[str, float]], by_product: dict[str, dict[str, EpochAnalysis]], groups: list[str]
+) -> tuple[list[dict[str, Any]], list[tuple[float, dict[str, tuple[np.ndarray, np.ndarray, np.ndarray]]]]]:
+    """Per-channel grouped image fluxes (A, B, ...) of every sample, aligned by Stage 2 fit index.
+
+    The same per-channel fluxes Stage 3 fits, so a group is the sum of its
+    model components, as on the standard spectra. Returns the table rows and,
+    per epoch, ``(MJD, {image: (frequency_ghz, flux_mjy, error_mjy)})``.
+    """
     rows: list[dict[str, Any]] = []
-    grid: list[tuple[str, dict[str, tuple[np.ndarray, np.ndarray, np.ndarray]]]] = []
-    for epoch, _ in epochs:
+    grid: list[tuple[float, dict[str, tuple[np.ndarray, np.ndarray, np.ndarray]]]] = []
+    for epoch, mjd in epochs:
         values: dict[str, dict[int, list[float]]] = defaultdict(lambda: defaultdict(list))
         frequency: dict[int, list[float]] = defaultdict(list)
-        names: list[tuple[str, str]] = []
         for visits in by_product.values():
             analysis = visits.get(epoch)
             if analysis is None:
                 continue
-            frame = load_spectrum(analysis.dataset, analysis.metadata, set(analysis.excluded_fit_indices) or None)
-            names = names or _component_columns(analysis)
-            indices = frame["fit_index"].to_numpy(dtype=int)
-            for fit_index, freq in zip(indices, frame["frequency_ghz"].to_numpy(dtype=float), strict=True):
-                frequency[int(fit_index)].append(float(freq))
-            for name, column in names:
-                if column not in frame.columns:
-                    continue
-                flux_mjy = pd.to_numeric(frame[column], errors="coerce").to_numpy(dtype=float) * 1000.0
-                for fit_index, flux in zip(indices, flux_mjy, strict=True):
-                    values[name][int(fit_index)].append(float(flux))
+            for position, fit_index in enumerate(analysis.fit_indices):
+                frequency[int(fit_index)].append(float(analysis.frequency_ghz[position]))
+                for group in groups:
+                    values[group][int(fit_index)].append(float(analysis.fluxes[group][position]) * 1000.0)
         panel: dict[str, tuple[np.ndarray, np.ndarray, np.ndarray]] = {}
-        for name, _ in names:
-            indices = sorted(values[name])
-            stats = [jackknife_estimate(values[name][i]) for i in indices]
-            panel[name] = (
+        for group in groups:
+            indices = sorted(values[group])
+            stats = [jackknife_estimate(values[group][i]) for i in indices]
+            panel[group] = (
                 np.array([np.mean(frequency[i]) for i in indices]),
                 np.array([s[0] for s in stats]),
                 np.array([s[1] for s in stats]),
             )
             rows.extend(
                 {
-                    "epoch": epoch, "fit_index": i, "frequency_ghz": float(np.mean(frequency[i])), "component": name,
-                    "flux_mjy": s[0], "flux_error_mjy": s[1], "n_samples": s[2],
+                    "epoch": epoch, "mjd": mjd, "fit_index": i, "frequency_ghz": float(np.mean(frequency[i])),
+                    "image": group, "flux_mjy": s[0], "flux_error_mjy": s[1], "n_samples": s[2],
                 }
                 for i, s in zip(indices, stats, strict=False)
             )
-        grid.append((epoch, panel))
+        grid.append((mjd, panel))
     return rows, grid
 
 
@@ -315,6 +305,10 @@ def write_jackknife_products(
 
         flux_est = {g: estimates(flux[g]) for g in groups}
         alpha_est = {g: estimates(alpha[g]) for g in groups}
+        # Offsets from the reference image's alpha of the same visit, differenced within each sample and then
+        # jackknifed, so the error includes the correlation between the two alphas.
+        reference = groups[0]
+        offset_est = {g: estimates(alpha[g] - alpha[reference]) for g in groups[1:]}
         ratio_est = {r: estimates(ratio[r]) for r in ratios}
 
         epoch_rows: list[dict[str, Any]] = []
@@ -325,6 +319,10 @@ def write_jackknife_products(
                 row |= {
                     f"{key}_flux_mjy": flux_est[g][0][i], f"{key}_flux_err_mjy": flux_est[g][1][i],
                     f"{key}_alpha": alpha_est[g][0][i], f"{key}_alpha_err": alpha_est[g][1][i],
+                    **(
+                        {f"{key}_alpha_offset": offset_est[g][0][i], f"{key}_alpha_offset_err": offset_est[g][1][i]}
+                        if g in offset_est else {}
+                    ),
                     f"{key}_n_samples": int(flux_est[g][2][i]),
                 }
             for r in ratios:
@@ -344,7 +342,7 @@ def write_jackknife_products(
                 ])
         write_csv(tables_dir / f"{stem}.average_fits.csv", average_rows)
 
-        spectra_rows, spectra_grid = _spectra(epochs, by_product)
+        spectra_rows, spectra_grid = _spectra(epochs, by_product, groups)
         write_csv(tables_dir / f"{stem}.spectra.csv", spectra_rows)
 
         # Figures, all in the _mnras style.
@@ -362,13 +360,12 @@ def write_jackknife_products(
             mjd, {g: alpha_est[g][:2] for g in groups}, {g: rf"$\alpha_{{\rm {g}}}$" for g in groups},
             plots_dir / f"{stem}.alphas_vs_mjd",
         )
-        reference = groups[0]
-        alpha_reference = float(np.nanmean(alpha_est[reference][0]))
-        plot_jackknife_stack(
-            mjd, {g: (alpha_est[g][0] - alpha_reference, alpha_est[g][1]) for g in groups},
-            {g: rf"$\alpha_{{\rm {g}}} - \bar{{\alpha}}_{{\rm {reference}}}$" for g in groups},
-            plots_dir / f"{stem}.alpha_offsets_vs_mjd",
-        )
+        if offset_est:
+            plot_jackknife_stack(
+                mjd, {g: offset_est[g][:2] for g in offset_est},
+                {g: rf"$\alpha_{{\rm {g}}} - \alpha_{{\rm {reference}}}$" for g in offset_est},
+                plots_dir / f"{stem}.alpha_offsets_vs_mjd", colour_offset=1,
+            )
         if ratios:
             plot_jackknife_stack(
                 mjd, {r: ratio_est[r][:2] for r in ratios}, {r: r for r in ratios},
@@ -410,8 +407,14 @@ def write_jackknife_products(
                         "std / mean, weighted_std_percent = inverse-variance (1/jackknife error^2) weighted."
                     ),
                     "errors_per_epoch.csv": "Per epoch, the jackknife mean and error of each visit's own S_ref, alpha and ratio_ref.",
-                    "spectra.csv": "Per epoch and Stage 2 fit, the jackknife mean and error of each component's flux.",
-                    "alpha_offsets_vs_mjd": f"alpha minus the mean over epochs of alpha_{reference}.",
+                    "spectra.csv": (
+                        "Per epoch and Stage 2 fit, the jackknife mean and error of each grouped image's flux "
+                        "(the sum of its model components, as Stage 3 fits it)."
+                    ),
+                    "alpha_offsets_vs_mjd": (
+                        f"alpha of each image minus alpha_{reference} of the same visit, differenced within each "
+                        "sample and then jackknifed; columns <image>_alpha_offset in errors_per_epoch.csv."
+                    ),
                     "normalised_flux_ratios_vs_mjd": "ratio and its error divided by the plain mean over epochs.",
                 },
                 "stage2_manifests": [str(a.dataset.manifest_json) for a in jack.samples[products[0]]],
