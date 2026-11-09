@@ -3,8 +3,8 @@
 No titles and no annotations, axis labels and tick labels ``MNRAS_FONT_STEP``
 points larger than the standard figures, and any key inside the axes where it
 covers no data (``plotting.legend_inside_clear``). Stacked panels name their
-quantity on the y-axis, so they need no key; the per-epoch spectra grid names
-each panel in a key inside it.
+quantity on the y-axis, so they need no key; the per-epoch spectra grid labels
+each panel with its MJD above the frame and keys the images once, in one row.
 """
 
 from __future__ import annotations
@@ -12,8 +12,10 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 
+import matplotlib as mpl
 import matplotlib.pyplot as plt
 import numpy as np
+from matplotlib.font_manager import FontProperties
 from matplotlib.ticker import MaxNLocator
 from numpy.typing import ArrayLike
 
@@ -22,6 +24,7 @@ from lenspipe.stage3.plotting import (
     COLOURS,
     correct_tick_marks,
     draw_points,
+    drop_edge_yticks,
     legend_inside_clear,
     mnras_axis_fonts,
 )
@@ -102,12 +105,8 @@ def plot_jackknife_stack(
         else:
             ax.margins(y=0.15)
         ax.set_ylabel(y_labels[label])
-        # Panels touch, so a tick label on a shared edge would collide with the neighbour's: keep only inner ones.
         ax.yaxis.set_major_locator(MaxNLocator(nbins=4))
-        low, high = ax.get_ylim()
-        edge = 0.06 * (high - low)
-        ax.set_yticks([tick for tick in ax.get_yticks() if low + edge < tick < high - edge])
-        ax.set_ylim(low, high)
+        drop_edge_yticks(ax)
         mnras_axis_fonts(ax)
     axes.ravel()[-1].set_xlabel("MJD")
     axes.ravel()[-1].xaxis.label.set_fontsize(axes.ravel()[0].yaxis.label.get_fontsize())
@@ -116,14 +115,14 @@ def plot_jackknife_stack(
 
 
 def plot_jackknife_spectra_grid(
-    epochs: Sequence[tuple[str, Mapping[str, tuple[np.ndarray, np.ndarray, np.ndarray]]]],
+    epochs: Sequence[tuple[float, Mapping[str, tuple[np.ndarray, np.ndarray, np.ndarray]]]],
     output_base: Path,
 ) -> None:
-    """Per-epoch component spectra (jackknife mean and error per channel), one panel per epoch.
+    """Per-epoch image spectra (jackknife mean and error per channel), one panel per epoch.
 
-    ``epochs`` is ``[(epoch label, {component: (frequency_ghz, flux_mjy, error_mjy)})]``.
-    Panels share both axes; the components are keyed in the first panel and
-    every panel's key carries its epoch name.
+    ``epochs`` is ``[(MJD, {image: (frequency_ghz, flux_mjy, error_mjy)})]``. Panels
+    share both axes and are labelled with their MJD above the frame; the images are
+    keyed once, in a single horizontal row inside the first panel, clear of the data.
     """
     if not epochs:
         return
@@ -134,22 +133,23 @@ def plot_jackknife_spectra_grid(
         sharex=True, sharey=True, squeeze=False,
     )
     flat = axes.ravel()
-    for panel, (ax, (_, components)) in enumerate(zip(flat, epochs, strict=False)):
+    label_size = FontProperties(size=mpl.rcParams["xtick.labelsize"]).get_size_in_points() + plotting.MNRAS_FONT_STEP
+    for panel, (ax, (mjd, images)) in enumerate(zip(flat, epochs, strict=False)):
         correct_tick_marks(ax)
-        for index, (name, (frequency, flux, error)) in enumerate(components.items()):
+        for index, (name, (frequency, flux, error)) in enumerate(images.items()):
             draw_points(
                 ax, frequency, flux, plotting._yerr(np.where(np.isfinite(error), error, 0.0)),
                 color=COLOURS[index % len(COLOURS)], label=name if panel == 0 else None, ms=3.0,
             )
         ax.set_xlim(*plotting.SUMMARY_FREQUENCY_LIMITS_GHZ)
         mnras_axis_fonts(ax)
+        ax.set_title(f"MJD {plotting._format_mjd(mjd)}", fontsize=label_size)  # outside the frame, as asked
     for ax in flat[len(epochs):]:
         fig.delaxes(ax)
     size = flat[0].xaxis.label.get_fontsize()
     fig.supxlabel("Frequency [GHz]", fontsize=size)
     fig.supylabel("Flux density [mJy]", fontsize=size)
     fig.tight_layout()
-    # Shared y: the first panel's key may raise the common top, so place it first, then name the rest.
-    for ax, (epoch, _) in zip(flat, epochs, strict=False):
-        legend_inside_clear(ax, title=epoch)
+    n_images = len(epochs[0][1])
+    legend_inside_clear(flat[0], ncol=max(1, n_images))
     plotting.save_figure(fig, output_base)

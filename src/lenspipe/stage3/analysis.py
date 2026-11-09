@@ -1953,11 +1953,13 @@ def write_combined_products(
                 mjds, weighted_ratio_series, source,
                 plots_dir / f"{stem}.weighted_flux_ratios_vs_mjd",
             )
-            plot_epoch_normalized_weighted_flux_ratios_vs_mjd(
-                mjds, normalised_ratio_series, source,
-                plots_dir / f"{stem}.normalised_weighted_flux_ratios_vs_mjd",
-                scatter_statistics=normalised_scatter,
-            )
+            for suffix, mnras in (("", False), (MNRAS_SUFFIX, True)):
+                plot_epoch_normalized_weighted_flux_ratios_vs_mjd(
+                    mjds, normalised_ratio_series, source,
+                    plots_dir / f"{stem}.normalised_weighted_flux_ratios_vs_mjd{suffix}",
+                    scatter_statistics=normalised_scatter,
+                    mnras=mnras,
+                )
 
             weighted_rows: list[dict[str, Any]] = []
             normalised_rows: list[dict[str, Any]] = []
