@@ -3,6 +3,18 @@
 Each entry says whether existing products need re-running. The `lenspipe`
 version that made a product is recorded in its metadata JSON.
 
+## 2.4.16 — 2026-11-09
+
+**Re-run needed:** Stage 3 only, for the redrawn RMS figures.
+
+- Changed: the residual-RMS diagnostics (`<prefix>.rms_vs_channel`,
+  `<stem>.rms_vs_channel_all_epochs`, `.median_rms_vs_channel`,
+  `.relative_rms_vs_channel_all_epochs`, `.rms_visit_robust_score_vs_channel`)
+  are plotted against frequency across the whole Stage 3 frequency frame
+  (as the spectra are), not against channel / fit index, and each channel or
+  IF is an individual marker with no connecting line. File names and the RMS
+  tables are unchanged.
+
 ## 2.4.15 — 2026-11-09
 
 **Re-run needed:** Stage 3 only (with the jackknife switch for the

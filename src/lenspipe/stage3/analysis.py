@@ -1134,24 +1134,37 @@ def _save_rms_figure(fig, output_base: Path) -> None:
     plotting.save_figure(fig, output_base, dpi=200)
 
 
-def _format_rms_axes(ax, xlabel: str, ylabel: str) -> None:
-    ax.set_xlabel(xlabel)
+def _format_rms_axes(ax, ylabel: str) -> None:
+    """Frequency across the whole Stage 3 frame (as on the spectra), not channel index."""
+    ax.set_xlabel("Frequency [GHz]")
     ax.set_ylabel(ylabel)
+    ax.set_xlim(*plotting.SUMMARY_FREQUENCY_LIMITS_GHZ)
+    ax.set_xticks(plotting.SUMMARY_FREQUENCY_TICKS_GHZ)
     ax.tick_params(which="major", direction="in", top=True, right=True)
     ax.minorticks_off()
 
 
+def _rms_points(ax, frequency_ghz, values, *, colour=None, label=None) -> None:
+    """One marker per channel or IF, with no line joining them."""
+    x = np.asarray(frequency_ghz, dtype=float)
+    y = np.asarray(values, dtype=float)
+    keep = np.isfinite(x) & np.isfinite(y)
+    ax.plot(x[keep], y[keep], marker="o", ms=3.0, linestyle="none", color=colour, label=label)
+
+
 def plot_epoch_rms_diagnostic(analysis: EpochAnalysis, output_base: Path) -> None:
-    """Plot the retained Stage 2 residual-image RMS versus fit/channel index."""
+    """Plot the retained Stage 2 residual-image RMS of each channel or IF against its frequency."""
     fig, ax = plt.subplots(figsize=(8, 4.5))
-    ax.plot(
-        analysis.fit_indices,
-        analysis.rms_jy_per_beam * 1000.0,
-        linewidth=0.8,
-    )
-    _format_rms_axes(ax, "Channel / fit index", "Residual RMS (mJy beam$^{-1}$)")
+    _rms_points(ax, analysis.frequency_ghz, analysis.rms_jy_per_beam * 1000.0, colour=plotting.COLOURS[0])
+    _format_rms_axes(ax, "Residual RMS (mJy beam$^{-1}$)")
     ax.set_title(f"MJD {analysis.mjd:.4f}")
     _save_rms_figure(fig, output_base)
+
+
+def _visit_colour(row: int) -> str:
+    """Matplotlib's default cycle, so each visit keeps a distinct colour however many there are."""
+    cycle = plt.rcParams["axes.prop_cycle"].by_key().get("color", plotting.COLOURS)
+    return cycle[row % len(cycle)]
 
 
 def _aligned_rms_diagnostics(analyses: list[EpochAnalysis]):
@@ -1195,15 +1208,15 @@ def write_combined_rms_diagnostics(
     # Raw RMS by visit.
     fig, ax = plt.subplots(figsize=(9, 5))
     for row, analysis in enumerate(analyses):
-        ax.plot(fit_indices, matrix[row] * 1000.0, linewidth=0.7, label=analysis.dataset.epoch)
-    _format_rms_axes(ax, "Channel / fit index", "Residual RMS (mJy beam$^{-1}$)")
+        _rms_points(ax, frequency, matrix[row] * 1000.0, colour=_visit_colour(row), label=analysis.dataset.epoch)
+    _format_rms_axes(ax, "Residual RMS (mJy beam$^{-1}$)")
     plotting.legend_outside(ax, fontsize=8)
     _save_rms_figure(fig, plots_dir / f"{stem}.rms_vs_channel_all_epochs")
 
     # Persistent band structure: median across visits for each channel.
     fig, ax = plt.subplots(figsize=(9, 4.5))
-    ax.plot(fit_indices, median * 1000.0, linewidth=0.9)
-    _format_rms_axes(ax, "Channel / fit index", "Median residual RMS (mJy beam$^{-1}$)")
+    _rms_points(ax, frequency, median * 1000.0, colour=plotting.COLOURS[0])
+    _format_rms_axes(ax, "Median residual RMS (mJy beam$^{-1}$)")
     _save_rms_figure(fig, plots_dir / f"{stem}.median_rms_vs_channel")
 
     with np.errstate(divide="ignore", invalid="ignore"):
@@ -1215,18 +1228,18 @@ def write_combined_rms_diagnostics(
     # Each visit relative to the visit-to-visit median of the same channel.
     fig, ax = plt.subplots(figsize=(9, 5))
     for row, analysis in enumerate(analyses):
-        ax.plot(fit_indices, relative[row], linewidth=0.7, label=analysis.dataset.epoch)
-    ax.axhline(1.0, linestyle="--", linewidth=0.8)
-    _format_rms_axes(ax, "Channel / fit index", "RMS / channel median RMS")
+        _rms_points(ax, frequency, relative[row], colour=_visit_colour(row), label=analysis.dataset.epoch)
+    ax.axhline(1.0, linestyle="--", linewidth=0.8, color="black")
+    _format_rms_axes(ax, "RMS / channel median RMS")
     plotting.legend_outside(ax, fontsize=8)
     _save_rms_figure(fig, plots_dir / f"{stem}.relative_rms_vs_channel_all_epochs")
 
     # Robust visit-to-visit channel statistic.  It is diagnostic only.
     fig, ax = plt.subplots(figsize=(9, 5))
     for row, analysis in enumerate(analyses):
-        ax.plot(fit_indices, zscore[row], linewidth=0.7, label=analysis.dataset.epoch)
-    ax.axhline(0.0, linestyle="--", linewidth=0.8)
-    _format_rms_axes(ax, "Channel / fit index", "Visit-to-visit robust RMS score")
+        _rms_points(ax, frequency, zscore[row], colour=_visit_colour(row), label=analysis.dataset.epoch)
+    ax.axhline(0.0, linestyle="--", linewidth=0.8, color="black")
+    _format_rms_axes(ax, "Visit-to-visit robust RMS score")
     plotting.legend_outside(ax, fontsize=8)
     _save_rms_figure(fig, plots_dir / f"{stem}.rms_visit_robust_score_vs_channel")
 
