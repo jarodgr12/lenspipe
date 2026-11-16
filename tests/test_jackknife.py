@@ -126,6 +126,14 @@ def test_stage3_jackknife_end_to_end(four_if_project: Path, fake_difmap: Path, m
 
     # Per epoch: recompute from each sample's own powerlaw_fits.csv, as the collaborators' script does.
     per_epoch = pd.read_csv(out / "tables" / f"{stem}.errors_per_epoch.csv")
+    # samples_per_epoch.csv holds the values behind each row: the formula applied to it gives the same error.
+    values = pd.read_csv(out / "tables" / f"{stem}.samples_per_epoch.csv")
+    assert len(values) == 2 * len(SAMPLE_TAGS) and sorted(values["product"].unique()) == SAMPLE_TAGS
+    for epoch, rows in values.groupby("epoch"):
+        x = rows["A2_over_A1_ratio_ref"].to_numpy()
+        expected_row = per_epoch.loc[per_epoch["epoch"] == epoch].iloc[0]
+        assert expected_row["A2_over_A1_ratio"] == pytest.approx(x.mean())
+        assert expected_row["A2_over_A1_ratio_err"] == pytest.approx(np.sqrt(3 / 4 * np.sum((x - x.mean()) ** 2)))
     assert list(per_epoch["epoch"]) == ["A", "B"]
     for epoch in ("A", "B"):
         s_ref = []
@@ -182,7 +190,7 @@ def test_stage3_jackknife_end_to_end(four_if_project: Path, fake_difmap: Path, m
         run_stage3(project, base.with_overrides(stage3={"jackknife": True}), products={"if4_edge0_x_spw3"}, reporter=quiet)
 
     assert {t.name for t in (out / "tables").glob("*.csv")} == {
-        f"{stem}.{table}.csv" for table in ("samples", "average_fits", "errors_per_epoch", "spectra")
+        f"{stem}.{table}.csv" for table in ("samples", "average_fits", "errors_per_epoch", "samples_per_epoch", "spectra")
     }
 
 

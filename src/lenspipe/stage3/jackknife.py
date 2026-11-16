@@ -331,6 +331,18 @@ def write_jackknife_products(
             epoch_rows.append(row)
         write_csv(tables_dir / f"{stem}.errors_per_epoch.csv", epoch_rows)
 
+        # The values behind every per-epoch mean and error: one row per epoch and sample.
+        value_rows: list[dict[str, Any]] = []
+        for i, (epoch, value) in enumerate(epochs):
+            for j, tag in enumerate(products):
+                row = {"epoch": epoch, "mjd": value, "product": tag, "exclude_channels": jack.specs[tag]}
+                for g in groups:
+                    row |= {f"{safe_label(g)}_s_ref_mjy": flux[g][i, j], f"{safe_label(g)}_alpha": alpha[g][i, j]}
+                for r in ratios:
+                    row[f"{r.replace('/', '_over_')}_ratio_ref"] = ratio[r][i, j]
+                value_rows.append(row)
+        write_csv(tables_dir / f"{stem}.samples_per_epoch.csv", value_rows)
+
         for kind, estimates_by_label in (("epoch_flux", flux_est), ("epoch_flux_ratio", ratio_est)):
             for label, (values, errors, _) in estimates_by_label.items():
                 plain, weighted = _scatter(values, errors)
@@ -407,6 +419,10 @@ def write_jackknife_products(
                         "std / mean, weighted_std_percent = inverse-variance (1/jackknife error^2) weighted."
                     ),
                     "errors_per_epoch.csv": "Per epoch, the jackknife mean and error of each visit's own S_ref, alpha and ratio_ref.",
+                    "samples_per_epoch.csv": (
+                        "Per epoch and sample, the visit's own S_ref, alpha and ratio_ref: the values each row of "
+                        "errors_per_epoch.csv is the mean and jackknife error of (empty = sample missing for that epoch)."
+                    ),
                     "spectra.csv": (
                         "Per epoch and Stage 2 fit, the jackknife mean and error of each grouped image's flux "
                         "(the sum of its model components, as Stage 3 fits it)."
