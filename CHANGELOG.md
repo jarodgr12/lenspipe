@@ -3,6 +3,17 @@
 Each entry says whether existing products need re-running. The `lenspipe`
 version that made a product is recorded in its metadata JSON.
 
+## 2.4.17 — 2026-11-16
+
+**Re-run needed:** Stage 3 with the jackknife switch, to get the new table.
+
+- Added: the jackknife product writes `<stem>.samples_per_epoch.csv`: one
+  row per epoch and sample with that visit's S_ref, alpha and ratio_ref,
+  the values each per-epoch mean and jackknife error is computed from. It
+  opens on the Results page with the other jackknife tables, so the errors
+  can be checked (or compared with another script) without the per-sample
+  Stage 3 products, which a jackknife run does not write.
+
 ## 2.4.16 — 2026-11-09
 
 **Re-run needed:** Stage 3 only, for the redrawn RMS figures.
