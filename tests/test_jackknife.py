@@ -145,6 +145,7 @@ def test_stage3_jackknife_end_to_end(four_if_project: Path, fake_difmap: Path, m
         row = per_epoch.loc[per_epoch["epoch"] == epoch].iloc[0]
         assert row["A1_flux_mjy"] == pytest.approx(s_ref.mean())
         assert row["A1_flux_err_mjy"] == pytest.approx(expected_error) and expected_error > 0
+        assert row["A1_flux_err_percent"] == pytest.approx(100 * expected_error / s_ref.mean())
         assert row["A1_n_samples"] == 4
         # alpha offset: alpha_A2 - alpha_A1 of this visit, differenced within each sample, then jackknifed.
         offsets = []

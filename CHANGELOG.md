@@ -3,6 +3,15 @@
 Each entry says whether existing products need re-running. The `lenspipe`
 version that made a product is recorded in its metadata JSON.
 
+## 2.4.18 — 2026-11-20
+
+**Re-run needed:** Stage 3 with the jackknife switch, to get the new columns.
+
+- Added: `errors_per_epoch.csv` has `<image>_flux_err_percent` next to each
+  `<image>_flux_err_mjy`: the same jackknife error as a percentage of the
+  epoch's mean flux (`100 * flux_err_mjy / flux_mjy`), so it compares
+  directly with scripts that print per-cent errors.
+
 ## 2.4.17 — 2026-11-16
 
 **Re-run needed:** Stage 3 with the jackknife switch, to get the new table.
