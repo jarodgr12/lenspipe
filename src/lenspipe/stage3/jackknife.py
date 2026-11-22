@@ -316,10 +316,8 @@ def write_jackknife_products(
             row = {"epoch": epoch, "mjd": value}
             for g in groups:
                 key = safe_label(g)
-                mean_flux, flux_error = flux_est[g][0][i], flux_est[g][1][i]
                 row |= {
-                    f"{key}_flux_mjy": mean_flux, f"{key}_flux_err_mjy": flux_error,
-                    f"{key}_flux_err_percent": flux_error / mean_flux * 100.0 if mean_flux else float("nan"),
+                    f"{key}_flux_mjy": flux_est[g][0][i], f"{key}_flux_err_mjy": flux_est[g][1][i],
                     f"{key}_alpha": alpha_est[g][0][i], f"{key}_alpha_err": alpha_est[g][1][i],
                     **(
                         {f"{key}_alpha_offset": offset_est[g][0][i], f"{key}_alpha_offset_err": offset_est[g][1][i]}
@@ -420,10 +418,7 @@ def write_jackknife_products(
                         "give the scatter across epochs of the per-epoch jackknife means: std_percent = population "
                         "std / mean, weighted_std_percent = inverse-variance (1/jackknife error^2) weighted."
                     ),
-                    "errors_per_epoch.csv": (
-                        "Per epoch, the jackknife mean and error of each visit's own S_ref, alpha and ratio_ref; "
-                        "<image>_flux_err_percent is the flux error as a percentage of the mean flux."
-                    ),
+                    "errors_per_epoch.csv": "Per epoch, the jackknife mean and error of each visit's own S_ref, alpha and ratio_ref.",
                     "samples_per_epoch.csv": (
                         "Per epoch and sample, the visit's own S_ref, alpha and ratio_ref: the values each row of "
                         "errors_per_epoch.csv is the mean and jackknife error of (empty = sample missing for that epoch)."
