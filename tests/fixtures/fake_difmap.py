@@ -32,6 +32,7 @@ SPLIT_WARNING = (
 class State:
     def __init__(self) -> None:
         self.observed: Path | None = None
+        self.channel_offset = 0  # channels preceding a lenspipe per-shard subset file
         self.model_rows: list[list[str]] = []
         self.model_comments: list[str] = []
         self.selection: tuple[int, int] | None = None
@@ -44,6 +45,17 @@ class State:
 
 PROMPT = "0>" if sys.stdout.isatty() else ""  # like DifMAP: the prompt is printed only on a terminal
 _prompt_pending = False
+
+
+def subset_channel_offset(path: Path) -> int:
+    """The CHANOFF of a lenspipe subset file (stage2.split_inputs), 0 for any other file."""
+    try:
+        with open(path, "rb") as handle:
+            head = handle.read(2880 * 64).decode("ascii", errors="replace")
+    except OSError:
+        return 0
+    found = re.search(r"LENSPIPE SUBSET IF \d+-\d+ OF \d+ CHANOFF (\d+)", head)
+    return int(found.group(1)) if found else 0
 
 
 def emit(text: str) -> None:
@@ -313,12 +325,15 @@ def main() -> int:
                 state.scratch = scratch
                 time.sleep(float(os.environ.get("FAKE_DIFMAP_SCRATCH_HOLD", "0.5")))
             state.observed = path
+            state.channel_offset = subset_channel_offset(path)
             emit(f"Reading UV FITS file: {path}")
             emit("AN table 1: 27 integrations on 351 of 351 possible baselines.")
         elif command == "select":
             fields = [f.strip() for f in argument.split(",")]
             if len(fields) >= 3:
-                state.selection = (int(fields[1]), int(fields[2]))
+                # The fake's fluxes are a function of the channel in the calibrated file, as the
+                # real data are: a subset file numbers its channels from its own first IF.
+                state.selection = (int(fields[1]) + state.channel_offset, int(fields[2]) + state.channel_offset)
                 emit(f"Selecting polarization: I,  channels: {fields[1]}..{fields[2]}")
             else:
                 state.selection = None

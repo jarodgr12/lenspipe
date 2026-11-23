@@ -39,6 +39,7 @@ class RunRequest:
     stage2_exclude_edge_channels: int | None = None
     stage2_modelfit_iterations: int | None = None
     stage2_unflag: bool | None = None
+    stage2_split_inputs: bool | None = None
     stage2_keep_models: bool | None = None
     stage2_plots: bool | None = None
     stage2_error_bars: bool | None = None
@@ -137,6 +138,7 @@ def build_steps(request: RunRequest) -> tuple[list[ChainStep], list[str]]:
             argv += ["--exclude-channels", request.stage2_exclude_channels]
         argv += _number(request.stage2_modelfit_iterations, "--modelfit-iterations")
         argv += _toggle(request.stage2_unflag, "--unflag", "--no-unflag")
+        argv += _toggle(request.stage2_split_inputs, "--split-inputs", "--no-split-inputs")
         argv += _toggle(request.stage2_keep_models, "--keep-models", "--no-keep-models")
         argv += _toggle(request.stage2_plots, "--plots", "--no-plots")
         argv += _toggle(request.stage2_error_bars, "--error-bars", "--no-error-bars")

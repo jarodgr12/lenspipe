@@ -499,6 +499,13 @@ def stage2(
     shards: Annotated[str | None, typer.Option("--shards", help="DifMAP processes per epoch or 'auto'.")] = None,
     modelfit_iterations: Annotated[int | None, typer.Option("--modelfit-iterations")] = None,
     unflag: Annotated[bool | None, typer.Option("--unflag/--no-unflag", help="Run 'unflag *' before the fits.")] = None,
+    split_inputs: Annotated[
+        bool | None,
+        typer.Option(
+            "--split-inputs/--no-split-inputs",
+            help="Give each DifMAP process only the spectral windows it fits instead of the whole file (same results, far less copying).",
+        ),
+    ] = None,
     calibration_mode: CalibrationModeOpt = None,
     keep_models: Annotated[bool | None, typer.Option("--keep-models/--no-keep-models")] = None,
     plots: Annotated[bool | None, typer.Option("--plots/--no-plots", help="Write the quick-look PNGs.")] = None,
@@ -524,6 +531,7 @@ def stage2(
         "exclude_channels": (exclude_channels.strip() or "__clear__") if exclude_channels is not None else None,
         "modelfit_iterations": modelfit_iterations,
         "unflag": unflag,
+        "split_inputs": split_inputs,
         "keep_models": keep_models,
         "plot_spectrum": plots,
         "plot_error_bars": error_bars,
