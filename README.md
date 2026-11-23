@@ -230,7 +230,16 @@ with its record under `<project>/.jobs/<id>/` (`job.json`, `log.txt`,
 the job was queued against, and `effective_config.toml`, the complete
 parameters the stage used after every command-line override, written when
 the job starts). The Jobs page shows that parameter set under each job. `lenspipe jobs <project>` lists them from a
-shell. When DifMAP lives on another machine, run the console there and reach
+shell. A stage job also writes `health.jsonl` there while it runs (load, free
+memory, temperatures and free disk every 15 s, synced to disk).
+
+When a run fails or a machine crashes, `lenspipe diagnostics <project>` (or
+"Collect diagnostics" on the Jobs page) packs everything needed to find out
+why into one zip in the project folder: doctor checks, config, recent jobs and
+their logs, DifMAP logs, a size check of every UV-FITS file against its
+header, and the machine's own records (memory, disks, temperatures, kernel
+messages of earlier boots). `SUMMARY.txt` inside lists what looks wrong. The
+zip stays on the machine; send it by hand. When DifMAP lives on another machine, run the console there and reach
 it through an SSH port forward:
 
 ```bash

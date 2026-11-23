@@ -207,6 +207,15 @@ def run_checks(project_root: Path | None, config: LenspipeConfig | None = None) 
             results.append(CheckResult("inputs", status, detail, fix))
         else:
             results.append(CheckResult("inputs", OK, detail))
+        broken = [p.name for p in uvfits if not p.exists()]
+        if broken:
+            results.append(
+                CheckResult("links", FAIL, f"inputs/ links to files that are gone: {', '.join(broken)}",
+                            "restore the files they point to, or link them again with lenspipe init --inputs")
+            )
+        uvfits = [p for p in uvfits if p.exists()]
+        if not uvfits:
+            return results
         largest_path = max(uvfits, key=lambda p: p.stat().st_size)
         largest = largest_path.stat().st_size
         # stage2.split_inputs: the processes of an epoch share one input's worth of files and scratch.

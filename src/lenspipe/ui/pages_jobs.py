@@ -26,6 +26,11 @@ def jobs_page(job: str | None = None) -> None:
                 with ui.row().classes("w-full items-center justify-between"):
                     ui.label("Jobs, newest first").classes("text-subtitle2")
                     count_label = ui.label().classes("text-caption opacity-70")
+                ui.button("Collect diagnostics", icon="bug_report", on_click=lambda: diagnostics()).props(
+                    "outline no-caps dense"
+                ).tooltip(
+                    "Pack the logs, config, recent jobs and machine state into one zip to send when a run fails or crashes"
+                )
                 job_list = ui.column().classes("w-full gap-1")
             detail = ui.column().classes("flex-grow gap-2 min-w-0")
 
@@ -162,6 +167,14 @@ def jobs_page(job: str | None = None) -> None:
             selected["signature"] = None
             list_signature["value"] = None
             await poll()
+
+        async def diagnostics() -> None:
+            from lenspipe.diagnostics import collect
+
+            ui.notify("Collecting diagnostics...", type="info")
+            target = await run.io_bound(collect, console.layout.root)
+            ui.download(target)
+            ui.notify(f"Diagnostics saved: {target}", type="positive", timeout=0, close_button=True)
 
         async def cancel(job_id: str) -> None:
             if console.manager is None:

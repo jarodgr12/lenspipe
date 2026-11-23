@@ -3,6 +3,28 @@
 Each entry says whether existing products need re-running. The `lenspipe`
 version that made a product is recorded in its metadata JSON.
 
+## 2.4.20 — 2026-11-24
+
+**Re-run needed:** no.
+
+- Added: `lenspipe diagnostics <project>` and a "Collect diagnostics" button on
+  the Jobs page. Both write one zip, `lenspipe-diagnostics-<host>-<time>.zip`,
+  in the project folder: the doctor checks, the config, the last 10 jobs with
+  their logs and parameters, the DifMAP logs (start and end of each), a listing
+  of the project tree, a check of every UV-FITS file's size against its own
+  header, and the machine's state (CPU, memory, disks, temperatures, `sar`
+  history, and the kernel messages of the three boots before this one).
+  `SUMMARY.txt` at the top lists what looks wrong: truncated or missing data
+  files, the first error lines of each DifMAP log, jobs whose process vanished
+  mid-run, failed doctor checks. Nothing is uploaded; the zip is a local file
+  to send by hand.
+- Added: every stage job writes `health.jsonl` into its job folder while it
+  runs: load, free memory and swap, I/O and memory pressure, the hottest
+  reading of each temperature sensor and free disk, every 15 s, synced to disk
+  so the minutes before a machine dies are kept. The diagnostics zip includes it.
+- Fixed: `lenspipe doctor` crashed when `inputs/` held a link to a file that
+  no longer exists. It now reports the broken links as a failed check.
+
 ## 2.4.19 — 2026-11-23
 
 **Re-run needed:** no. Stage 2 results are unchanged; only how the DifMAP

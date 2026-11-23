@@ -163,6 +163,9 @@ def _record_effective_config(cfg: LenspipeConfig) -> None:
         return
     import tomli_w
 
+    from lenspipe.diagnostics import start_health_log
+
+    start_health_log(Path(job_dir))  # load, memory, temperatures and disk while the job runs
     try:
         Path(job_dir).mkdir(parents=True, exist_ok=True)
         (Path(job_dir) / "effective_config.toml").write_text(
@@ -274,6 +277,33 @@ def doctor(
                 typer.echo(f"      fix: {check.fix}")
     if any(c.status == "fail" for c in checks):
         raise typer.Exit(code=1)
+
+
+@app.command()
+def diagnostics(
+    project: Annotated[Path | None, typer.Argument(help="Project root. Default: the current directory if it is a project.")] = None,
+    out: Annotated[Path | None, typer.Option("--out", help="Directory to write the zip into (default: the project).")] = None,
+    jobs: Annotated[int, typer.Option("--jobs", help="How many of the most recent jobs to include.")] = 10,
+) -> None:
+    """Pack logs, config, recent jobs and machine state into one zip to send when something goes wrong."""
+    import zipfile
+
+    from lenspipe.diagnostics import collect
+
+    root: Path | None
+    if project is not None:
+        root = Layout.at(project).root
+    else:
+        try:
+            root, _ = find_project_root(Path("."))
+        except NotAProject:
+            root = None
+            typer.echo("No project here; collecting the machine only (give a project path to include its logs).", err=True)
+    target = collect(root, out_dir=out, jobs=jobs)
+    with zipfile.ZipFile(target) as archive:
+        summary = archive.read("SUMMARY.txt").decode("utf-8")
+    typer.echo(summary.split("\n\nCould not be collected:")[0].split("\n\nEverything was collected.")[0])
+    typer.echo(f"\nSend this file: {target}  ({target.stat().st_size / 2**20:.1f} MiB)")
 
 
 @app.command()
