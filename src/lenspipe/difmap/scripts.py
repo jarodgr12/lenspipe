@@ -247,11 +247,16 @@ def stage2_commands(
     mode: str,
     config: Stage2Config,
     segments: dict[int, tuple[tuple[int, int], ...]] | None = None,
+    channel_offset: int = 0,
 ) -> str:
     """One DifMAP command stream fitting every ``(fit_index, first, last)`` range.
 
     ``segments`` (fit index -> channel runs) overrides the plain first-last
     selection for fits whose channels are not contiguous after exclusions.
+    ``channel_offset`` is subtracted from every channel number: the number of
+    channels that precede ``calibrated_uvfits`` when it is a per-shard subset of
+    the calibrated file (see ``lenspipe.uvfits_subset``); fit indices and model
+    file names keep the numbering of the whole file.
     """
     lines = [
         f"observe {calibrated_uvfits}",
@@ -265,7 +270,8 @@ def stage2_commands(
     for fit_index, first_channel, last_channel in fit_ranges:
         fitted_model = fit_model_path(work_directory, mode, fit_index)
         runs = segments.get(fit_index) if segments else None
-        selection = ",".join(f"{a},{b}" for a, b in runs) if runs and len(runs) > 1 else f"{first_channel},{last_channel}"
+        spans = runs if runs and len(runs) > 1 else ((first_channel, last_channel),)
+        selection = ",".join(f"{a - channel_offset},{b - channel_offset}" for a, b in spans)
         lines.extend(
             [
                 f"select i,{selection}",

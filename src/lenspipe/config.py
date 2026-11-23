@@ -310,6 +310,15 @@ class Stage2Config(_Model):
             "disk; None uses the Stage 2 work directory inside the project."
         ),
     )
+    split_inputs: bool = Field(
+        True,
+        description=(
+            "Give every DifMAP process a copy of the calibrated file holding only the spectral "
+            "windows it fits (and only the parallel-hand polarisations), instead of the whole "
+            "file. DifMAP copies its input to scratch at start-up, so this divides that copying "
+            "and the scratch space by about the shard count. Fit results are unchanged."
+        ),
+    )
     keep_models: bool = Field(False, description="Retain every fitted model under models_<mode>/.")
     input_pattern: str = "*.cal.uvf"
     plot_spectrum: bool = Field(True, description="Write the quick-look PNG plots after each epoch.")

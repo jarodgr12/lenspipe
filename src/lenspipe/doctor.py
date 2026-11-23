@@ -207,7 +207,16 @@ def run_checks(project_root: Path | None, config: LenspipeConfig | None = None) 
             results.append(CheckResult("inputs", status, detail, fix))
         else:
             results.append(CheckResult("inputs", OK, detail))
-        largest = max(p.stat().st_size for p in uvfits)
+        largest_path = max(uvfits, key=lambda p: p.stat().st_size)
+        largest = largest_path.stat().st_size
+        # stage2.split_inputs: the processes of an epoch share one input's worth of files and scratch.
+        split_bytes: int | None = None
+        if config.stage2.split_inputs:
+            from lenspipe.uvfits_subset import read_layout
+
+            uv_layout, _ = read_layout(largest_path)
+            if uv_layout is not None and (uv_layout.n_if > 1 or uv_layout.cross_hands):
+                split_bytes = int(largest * uv_layout.polarisation_fraction)
         scratch_where = (
             Path(config.stage2.scratch_dir).expanduser() if config.stage2.scratch_dir
             else layout.root / "stage2"
@@ -219,6 +228,7 @@ def run_checks(project_root: Path | None, config: LenspipeConfig | None = None) 
             memory_fraction=config.stage2.memory_fraction,
             memory_multiple=config.stage2.memory_multiple,
             free_disk_bytes=free,
+            split_input_bytes=split_bytes,
         )
         if config.stage2.memory_multiple == 3.0:
             fix = (
@@ -238,7 +248,9 @@ def run_checks(project_root: Path | None, config: LenspipeConfig | None = None) 
                 fix,
             )
         )
-        results.append(_disk_check(scratch_where, free, largest, decision.shards, config.run.epoch_workers))
+        results.append(
+            _disk_check(scratch_where, free, largest, decision.shards, config.run.epoch_workers, split_bytes)
+        )
         results.append(_rcusp_check(models, config.stage3.rcusp_images))
     return results
 
@@ -288,21 +300,36 @@ def _rcusp_check(models: list[Path], images: list[str]) -> CheckResult:
     return CheckResult("rcusp", OK, detail)
 
 
-def _disk_check(where: Path, free: int | None, largest: int, shards: int, epoch_workers: int) -> CheckResult:
+def _disk_check(
+    where: Path, free: int | None, largest: int, shards: int, epoch_workers: int, split_bytes: int | None = None
+) -> CheckResult:
     """Compare free disk with what Stage 2's DifMAP processes will hold in scratch copies.
 
     Every DifMAP process streams its input into a hidden scratch file in its working
     directory, so a run needs about shards x epochs-at-once x input size there, on
-    top of the calibrated copy Stage 1 writes per epoch.
+    top of the calibrated copy Stage 1 writes per epoch. With ``stage2.split_inputs``
+    (``split_bytes``: the size of one epoch's per-process inputs together) each process
+    holds only its share, as a file plus the hidden copy, so the need is about twice
+    the input per epoch at once, whatever the shard count.
     """
-    per_process = int(largest * SCRATCH_PER_PROCESS)
-    processes = shards * max(1, epoch_workers)
-    need = per_process * processes
-    detail = (
-        f"{_human(free) if free is not None else 'unknown'} free at {where}; Stage 2 scratch needs about "
-        f"{_human(need)} for {shards} shard(s) x {epoch_workers} epoch(s) at once "
-        f"(DifMAP keeps a hidden copy of the input, {_human(per_process)}, per process)"
-    )
+    if split_bytes:
+        per_epoch = int(split_bytes * (1 + SCRATCH_PER_PROCESS))
+        per_process = max(1, per_epoch // max(1, shards))
+        need = per_epoch * max(1, epoch_workers)
+        detail = (
+            f"{_human(free) if free is not None else 'unknown'} free at {where}; Stage 2 scratch needs about "
+            f"{_human(need)} for {shards} shard(s) x {epoch_workers} epoch(s) at once (split inputs: each "
+            f"DifMAP process gets only its share of the input and keeps a hidden copy of it, "
+            f"{_human(per_process)} per process together)"
+        )
+    else:
+        per_process = int(largest * SCRATCH_PER_PROCESS)
+        need = per_process * shards * max(1, epoch_workers)
+        detail = (
+            f"{_human(free) if free is not None else 'unknown'} free at {where}; Stage 2 scratch needs about "
+            f"{_human(need)} for {shards} shard(s) x {epoch_workers} epoch(s) at once "
+            f"(DifMAP keeps a hidden copy of the input, {_human(per_process)}, per process)"
+        )
     if free is None:
         return CheckResult("disk", WARN, detail, "could not measure free space")
     remedy = (

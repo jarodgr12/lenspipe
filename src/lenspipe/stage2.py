@@ -29,9 +29,9 @@ from lenspipe.difmap import (
     run_difmap,
     tagged_values,
 )
-from lenspipe.difmap.runner import DifmapNotFound
+from lenspipe.difmap.runner import DifmapNotFound, DifmapResult
 from lenspipe.difmap.scripts import fit_model_path, stage2_commands
-from lenspipe.memory_calibration import record_measurement
+from lenspipe.memory_calibration import load_calibration, record_measurement
 from lenspipe.models import (
     ModelFormatError,
     ModelHierarchy,
@@ -66,6 +66,7 @@ from lenspipe.uvfits import (
     get_uvfits_spw_layout,
     representative_channel_width,
 )
+from lenspipe.uvfits_subset import SubsetCancelled, UvfitsLayout, if_span, read_layout, write_subset
 
 __all__ = [
     "STAGE2_MODEL_SUFFIX",
@@ -88,6 +89,7 @@ __all__ = [
 
 STAGE_NUMBER = 2
 STAGE2_MODEL_SUFFIX = "stage2.mod"
+SHARD_INPUT_NAME = "input.uvf"  # stage2.split_inputs: one per DifMAP process, in its own cwd
 SCHEMA_VERSION = "1.0"
 
 
@@ -555,6 +557,7 @@ def _write_metadata(
     input_bytes: int | None = None,
     spw_layout: dict[str, int] | None = None,
     fit_selection: dict[str, Any] | None = None,
+    shard_input_bytes: list[int] | None = None,
 ) -> None:
     stage2 = config.stage2
     provenance = {
@@ -610,8 +613,13 @@ def _write_metadata(
                 "resumed": resumed,
                 "difmap_peak_rss_bytes": peak_rss_bytes,
                 "input_bytes": input_bytes,
+                # stage2.split_inputs: the size of each DifMAP process's own input, largest first;
+                # None when every process read the whole calibrated file.
+                "shard_input_bytes": shard_input_bytes,
+                # Peak memory over the size of the file a process loaded (its own input when split).
                 "measured_memory_multiple": (
-                    round(peak_rss_bytes / input_bytes, 3) if peak_rss_bytes and input_bytes else None
+                    round(peak_rss_bytes / (max(shard_input_bytes) if shard_input_bytes else input_bytes), 3)
+                    if peak_rss_bytes and input_bytes else None
                 ),
             },
             "provenance": provenance,
@@ -793,14 +801,30 @@ def run_epoch(
     work_dir = work_directory_for(paths.output_directory, paths.product_prefix)
     scratch_root = Path(stage2.scratch_dir).expanduser() if stage2.scratch_dir else None
     difmap_cwd = scratch_root / paths.product_prefix if scratch_root else work_dir
+    full_input_bytes = paths.calibrated_uvfits.stat().st_size
+    # stage2.split_inputs: every process gets a file with only the IFs it fits (and only
+    # the parallel hands), so DifMAP's start-up copy shrinks to that share of the input.
+    layout: UvfitsLayout | None = None
+    if stage2.split_inputs:
+        layout, why_not = read_layout(paths.calibrated_uvfits)
+        if layout is not None and layout.n_if * layout.channels_per_if != len(prepared.frequencies):
+            layout, why_not = None, "its IF and channel axes do not match the frequency table"
+        if layout is None:
+            reporter.warn(
+                f"[{label}] stage2.split_inputs is on but {paths.calibrated_uvfits.name} cannot be "
+                f"split ({why_not}); every DifMAP process reads the whole file."
+            )
+        elif layout.n_if < 2 and not layout.cross_hands:
+            layout = None  # one IF, no cross hands: nothing to leave out
     decision = decide_shards(
         stage2.shards,
         n_fits,
-        input_bytes=paths.calibrated_uvfits.stat().st_size,
+        input_bytes=full_input_bytes,
         epoch_workers=max(1, epoch_workers),
         memory_fraction=stage2.memory_fraction,
         memory_multiple=stage2.memory_multiple,
         free_disk_bytes=free_disk_bytes(difmap_cwd),
+        split_input_bytes=int(full_input_bytes * layout.polarisation_fraction) if layout else None,
     )
     if (
         isinstance(stage2.shards, int)
@@ -814,7 +838,14 @@ def run_epoch(
     if decision.disk_cap is not None and decision.scratch_bytes_per_process:
         scratch_gib = decision.scratch_bytes_per_process / (1 << 30)
         free_gib = (decision.free_disk_bytes or 0) / (1 << 30)
-        if decision.disk_short:
+        if decision.disk_short and decision.split_inputs:
+            reporter.warn(
+                f"[{label}] the per-process input files and DifMAP's scratch copies of them need "
+                f"about {scratch_gib * decision.shards:.1f} GiB in {difmap_cwd.parent}, but only "
+                f"{free_gib:.1f} GiB is free; the run may stop with a disk-full error. Free space "
+                "or set stage2.scratch_dir to a larger disk."
+            )
+        elif decision.disk_short:
             reporter.warn(
                 f"[{label}] each DifMAP process keeps a hidden scratch copy of the input "
                 f"(about {scratch_gib:.1f} GiB) in {difmap_cwd.parent}, but only {free_gib:.1f} GiB "
@@ -832,6 +863,12 @@ def run_epoch(
         f"[{label}] {len(prepared.frequencies)} channels, mode={mode}, fits={n_fits}, "
         f"{decision.describe()}"
     )
+    if layout is not None:
+        reporter.log(
+            f"[{label}] split inputs: each DifMAP process reads only the spectral windows it fits"
+            + (f", {2} of {layout.n_pol} polarisations (the parallel hands)" if layout.cross_hands else "")
+            + f" (the whole file is {full_input_bytes / 2**30:.2f} GiB)"
+        )
 
     if dry_run:
         commands = stage2_commands(
@@ -918,30 +955,50 @@ def run_epoch(
 
     def run_block(index: int):
         block = blocks[index]
+        shard_log = shard_log_path(work_dir, index)
+        if shard_log.exists():
+            shard_log.unlink()
+        process_cwd = shard_cwd(difmap_cwd, index)
+        process_cwd.mkdir(parents=True, exist_ok=True)
+        shard_input, channel_offset = paths.calibrated_uvfits, 0
+        if layout is not None:
+            if_first, if_last = if_span(block, layout.channels_per_if)
+            if layout.cross_hands or (if_first, if_last) != (0, layout.n_if - 1):
+                try:
+                    subset = write_subset(
+                        paths.calibrated_uvfits, process_cwd / SHARD_INPUT_NAME, if_first, if_last,
+                        cancel_event=cancel_event,
+                    )
+                except SubsetCancelled:
+                    return index, DifmapResult(-1, "", shard_log, 0.0, cancelled=True)
+                except OSError as exc:
+                    raise OSError(f"writing the input of shard {index + 1} in {process_cwd}: {exc}") from exc
+                shard_input, channel_offset = subset.path, subset.channel_offset
         commands = stage2_commands(
-            calibrated_uvfits=paths.calibrated_uvfits,
+            calibrated_uvfits=shard_input,
             stage2_model=paths.stage2_model,
             fit_ranges=block,
             segments=prepared.segments,
             work_directory=work_dir,
             mode=mode,
             config=stage2,
+            channel_offset=channel_offset,
         )
-        shard_log = shard_log_path(work_dir, index)
-        if shard_log.exists():
-            shard_log.unlink()
-        process_cwd = shard_cwd(difmap_cwd, index)
-        process_cwd.mkdir(parents=True, exist_ok=True)
-        result = run_difmap(
-            config.project.difmap.executable,
-            commands,
-            shard_log,
-            on_line=on_line,
-            cancel_event=cancel_event,
-            stream=config.project.difmap.stream,
-            nice=config.run.nice,
-            cwd=process_cwd,  # this process's scratch copy and difmap.log land here, nowhere shared
-        )
+        shard_input_bytes = shard_input.stat().st_size
+        try:
+            result = run_difmap(
+                config.project.difmap.executable,
+                commands,
+                shard_log,
+                on_line=on_line,
+                cancel_event=cancel_event,
+                stream=config.project.difmap.stream,
+                nice=config.run.nice,
+                cwd=process_cwd,  # this process's scratch copy and difmap.log land here, nowhere shared
+            )
+        finally:
+            if shard_input != paths.calibrated_uvfits:
+                shard_input.unlink(missing_ok=True)  # a failed shard must not leave its input behind
         if result.ok:
             shutil.rmtree(process_cwd, ignore_errors=True)  # only DifMAP's own log remains in it
         if result.ok:
@@ -956,6 +1013,8 @@ def run_epoch(
                     "command_script_sha256": hashlib.sha256(commands.encode("utf-8")).hexdigest(),
                     "finished_utc": utc_now(),
                     "peak_rss_bytes": result.peak_rss_bytes,
+                    "input_bytes": shard_input_bytes,
+                    "input_split": shard_input != paths.calibrated_uvfits,
                 },
             )
         return index, result
@@ -1001,8 +1060,29 @@ def run_epoch(
     peaks = [int(r["peak_rss_bytes"]) for r in done.values() if r.get("peak_rss_bytes")]
     peak_rss_bytes = max(peaks) if peaks else None
     input_bytes = paths.calibrated_uvfits.stat().st_size
-    calibration = record_measurement(peak_rss_bytes, input_bytes)
-    if peak_rss_bytes:
+    shard_input_sizes = [int(r.get("input_bytes") or input_bytes) for r in done.values()]
+    largest_shard_input = max(shard_input_sizes, default=input_bytes)
+    inputs_were_split = any(r.get("input_split") for r in done.values())
+    # The memory multiple is DifMAP's footprint per byte of the file it loaded. A process that
+    # loaded a share of the input over-states it (the footprint has a part that does not shrink
+    # with the file), so a split run only fills in the figure while none has been measured:
+    # high but real beats the 3.0 guess, and an existing whole-file measurement is left alone.
+    if not inputs_were_split:
+        calibration = record_measurement(peak_rss_bytes, input_bytes)
+    elif load_calibration() is None:
+        calibration = record_measurement(peak_rss_bytes, largest_shard_input)
+    else:
+        calibration = None
+    if peak_rss_bytes and inputs_were_split:
+        reporter.log(
+            f"[{label}] DifMAP peak memory {peak_rss_bytes / 2**30:.2f} GiB per process; the largest "
+            f"process input was {largest_shard_input / 2**30:.2f} GiB of the {input_bytes / 2**30:.2f} GiB file"
+            + (
+                f"; memory_multiple 'auto' will use {calibration.multiple:g} x safety from now on"
+                if calibration is not None else ""
+            )
+        )
+    elif peak_rss_bytes:
         reporter.log(
             f"[{label}] DifMAP peak memory {peak_rss_bytes / 2**30:.2f} GiB for a "
             f"{input_bytes / 2**30:.2f} GiB input (ratio {peak_rss_bytes / input_bytes:.2f})"
@@ -1096,6 +1176,7 @@ def run_epoch(
         command_sha256=command_sha, duration_s=duration_s, recovered=False,
         shard_decision=decision.to_dict(), resumed=resumed,
         peak_rss_bytes=peak_rss_bytes, input_bytes=input_bytes, spw_layout=prepared.spw_layout, fit_selection=prepared.selection_record(),
+        shard_input_bytes=sorted(shard_input_sizes, reverse=True) if inputs_were_split else None,
     )
     _write_manifest(paths, retained_models_directory)
     shutil.rmtree(work_dir, ignore_errors=True)

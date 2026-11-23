@@ -3,6 +3,40 @@
 Each entry says whether existing products need re-running. The `lenspipe`
 version that made a product is recorded in its metadata JSON.
 
+## 2.4.19 — 2026-11-23
+
+**Re-run needed:** no. Stage 2 results are unchanged; only how the DifMAP
+processes are fed.
+
+- Added: `stage2.split_inputs` (on by default; `--split-inputs/--no-split-inputs`,
+  "Split inputs per process" on the Run page). DifMAP copies its whole input
+  to a scratch file and then reads all of it before the first fit, whatever it
+  goes on to fit, so with N shards an epoch copied the calibrated file N times
+  (and N x concurrent epochs at once). Each DifMAP process now gets a file
+  holding only the spectral windows it fits, and only RR and LL when the file
+  also carries cross hands. On a 48-window, 4-polarisation visit at 4 shards
+  that is an eighth of the file per process; the start-up copying and the
+  scratch space fall accordingly, and an epoch needs about twice its input in
+  scratch whatever the shard count. The per-process file is written into the
+  process's own working directory and removed when the process ends.
+- Results: checked against DifMAP 2.5q. Per-channel fitted models and
+  residual RMS from the subset files equal those from the whole file, with
+  flagged and deleted visibilities, down to one window per file; a full
+  3072-channel Stage 2 run gives the same spectrum table with the setting on
+  and off. `tests/test_split_inputs.py` repeats the DifMAP comparison when
+  `LENSPIPE_TEST_DIFMAP` names a real `difmap`.
+- Changed: with split inputs the free disk no longer caps `shards = auto`
+  (the need does not grow with the shard count); the run warns when the
+  epoch as a whole does not fit, and `lenspipe doctor` reports the new figure.
+  The memory cap is unchanged and still assumes the whole file per process.
+- Changed: a run with split inputs leaves an existing measured
+  `memory_multiple` alone (a process that loaded a share of the file
+  over-states the memory per byte of a whole one) and supplies the figure
+  only while none has been measured. The metadata records each process's
+  input size (`execution.shard_input_bytes`).
+- A file that is not 32-bit random-groups UV-FITS with IF and FREQ axes is
+  not split; the run says so and every process reads the whole file as before.
+
 ## 2.4.17 — 2026-11-16
 
 **Re-run needed:** Stage 3 with the jackknife switch, to get the new table.

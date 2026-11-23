@@ -301,6 +301,13 @@ def run_page(run: str | None = None) -> None:
                         _examples("How to write what to leave out (CASA numbering: spw and channel both start at 0)", EXCLUSION_EXAMPLES)
                         with ui.row().classes("gap-6 items-center"):
                             unflag = ui.switch("Unflag before fitting", value=config.stage2.unflag)
+                            split_inputs = ui.switch("Split inputs per process", value=config.stage2.split_inputs)
+                            split_inputs.tooltip(
+                                "Each DifMAP process gets a copy of the calibrated file holding only the spectral "
+                                "windows it fits (and only RR and LL), instead of the whole file. DifMAP copies its "
+                                "input to scratch before the first fit, so this cuts that copying and the scratch "
+                                "space by about the shard count. The fitted fluxes are the same either way."
+                            )
                             keep_models = ui.switch("Keep every fitted model", value=config.stage2.keep_models)
                             plots = ui.switch("Quick-look plots", value=config.stage2.plot_spectrum)
                             s2_error_bars = ui.switch("Error bars", value=config.stage2.plot_error_bars)
@@ -470,6 +477,7 @@ def run_page(run: str | None = None) -> None:
                 stage2_exclude_edge_channels=_override(_int_or_none(edge.value), s2.exclude_edge_channels),
                 stage2_modelfit_iterations=_override(_int_or_none(iterations.value), s2.modelfit_iterations),
                 stage2_unflag=_override(bool(unflag.value), s2.unflag),
+                stage2_split_inputs=_override(bool(split_inputs.value), s2.split_inputs),
                 stage2_keep_models=_override(bool(keep_models.value), s2.keep_models),
                 stage2_plots=_override(bool(plots.value), s2.plot_spectrum),
                 stage2_error_bars=_override(bool(s2_error_bars.value), s2.plot_error_bars),
@@ -634,7 +642,7 @@ def run_page(run: str | None = None) -> None:
         for widget in (
             *stage_boxes.values(), epochs, overwrite, dry_run, workers, calibration_mode, if_count,
             s1_channels_per_if, s1_edge, s1_exclude, final_if, final_if_channels, reimage, reimage_only, mode, channels_per_if,
-            channels, shards, edge, s2_exclude, iterations, unflag, keep_models, plots, s2_error_bars,
+            channels, shards, edge, s2_exclude, iterations, unflag, split_inputs, keep_models, plots, s2_error_bars,
             error_source, product, plot_workers, fit_method, reference_frequency, formats,
             exclude_channels, exclude_epoch_channels, annotations, jackknife, s3_error_bars, point_opacity, error_bar_opacity,
             images_on, image_center, image_size, image_cmap, image_pmax, image_residual_pmax,

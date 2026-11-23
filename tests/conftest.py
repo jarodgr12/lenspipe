@@ -62,11 +62,15 @@ def write_synthetic_uvfits(
     channel_width_hz: float = 2.0e6,
     date_obs: str = "2022-03-15T13:28:04.0",
     seed: int = 0,
+    n_pol: int = 1,
 ) -> None:
-    """Write a small random-groups UV-FITS file with an AIPS FQ table."""
+    """Write a small random-groups UV-FITS file with an AIPS FQ table.
+
+    ``n_pol`` above 1 gives RR, LL, RL, LR planes (Stokes codes -1 downwards).
+    """
     rng = np.random.default_rng(seed)
     n_groups = 6
-    data = rng.normal(size=(n_groups, 1, 1, n_if, n_chan, 1, 3)).astype(">f4")
+    data = rng.normal(size=(n_groups, 1, 1, n_if, n_chan, n_pol, 3)).astype(">f4")
     data[..., 2] = 1.0  # weights
     parnames = ["UU", "VV", "WW", "BASELINE", "DATE"]
     pardata = [
@@ -87,8 +91,8 @@ def write_synthetic_uvfits(
     header["CDELT2"] = 1.0
     header["CRPIX2"] = 1.0
     header["CTYPE3"] = "STOKES"
-    header["CRVAL3"] = 1.0
-    header["CDELT3"] = 1.0
+    header["CRVAL3"] = 1.0 if n_pol == 1 else -1.0
+    header["CDELT3"] = 1.0 if n_pol == 1 else -1.0
     header["CRPIX3"] = 1.0
     header["CTYPE4"] = "FREQ"
     header["CRVAL4"] = reference_frequency_hz
